@@ -38,29 +38,50 @@ ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 def generate_pngs(source: Image.Image):
     for filename, size in SIZES.items():
         img = source.resize((size, size), Image.LANCZOS)
+        if img.mode != "RGBA":
+            img = img.convert("RGBA")
         path = OUTPUT_DIR / filename
         img.save(path, "PNG")
         print(f"  ✓ {filename} ({size}x{size})")
 
 
 def generate_ico(source: Image.Image):
-    """生成 .ico 文件，包含多个尺寸"""
+    """生成 .ico 文件 (256x256 BMP 格式，兼容 Windows RC.EXE)"""
     path = OUTPUT_DIR / "icon.ico"
-    frames = []
-    for size in ICO_SIZES:
-        img = source.resize((size, size), Image.LANCZOS)
-        # ICO 需要 RGBA
-        if img.mode != "RGBA":
-            img = img.convert("RGBA")
-        frames.append(img)
+    img = source.resize((256, 256), Image.LANCZOS)
+    img = img.convert("RGBA")
 
-    frames[0].save(
-        path,
-        format="ICO",
-        sizes=[(s, s) for s in ICO_SIZES],
-        append_images=frames[1:],
+    # 手工构建 ICO: BMP 格式头 + DIB 数据
+    import struct
+    from io import BytesIO
+
+    # 生成 32-bit BMP (BGRA) 数据
+    bmp_buf = BytesIO()
+    img_rgba = img.tobytes("raw", "BGRA")
+    # DIB header: 40 bytes
+    dib_header = struct.pack(
+        "<IiiHHIIiiII",
+        40, 256, 512, 1, 32, 0,
+        len(img_rgba), 0, 0, 0, 0,
     )
-    print(f"  ✓ icon.ico ({', '.join(str(s) for s in ICO_SIZES)})")
+    bmp_buf.write(dib_header)
+    bmp_buf.write(img_rgba)
+    bmp_data = bmp_buf.getvalue()
+
+    # ICO header + directory + image
+    with open(path, "wb") as f:
+        f.write(struct.pack("<HHH", 0, 1, 1))  # ICO header: 1 icon
+        # Directory entry
+        total_size = 6 + 16 + len(bmp_data)
+        f.write(struct.pack(
+            "<BBBBHHII",
+            0, 0, 1, 0, 1, 32,
+            len(bmp_data),
+            6 + 16,  # offset
+        ))
+        f.write(bmp_data)
+
+    print(f"  ✓ icon.ico (256x256 BMP)")
 
 
 def generate_icns(source: Image.Image):
