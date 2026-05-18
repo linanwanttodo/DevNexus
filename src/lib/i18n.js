@@ -1,13 +1,18 @@
-import { get, writable } from "svelte/store";
-
-const store = writable("en");
-let translations = {};
+let _lang = "en";
+let _translations = {};
+let _listeners = [];
+let _version = 0;
 
 export async function initI18n(lang) {
   try {
-    translations = (await import(`../locales/${lang}.json`)).default;
-    store.set(lang);
+    _translations = (await import(`../locales/${lang}.json`)).default;
+    _lang = lang;
+    _version++;
     localStorage.setItem("devnexus-lang", lang);
+    // 通知所有监听器
+    for (const fn of _listeners) {
+      try { fn(_version); } catch (e) { console.error(e); }
+    }
   } catch (e) {
     console.error("Failed to load language:", lang, e);
   }
@@ -15,7 +20,7 @@ export async function initI18n(lang) {
 
 export function t(key) {
   const keys = key.split(".");
-  let val = translations;
+  let val = _translations;
   for (const k of keys) {
     val = val?.[k];
   }
@@ -33,9 +38,16 @@ export function tFormat(key, vars) {
 }
 
 export function getLang() {
-  return get(store);
+  return _lang;
+}
+
+export function getVersion() {
+  return _version;
 }
 
 export function onLangChange(fn) {
-  return store.subscribe(fn);
+  _listeners.push(fn);
+  return () => {
+    _listeners = _listeners.filter(f => f !== fn);
+  };
 }

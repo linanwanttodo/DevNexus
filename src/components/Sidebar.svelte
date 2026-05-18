@@ -1,18 +1,24 @@
 <script>
   import { getRoute, navigate, onRouteChange } from "../lib/stores.js";
-  import { t, getLang } from "../lib/i18n.js";
+  import { t, getVersion, onLangChange } from "../lib/i18n.js";
 
-  const navItems = [
-    { route: "/dashboard", label: () => t("nav.dashboard"), icon: "dashboard" },
-    { route: "/environments", label: () => t("nav.environments"), icon: "code" },
-    { route: "/software", label: () => t("nav.software"), icon: "apps" },
-    { route: "/mirrors", label: () => t("nav.mirrors"), icon: "sync" },
-    { route: "/ports", label: () => t("nav.ports"), icon: "lan" },
-    { route: "/scheduler", label: () => t("nav.scheduler"), icon: "schedule" },
-    { route: "/passwords", label: () => t("nav.passwords"), icon: "key" },
-    { route: "/cookies", label: () => t("nav.cookies"), icon: "cookie" },
-    { route: "/settings", label: () => t("nav.settings"), icon: "settings" },
-  ];
+  let _v = $state(getVersion());
+
+  $effect(() => {
+    return onLangChange((v) => { _v = v; });
+  });
+
+  const navItems = $derived([
+    { route: "/dashboard", label: t("nav.dashboard"), icon: "dashboard" },
+    { route: "/environments", label: t("nav.environments"), icon: "code" },
+    { route: "/software", label: t("nav.software"), icon: "apps" },
+    { route: "/mirrors", label: t("nav.mirrors"), icon: "sync" },
+    { route: "/ports", label: t("nav.ports"), icon: "lan" },
+    { route: "/scheduler", label: t("nav.scheduler"), icon: "schedule" },
+    { route: "/passwords", label: t("nav.passwords"), icon: "key" },
+    { route: "/cookies", label: t("nav.cookies"), icon: "cookie" },
+    { route: "/settings", label: t("nav.settings"), icon: "settings" },
+  ]);
 
   let currentRoute = $state(getRoute());
 
@@ -40,7 +46,7 @@
             onclick={() => handleClick(item.route)}
           >
             <span class="material-symbols-outlined text-xl">{item.icon}</span>
-            {item.label()}
+            {item.label}
           </button>
         </li>
       {/each}

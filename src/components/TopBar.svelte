@@ -1,17 +1,24 @@
 <script>
   import { getRoute, onRouteChange, getSearchQuery, setSearchQuery } from "../lib/stores.js";
+  import { t, getVersion, onLangChange } from "../lib/i18n.js";
 
-  const routeTitles = {
-    "/dashboard": "Dashboard",
-    "/environments": "Environment Manager",
-    "/software": "Software Center",
-    "/mirrors": "Package Mirrors",
-    "/ports": "Port Manager",
-    "/scheduler": "Task Scheduler",
-    "/passwords": "Password Manager",
-    "/cookies": "Cookie Extractor",
-    "/settings": "Settings",
-  };
+  let _v = $state(getVersion());
+
+  $effect(() => {
+    return onLangChange((v) => { _v = v; });
+  });
+
+  const routeTitles = $derived({
+    "/dashboard": t("nav.dashboard"),
+    "/environments": t("nav.environments"),
+    "/software": t("nav.software"),
+    "/mirrors": t("nav.mirrors"),
+    "/ports": t("nav.ports"),
+    "/scheduler": t("nav.scheduler"),
+    "/passwords": t("nav.passwords"),
+    "/cookies": t("nav.cookies"),
+    "/settings": t("nav.settings"),
+  });
 
   let currentRoute = $state(getRoute());
   let searchQuery = $state(getSearchQuery());

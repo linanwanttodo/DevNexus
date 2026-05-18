@@ -56,6 +56,8 @@ jobs:
           path: |
             src-tauri/target/release/bundle/deb/*.deb
             src-tauri/target/release/bundle/appimage/*.AppImage
+            target/release/bundle/deb/*.deb
+            target/release/bundle/appimage/*.AppImage
 
   # ============================================================
   # macOS (x86_64 + aarch64 universal)
@@ -93,7 +95,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.target }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            target/${{ matrix.target }}/release/bundle/dmg/*.dmg
 
   # ============================================================
   # Windows (x86_64 MSI + NSIS)
@@ -129,6 +133,8 @@ jobs:
           path: |
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
 
   # ============================================================
   # GitHub Release (only on version tags)
