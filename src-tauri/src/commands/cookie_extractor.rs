@@ -331,49 +331,16 @@ fn decrypt_cookie_value(encrypted: &[u8]) -> String {
 #[cfg(target_os = "windows")]
 fn decrypt_windows(encrypted_data: &[u8]) -> String {
     use windows::Win32::Security::Cryptography::{
-        CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN,
+        CryptUnprotectData, CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN,
     };
-    use windows::Win32::Foundation::DATA_BLOB;
 
-    // RAII guard: 确保 DPAPI 分配的内存一定被释放
-    struct DataBlobGuard {
-        ptr: *mut u8,
-        len: u32,
-    }
-
-    impl DataBlobGuard {
-        unsafe fn from_blob(blob: &DATA_BLOB) -> Option<Self> {
-            if blob.pbData.is_null() {
-                None
-            } else {
-                Some(Self {
-                    ptr: blob.pbData,
-                    len: blob.cbData,
-                })
-            }
-        }
-
-        fn as_slice(&self) -> &[u8] {
-            unsafe { std::slice::from_raw_parts(self.ptr, self.len as usize) }
-        }
-    }
-
-    impl Drop for DataBlobGuard {
-        fn drop(&mut self) {
-            unsafe {
-                windows::Win32::System::Memory::LocalFree(self.ptr as _);
-            }
-        }
-    }
-
-    // SAFETY: DATA_BLOB 由 DPAPI 分配，DataBlobGuard 确保释放
     unsafe {
-        let data_in = DATA_BLOB {
+        let data_in = CRYPT_INTEGER_BLOB {
             cbData: encrypted_data.len() as u32,
-            pbData: encrypted_data.as_ptr() as *mut _,
+            pbData: encrypted_data.as_ptr() as *mut u8,
         };
 
-        let mut data_out = DATA_BLOB {
+        let mut data_out = CRYPT_INTEGER_BLOB {
             cbData: 0,
             pbData: std::ptr::null_mut(),
         };
@@ -385,14 +352,16 @@ fn decrypt_windows(encrypted_data: &[u8]) -> String {
             None,
             None,
             CRYPTPROTECT_UI_FORBIDDEN,
-            Some(&mut data_out),
+            &mut data_out as *mut _,
         ) {
             Ok(()) => {
-                if let Some(guard) = DataBlobGuard::from_blob(&data_out) {
-                    String::from_utf8_lossy(guard.as_slice()).to_string()
-                } else {
-                    String::from_utf8_lossy(encrypted_data).to_string()
+                if data_out.pbData.is_null() || data_out.cbData == 0 {
+                    return String::from_utf8_lossy(encrypted_data).to_string();
                 }
+                let result = String::from_utf8_lossy(
+                    std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize),
+                ).to_string();
+                result
             }
             Err(_) => String::from_utf8_lossy(encrypted_data).to_string(),
         }
