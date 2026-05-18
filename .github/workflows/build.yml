@@ -75,6 +75,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install create-dmg (for DMG bundling)
+        run: brew install create-dmg || true
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -158,6 +161,8 @@ jobs:
           files: |
             linux-packages/*.deb
             linux-packages/*.AppImage
+            linux-packages/*.zip
+            linux-packages/*.app
             macos-x86_64-apple-darwin/*.dmg
             macos-aarch64-apple-darwin/*.dmg
             windows-packages/*.msi
