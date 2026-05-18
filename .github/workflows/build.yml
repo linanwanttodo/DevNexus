@@ -31,7 +31,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -42,7 +41,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Install frontend deps
-        run: npm ci
+        run: npm install
 
       - name: Build Tauri
         run: npx tauri build --bundles deb,appimage
@@ -83,7 +82,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Install frontend deps
-        run: npm ci
+        run: npm install
 
       - name: Build Tauri
         run: npx tauri build --target ${{ matrix.target }} --bundles dmg
@@ -117,7 +116,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Install frontend deps
-        run: npm ci
+        run: npm install
 
       - name: Build Tauri
         run: npx tauri build --bundles msi,nsis
