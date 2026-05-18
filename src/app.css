@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== Dark Theme (default) ===== */
+:root {
+  --nx-deep: #010409;
+  --nx-bg: #0d1117;
+  --nx-surface: #161b22;
+  --nx-raised: #1c2128;
+  --nx-overlay: #25292e;
+  --nx-border: #30363d;
+  --nx-border-light: #444c56;
+  --nx-text: #e6edf3;
+  --nx-text-secondary: #9198a1;
+  --nx-text-muted: #6e7681;
+  --nx-accent: #4493f8;
+  --nx-success: #3fb950;
+  --nx-danger: #f85149;
+  --nx-warning: #d29922;
+  --nx-info: #58a6ff;
+}
+
+/* ===== Light Theme ===== */
+[data-theme="light"] {
+  --nx-deep: #ffffff;
+  --nx-bg: #ffffff;
+  --nx-surface: #f6f8fa;
+  --nx-raised: #eaeef2;
+  --nx-overlay: #d0d7de;
+  --nx-border: #d0d7de;
+  --nx-border-light: #afb8c1;
+  --nx-text: #1f2328;
+  --nx-text-secondary: #656d76;
+  --nx-text-muted: #8b949e;
+  --nx-accent: #0969da;
+  --nx-success: #1a7f37;
+  --nx-danger: #cf222e;
+  --nx-warning: #9a6700;
+  --nx-info: #0969da;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--nx-bg);
+  color: var(--nx-text);
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background-color: var(--nx-border); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--nx-border-light); }
+
+::selection {
+  background-color: var(--nx-accent);
+  color: #ffffff;
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+select option {
+  background-color: var(--nx-surface);
+  color: var(--nx-text);
+}
+
+input[type="checkbox"] {
+  accent-color: var(--nx-accent);
+}

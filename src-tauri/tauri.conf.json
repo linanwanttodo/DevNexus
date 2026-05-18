@@ -1,0 +1,61 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicehash/Tauri/dev/crates/tauri-config-schema/schema.json",
+  "productName": "DevNexus",
+  "version": "2.4.1",
+  "identifier": "com.devnexus.app",
+  "build": {
+    "beforeDevCommand": "export PATH=\"/home/lin/.nvm/versions/node/v24.15.0/bin:$PATH\" && npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "DevNexus",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 600,
+        "center": true,
+        "decorations": true,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "rpm": {
+        "depends": []
+      }
+    },
+    "windows": {
+      "wix": {
+        "language": "zh-CN"
+      },
+      "nsis": {
+        "languages": ["English", "SimpChinese"],
+        "installMode": "currentUser"
+      }
+    }
+  }
+}
