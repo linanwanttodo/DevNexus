@@ -8,16 +8,19 @@
     return onLangChange((v) => { _v = v; });
   });
 
-  const routeTitles = $derived({
-    "/dashboard": t("nav.dashboard"),
-    "/environments": t("nav.environments"),
-    "/software": t("nav.software"),
-    "/mirrors": t("nav.mirrors"),
-    "/ports": t("nav.ports"),
-    "/scheduler": t("nav.scheduler"),
-    "/passwords": t("nav.passwords"),
-    "/cookies": t("nav.cookies"),
-    "/settings": t("nav.settings"),
+  let routeTitles = $derived.by(() => {
+    _v;
+    return {
+      "/dashboard": t("nav.dashboard"),
+      "/environments": t("nav.environments"),
+      "/software": t("nav.software"),
+      "/mirrors": t("nav.mirrors"),
+      "/ports": t("nav.ports"),
+      "/scheduler": t("nav.scheduler"),
+      "/passwords": t("nav.passwords"),
+      "/cookies": t("nav.cookies"),
+      "/settings": t("nav.settings"),
+    };
   });
 
   let currentRoute = $state(getRoute());
@@ -38,8 +41,6 @@
 <header class="flex h-10 flex-shrink-0 items-center justify-between border-b border-nx-border bg-nx-surface px-4">
   <div class="flex items-center gap-3">
     <span class="material-symbols-outlined text-nx-accent text-lg">terminal</span>
-    <span class="text-xs font-medium text-nx-text-secondary">DevNexus</span>
-    <span class="text-nx-border">|</span>
     <h2 class="text-sm font-medium text-nx-text">
       {routeTitles[currentRoute] || "DevNexus"}
     </h2>

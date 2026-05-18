@@ -8,17 +8,20 @@
     return onLangChange((v) => { _v = v; });
   });
 
-  const navItems = $derived([
-    { route: "/dashboard", label: t("nav.dashboard"), icon: "dashboard" },
-    { route: "/environments", label: t("nav.environments"), icon: "code" },
-    { route: "/software", label: t("nav.software"), icon: "apps" },
-    { route: "/mirrors", label: t("nav.mirrors"), icon: "sync" },
-    { route: "/ports", label: t("nav.ports"), icon: "lan" },
-    { route: "/scheduler", label: t("nav.scheduler"), icon: "schedule" },
-    { route: "/passwords", label: t("nav.passwords"), icon: "key" },
-    { route: "/cookies", label: t("nav.cookies"), icon: "cookie" },
-    { route: "/settings", label: t("nav.settings"), icon: "settings" },
-  ]);
+  let navItems = $derived.by(() => {
+    _v; // 依赖 _v，语言切换时强制重算
+    return [
+      { route: "/dashboard", label: t("nav.dashboard"), icon: "dashboard" },
+      { route: "/environments", label: t("nav.environments"), icon: "code" },
+      { route: "/software", label: t("nav.software"), icon: "apps" },
+      { route: "/mirrors", label: t("nav.mirrors"), icon: "sync" },
+      { route: "/ports", label: t("nav.ports"), icon: "lan" },
+      { route: "/scheduler", label: t("nav.scheduler"), icon: "schedule" },
+      { route: "/passwords", label: t("nav.passwords"), icon: "key" },
+      { route: "/cookies", label: t("nav.cookies"), icon: "cookie" },
+      { route: "/settings", label: t("nav.settings"), icon: "settings" },
+    ];
+  });
 
   let currentRoute = $state(getRoute());
 
