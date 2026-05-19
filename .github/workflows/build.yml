@@ -47,7 +47,7 @@ jobs:
         run: npm install -g pnpm
 
       - name: Install frontend deps
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --allow-build esbuild
 
       - name: Build Tauri
         run: pnpm tauri build --bundles deb,appimage
@@ -92,7 +92,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Install frontend deps
-        run: npm install -g pnpm && pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --allow-build esbuild
 
       - name: Build Tauri
         run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg
@@ -127,7 +127,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Install frontend deps
-        run: npm install -g pnpm && pnpm install --frozen-lockfile
+        run: npm install -g pnpm && pnpm install --frozen-lockfile --allow-build esbuild
 
       - name: Build Tauri
         run: pnpm tauri build --bundles msi,nsis
@@ -160,7 +160,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          draft: false
           files: |
             linux-packages/*.deb
             linux-packages/*.AppImage
@@ -169,3 +169,41 @@ jobs:
             windows-packages/*.msi
             windows-packages/*.exe
           generate_release_notes: true
+
+      - name: Generate updates.json for Tauri Updater
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          cat > updates.json << 'JSONEOF'
+          {
+            "version": "TAG_PLACEHOLDER",
+            "notes": "",
+            "pub_date": "DATE_PLACEHOLDER",
+            "platforms": {
+              "linux-x86_64": {
+                "signature": "",
+                "url": "https://github.com/linanwanttodo/DevNexus/releases/download/TAG_PLACEHOLDER/DevNexus_${TAG#v}_amd64.deb"
+              },
+              "darwin-x86_64": {
+                "signature": "",
+                "url": "https://github.com/linanwanttodo/DevNexus/releases/download/TAG_PLACEHOLDER/DevNexus_${TAG#v}_x64.dmg"
+              },
+              "darwin-aarch64": {
+                "signature": "",
+                "url": "https://github.com/linanwanttodo/DevNexus/releases/download/TAG_PLACEHOLDER/DevNexus_${TAG#v}_aarch64.dmg"
+              },
+              "windows-x86_64": {
+                "signature": "",
+                "url": "https://github.com/linanwanttodo/DevNexus/releases/download/TAG_PLACEHOLDER/DevNexus_${TAG#v}_x64-setup.exe"
+              }
+            }
+          }
+          JSONEOF
+          # Replace placeholders
+          sed -i "s/TAG_PLACEHOLDER/$TAG/g" updates.json
+          sed -i "s/DATE_PLACEHOLDER/$(date -u +%Y-%m-%dT%H:%M:%SZ)/g" updates.json
+          cat updates.json
+
+      - name: Upload updates.json
+        uses: softprops/action-gh-release@v2
+        with:
+          files: updates.json
