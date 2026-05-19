@@ -24,9 +24,55 @@ pub struct TaskScheduler {
 
 impl TaskScheduler {
     pub fn new() -> Self {
-        Self {
+        let mut s = Self {
             tasks: Arc::new(Mutex::new(Vec::new())),
             next_id: Arc::new(Mutex::new(1)),
+        };
+        s.load();
+        s
+    }
+
+    fn data_path() -> std::path::PathBuf {
+        let base = if cfg!(target_os = "macos") {
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join("Library/Application Support"))
+                .unwrap_or_default()
+        } else if cfg!(target_os = "windows") {
+            std::env::var("APPDATA")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_default()
+        } else {
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join(".config"))
+                .unwrap_or_default()
+        };
+        base.join("devnexus").join("tasks.json")
+    }
+
+    fn save(&self) {
+        let path = Self::data_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(tasks) = self.tasks.lock() {
+            if let Ok(json) = serde_json::to_string_pretty(&*tasks) {
+                let _ = std::fs::write(&path, json);
+            }
+        }
+    }
+
+    fn load(&mut self) {
+        let path = Self::data_path();
+        if let Ok(data) = std::fs::read_to_string(&path) {
+            if let Ok(tasks) = serde_json::from_str::<Vec<ScheduledTask>>(&data) {
+                let max_id = tasks.iter().map(|t| t.id).max().unwrap_or(0);
+                if let Ok(mut next_id) = self.next_id.lock() {
+                    *next_id = max_id + 1;
+                }
+                if let Ok(mut t) = self.tasks.lock() {
+                    *t = tasks;
+                }
+            }
         }
     }
 }
@@ -68,6 +114,8 @@ pub fn add_task(
         .map_err(|e| e.to_string())?
         .push(task);
 
+    state.save();
+
     Ok(id)
 }
 
@@ -84,6 +132,8 @@ pub fn list_tasks(state: tauri::State<'_, TaskScheduler>) -> Vec<ScheduledTask> 
 pub fn delete_task(task_id: u32, state: tauri::State<'_, TaskScheduler>) -> Result<(), String> {
     let mut tasks = state.tasks.lock().map_err(|e| e.to_string())?;
     tasks.retain(|t| t.id != task_id);
+    drop(tasks);
+    state.save();
     Ok(())
 }
 
@@ -93,6 +143,8 @@ pub fn toggle_task(task_id: u32, state: tauri::State<'_, TaskScheduler>) -> Resu
     let mut tasks = state.tasks.lock().map_err(|e| e.to_string())?;
     if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
         task.enabled = !task.enabled;
+        drop(tasks);
+        state.save();
         Ok(())
     } else {
         Err("Task not found".to_string())
@@ -138,6 +190,8 @@ pub async fn execute_task(task_id: u32, state: tauri::State<'_, TaskScheduler>) 
             t.run_count += 1;
             t.next_run = calculate_next_run(&t.cron_expression)?;
         }
+        drop(tasks);
+        state.save();
     }
 
     result

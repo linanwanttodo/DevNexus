@@ -69,9 +69,17 @@ fn detect_environment(name: &str, check_cmd: &str, version_args: &[&str], config
         
         let version = get_version(check_cmd, version_args);
         
-        // 查找可能的配置文件
+        // 展开 ~ 为 HOME 目录
+        let home = std::env::var("HOME").unwrap_or_default();
         let shell_config = config_files.iter()
-            .find(|&file| std::path::Path::new(file).exists())
+            .find(|&file| {
+                let resolved = if file.starts_with("~/") {
+                    format!("{}/{}", home, &file[2..])
+                } else {
+                    file.to_string()
+                };
+                std::path::Path::new(&resolved).exists()
+            })
             .map(|s| s.to_string());
         
         Some(Environment {

@@ -114,12 +114,12 @@ pub async fn spawn_terminal(app: AppHandle, state: State<'_, TerminalState>) -> 
     let sessions = state.sessions.clone();
     let app_handle = app.clone();
     
-    tokio::spawn(async move {
+    tokio::task::spawn_blocking(move || {
         let mut buffer = [0u8; 1024];
         let mut reader = reader_for_thread;
         loop {
             match reader.read(&mut buffer) {
-                Ok(0) => break, // EOF
+                Ok(0) => break,
                 Ok(n) => {
                     let output = String::from_utf8_lossy(&buffer[..n]).to_string();
                     let _ = app_handle.emit("terminal-output", serde_json::json!({
@@ -131,7 +131,6 @@ pub async fn spawn_terminal(app: AppHandle, state: State<'_, TerminalState>) -> 
             }
         }
         
-        // 清理会话
         let _ = sessions.lock().unwrap().remove(&session_id);
         let _ = app_handle.emit("terminal-closed", serde_json::json!({
             "session_id": session_id
