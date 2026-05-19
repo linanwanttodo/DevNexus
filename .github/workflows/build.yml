@@ -170,10 +170,10 @@ jobs:
           name: DevNexus v${{ steps.version.outputs.version }} (${{ github.sha }})
           draft: false
           files: |
-            linux-packages/*.deb
-            linux-packages/*.AppImage
-            macos-x86_64-apple-darwin/*.dmg
-            macos-aarch64-apple-darwin/*.dmg
-            windows-packages/*.msi
-            windows-packages/*.exe
+            linux-packages/**/*.deb
+            linux-packages/**/*.AppImage
+            macos-x86_64-apple-darwin/**/*.dmg
+            macos-aarch64-apple-darwin/**/*.dmg
+            windows-packages/**/*.msi
+            windows-packages/**/*.exe
           generate_release_notes: true
