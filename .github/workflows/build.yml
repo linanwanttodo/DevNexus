@@ -133,7 +133,7 @@ jobs:
         run: npm install -g pnpm@9 && pnpm install --frozen-lockfile
 
       - name: Build Tauri
-        run: pnpm tauri build --bundles msi,nsis
+        run: pnpm tauri build --bundles msi --bundles nsis
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
