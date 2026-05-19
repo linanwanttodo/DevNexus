@@ -1,6 +1,12 @@
 <script>
-  import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import { showToast } from "../lib/toast.js";
+  import { showConfirm } from "../lib/confirm.js";
+  import { t, getVersion, onLangChange } from "../lib/i18n.js";
+
+  let _v = $state(getVersion());
+  $effect(() => onLangChange(v => _v = v));
 
   let passwords = $state([]);
   let loading = $state(true);
@@ -20,7 +26,7 @@
       passwords = await invoke("list_passwords");
     } catch (err) {
       console.error("Failed to load passwords:", err);
-      alert("Failed to load passwords");
+      showToast(t('passwords.failed_load'));
     } finally {
       loading = false;
     }
@@ -28,7 +34,7 @@
 
   async function addPassword() {
     if (!entryName || !username || !password) {
-      alert("Please fill in all required fields");
+      showToast(t('passwords.fill_fields'));
       return;
     }
 
@@ -44,20 +50,20 @@
       showAddModal = false;
       resetForm();
       await loadPasswords();
-      alert("Password added successfully");
+      showToast(t('passwords.add_success'));
     } catch (err) {
-      alert(`Failed to add password: ${err.message || err}`);
+      showToast(t('passwords.add_failed').replace('{error}', err.message || err));
     }
   }
 
   async function deletePassword(id) {
-    if (!confirm("Delete this password?")) return;
+    if (!await showConfirm(t('passwords.delete_confirm'))) return;
     
     try {
       await invoke("delete_password", { id });
       await loadPasswords();
     } catch (err) {
-      alert(`Failed to delete password: ${err.message || err}`);
+      showToast(t('passwords.delete_failed').replace('{error}', err.message || err));
     }
   }
 
@@ -66,7 +72,7 @@
       const pwd = await invoke("get_password", { id });
       showPassword = { id, password: pwd };
     } catch (err) {
-      alert(`Failed to decrypt password: ${err.message || err}`);
+      showToast(t('passwords.view_failed').replace('{error}', err.message || err));
     }
   }
 
@@ -85,9 +91,9 @@
       document.body.removeChild(a);
       URL.revokeObjectURL(downloadUrl);
       
-      alert("Passwords exported successfully");
+      showToast(t('passwords.export_success'));
     } catch (err) {
-      alert(`Export failed: ${err.message || err}`);
+      showToast(t('passwords.export_failed').replace('{error}', err.message || err));
     }
   }
 
@@ -99,38 +105,38 @@
       const text = await file.text();
       const count = await invoke("import_chrome_csv", { csvContent: text });
       await loadPasswords();
-      alert(`Successfully imported ${count} passwords`);
+      showToast(t('passwords.import_success').replace('{count}', count));
       event.target.value = ''; // 重置文件输入
     } catch (err) {
-      alert(`Import failed: ${err.message || err}`);
+      showToast(t('passwords.import_failed').replace('{error}', err.message || err));
     }
   }
 
   async function saveToFile() {
-    const masterPassword = prompt("Enter master password for encryption:");
+    const masterPassword = prompt(t('passwords.master_pwd_save'));
     if (!masterPassword) return;
 
     try {
       // 使用 Tauri dialog 选择文件路径（需要添加 tauri-plugin-dialog）
-      const filePath = prompt("Enter file path to save (e.g., /home/user/passwords.enc):");
+      const filePath = prompt(t('passwords.file_path_save'));
       if (!filePath) return;
 
       await invoke("save_to_file", {
         filePath,
         masterPassword,
       });
-      alert("Passwords saved successfully");
+      showToast(t('passwords.save_success'));
     } catch (err) {
-      alert(`Save failed: ${err.message || err}`);
+      showToast(t('passwords.save_failed').replace('{error}', err.message || err));
     }
   }
 
   async function loadFromFile() {
-    const masterPassword = prompt("Enter master password for decryption:");
+    const masterPassword = prompt(t('passwords.master_pwd_load'));
     if (!masterPassword) return;
 
     try {
-      const filePath = prompt("Enter file path to load:");
+      const filePath = prompt(t('passwords.file_path_load'));
       if (!filePath) return;
 
       const count = await invoke("load_from_file", {
@@ -138,9 +144,9 @@
         masterPassword,
       });
       await loadPasswords();
-      alert(`Successfully loaded ${count} passwords`);
+      showToast(t('passwords.load_success').replace('{count}', count));
     } catch (err) {
-      alert(`Load failed: ${err.message || err}`);
+      showToast(t('passwords.load_failed').replace('{error}', err.message || err));
     }
   }
 
@@ -154,7 +160,7 @@
 
   function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
-      alert("Copied to clipboard");
+      showToast(t('passwords.copied'));
     });
   }
 
@@ -167,32 +173,32 @@
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between">
     <div>
-      <h1 class="text-xl font-semibold text-nx-text">Password Manager</h1>
-      <p class="mt-1 text-xs text-nx-text-muted">Securely store and manage your passwords with AES-256 encryption</p>
+      <h1 class="text-xl font-semibold text-nx-text">{t('passwords.title')}</h1>
+      <p class="mt-1 text-xs text-nx-text-muted">{t('passwords.desc')}</p>
     </div>
     <div class="flex gap-2">
       <button 
         class="flex items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text"
         onclick={exportCSV}>
         <span class="material-symbols-outlined text-lg">download</span>
-        Export CSV
+        {t('passwords.export_csv')}
       </button>
       <label class="flex cursor-pointer items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text">
         <span class="material-symbols-outlined text-lg">upload</span>
-        Import CSV
+        {t('passwords.import_csv')}
         <input type="file" accept=".csv" class="hidden" onchange={importCSV} />
       </label>
       <button 
         class="flex items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text"
         onclick={saveToFile}>
         <span class="material-symbols-outlined text-lg">save</span>
-        Save Encrypted
+        {t('passwords.save_encrypted')}
       </button>
       <button 
         class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white"
         onclick={() => showAddModal = true}>
         <span class="material-symbols-outlined text-lg">add</span>
-        Add Password
+        {t('passwords.add')}
       </button>
     </div>
   </div>
@@ -205,19 +211,19 @@
   {:else if passwords.length === 0}
     <div class="border border-nx-border bg-nx-surface p-12 text-center">
       <span class="material-symbols-outlined text-nx-text-muted text-4xl">lock</span>
-      <div class="mt-4 text-sm text-nx-text-muted">No passwords stored</div>
-      <div class="mt-1 text-xs text-nx-text-muted">Add your first password entry</div>
+      <div class="mt-4 text-sm text-nx-text-muted">{t('passwords.no_passwords')}</div>
+      <div class="mt-1 text-xs text-nx-text-muted">{t('passwords.no_passwords_desc')}</div>
     </div>
   {:else}
     <div class="border border-nx-border bg-nx-surface">
       <table class="w-full">
         <thead>
           <tr class="border-b border-nx-border text-xs text-nx-text-muted">
-            <th class="px-4 py-3 text-left font-medium">Name</th>
-            <th class="px-4 py-3 text-left font-medium">Username</th>
+            <th class="px-4 py-3 text-left font-medium">{t('passwords.name')}</th>
+            <th class="px-4 py-3 text-left font-medium">{t('passwords.username')}</th>
             <th class="px-4 py-3 text-left font-medium">URL</th>
-            <th class="px-4 py-3 text-left font-medium">Created</th>
-            <th class="px-4 py-3 text-right font-medium">Actions</th>
+            <th class="px-4 py-3 text-left font-medium">{t('passwords.created')}</th>
+            <th class="px-4 py-3 text-right font-medium">{t('passwords.actions')}</th>
           </tr>
         </thead>
         <tbody>
@@ -234,7 +240,7 @@
                 {#if entry.url}
                   <a href={entry.url} target="_blank" class="text-nx-text-secondary underline">{entry.url}</a>
                 {:else}
-                  <span class="text-nx-text-muted">—</span>
+                  <span class="text-nx-text-muted">{t('passwords.no_url')}</span>
                 {/if}
               </td>
               <td class="px-4 py-3 text-xs text-nx-text-muted">{entry.created_at}</td>
@@ -242,19 +248,19 @@
                 <div class="flex items-center justify-end gap-1">
                   <button 
                     class="p-1.5 text-nx-text-secondary"
-                    title="View Password"
+                    title={t('passwords.title_view')}
                     onclick={() => viewPassword(entry.id)}>
                     <span class="material-symbols-outlined text-lg">visibility</span>
                   </button>
                   <button 
                     class="p-1.5 text-nx-text-secondary"
-                    title="Copy Username"
+                    title={t('passwords.title_copy')}
                     onclick={() => copyToClipboard(entry.username)}>
                     <span class="material-symbols-outlined text-lg">content_copy</span>
                   </button>
                   <button 
                     class="p-1.5 text-nx-text-secondary"
-                    title="Delete"
+                    title={t('passwords.title_delete')}
                     onclick={() => deletePassword(entry.id)}>
                     <span class="material-symbols-outlined text-lg">delete</span>
                   </button>
@@ -272,11 +278,11 @@
 {#if showAddModal}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onclick={() => showAddModal = false}>
     <div class="w-full max-w-lg border border-nx-border bg-nx-surface p-6" onclick={(e) => e.stopPropagation()}>
-      <h2 class="mb-4 text-lg font-semibold text-nx-text">Add Password</h2>
+      <h2 class="mb-4 text-lg font-semibold text-nx-text">{t('passwords.add')}</h2>
       
       <div class="space-y-4">
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted">Name *</label>
+          <label class="mb-1 block text-xs text-nx-text-muted">{t('passwords.name')} *</label>
           <input
             type="text"
             bind:value={entryName}
@@ -286,7 +292,7 @@
         </div>
 
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted">Username *</label>
+          <label class="mb-1 block text-xs text-nx-text-muted">{t('passwords.username')} *</label>
           <input
             type="text"
             bind:value={username}
@@ -296,7 +302,7 @@
         </div>
 
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted">Password *</label>
+          <label class="mb-1 block text-xs text-nx-text-muted">{t('passwords.password')} *</label>
           <input
             type="password"
             bind:value={password}
@@ -316,7 +322,7 @@
         </div>
 
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted">Notes</label>
+          <label class="mb-1 block text-xs text-nx-text-muted">{t('passwords.notes')}</label>
           <textarea
             bind:value={notes}
             placeholder="Additional information..."
@@ -329,12 +335,12 @@
         <button
           class="border border-nx-border bg-nx-bg px-4 py-2 text-sm font-medium text-nx-text-secondary"
           onclick={() => showAddModal = false}>
-          Cancel
+          {t('passwords.cancel')}
         </button>
         <button
           class="bg-nx-text px-4 py-2 text-sm font-medium text-nx-deep"
           onclick={addPassword}>
-          Save Password
+          {t('passwords.save')}
         </button>
       </div>
     </div>
@@ -345,16 +351,16 @@
 {#if showPassword}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onclick={() => showPassword = null}>
     <div class="w-full max-w-md border border-nx-border bg-nx-surface p-6" onclick={(e) => e.stopPropagation()}>
-      <h2 class="mb-4 text-lg font-semibold text-nx-text">Password Details</h2>
+      <h2 class="mb-4 text-lg font-semibold text-nx-text">{t('passwords.details')}</h2>
       
       <div class="border border-nx-border bg-nx-bg p-4">
-        <div class="mb-2 text-xs text-nx-text-muted">Password</div>
+        <div class="mb-2 text-xs text-nx-text-muted">{t('passwords.password')}</div>
         <div class="flex items-center gap-2">
           <code class="flex-1 break-all text-sm text-nx-text">{showPassword.password}</code>
           <button
             class="p-1.5 text-nx-text-secondary"
             onclick={() => copyToClipboard(showPassword.password)}
-            title="Copy">
+            title={t('passwords.title_copy')}>
             <span class="material-symbols-outlined text-lg">content_copy</span>
           </button>
         </div>
@@ -364,7 +370,7 @@
         <button
           class="bg-nx-text px-4 py-2 text-sm font-medium text-nx-deep"
           onclick={() => showPassword = null}>
-          Close
+          {t('passwords.close')}
         </button>
       </div>
     </div>

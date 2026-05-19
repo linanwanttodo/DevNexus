@@ -28,35 +28,61 @@ fn get_version(cmd: &str, args: &[&str]) -> String {
 
 /// 查找命令的完整路径（含 nvm 等常见路径）
 fn find_cmd_path(cmd: &str) -> Option<String> {
-    // 先尝试标准 PATH
     if let Ok(p) = which::which(cmd) {
         return Some(p.to_string_lossy().to_string());
     }
 
-    // 检查 nvm 安装的 Node.js
-    if cmd == "node" || cmd == "npm" || cmd == "npx" {
-        if let Ok(home) = std::env::var("HOME") {
-            let nvm_base = format!("{}/.nvm/versions/node", home);
+    #[cfg(unix)]
+    {
+        if cmd == "node" || cmd == "npm" || cmd == "npx" {
+            if let Ok(home) = std::env::var("HOME") {
+                let nvm_base = format!("{}/.nvm/versions/node", home);
+                if let Ok(entries) = std::fs::read_dir(&nvm_base) {
+                    for entry in entries.flatten() {
+                        let bin = entry.path().join("bin").join(cmd);
+                        if bin.exists() {
+                            return Some(bin.to_string_lossy().to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        let common = [
+            format!("/usr/local/bin/{}", cmd),
+            format!("/opt/homebrew/bin/{}", cmd),
+            format!("/snap/bin/{}", cmd),
+        ];
+        for p in &common {
+            if std::path::Path::new(p).exists() {
+                return Some(p.clone());
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+            let nvm_base = format!("{}\\nvm", localappdata);
             if let Ok(entries) = std::fs::read_dir(&nvm_base) {
                 for entry in entries.flatten() {
-                    let bin = entry.path().join("bin").join(cmd);
+                    let bin = entry.path().join(cmd);
                     if bin.exists() {
                         return Some(bin.to_string_lossy().to_string());
                     }
                 }
             }
         }
-    }
-
-    // 常见固定路径
-    let common = [
-        format!("/usr/local/bin/{}", cmd),
-        format!("/opt/homebrew/bin/{}", cmd),
-        format!("/snap/bin/{}", cmd),
-    ];
-    for p in &common {
-        if std::path::Path::new(p).exists() {
-            return Some(p.clone());
+        if let Ok(programfiles) = std::env::var("ProgramFiles") {
+            let common = [
+                format!("{}\\{}", programfiles, cmd),
+                format!("{} (x86)\\{}", std::env::var("ProgramFiles(x86)").unwrap_or_default(), cmd),
+            ];
+            for p in &common {
+                if std::path::Path::new(p).exists() {
+                    return Some(p.clone());
+                }
+            }
         }
     }
 
@@ -169,7 +195,7 @@ fn add_to_path_impl(env_name: &str, path: &str) -> Result<String, String> {
     let mut written_to = Vec::new();
     for rc_file in rc_files {
         let rc_path = format!("{}/{}", home, rc_file);
-        if std::path::Path::new(&rc_path).exists() || rc_file == &".bashrc" || rc_file == &".zshrc" {
+        if std::path::Path::new(&rc_path).exists() {
             let existing = std::fs::read_to_string(&rc_path).unwrap_or_default();
             if existing.contains(path) {
                 written_to.push(rc_path);

@@ -2,6 +2,8 @@
   import { getRoute, onRouteChange } from "./lib/stores.js";
   import Sidebar from "./components/Sidebar.svelte";
   import TopBar from "./components/TopBar.svelte";
+  import Toast from "./components/Toast.svelte";
+  import ConfirmDialog from "./components/ConfirmDialog.svelte";
   import Dashboard from "./routes/Dashboard.svelte";
   import EnvironmentManager from "./routes/EnvironmentManager.svelte";
   import SoftwareCenter from "./routes/SoftwareCenter.svelte";
@@ -49,4 +51,6 @@
       </main>
     </div>
   </div>
+  <Toast />
+  <ConfirmDialog />
 </div>

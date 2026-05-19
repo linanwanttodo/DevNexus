@@ -1,6 +1,8 @@
 <script>
   import { onMount } from "svelte";
   import { t, initI18n, getLang } from "../lib/i18n.js";
+  import { invoke } from "@tauri-apps/api/core";
+  import { check } from "@tauri-apps/plugin-updater";
 
   let theme = $state("dark");
   let lang = $state(getLang());
@@ -10,6 +12,12 @@
   let proxyEnabled = $state(false);
   let proxyAddress = $state("");
   let proxyPort = $state("");
+
+  // Update state
+  let updateState = $state("idle"); // idle | checking | available | up_to_date | error | downloading
+  let updateInfo = $state(null);
+  let updateError = $state("");
+  let downloadProgress = $state(0);
 
   function applyTheme(t) {
     document.documentElement.setAttribute("data-theme", t);
@@ -31,6 +39,72 @@
     await initI18n(l);
   }
 
+  async function checkForUpdates() {
+    updateState = "checking";
+    updateError = "";
+    updateInfo = null;
+
+    try {
+      // Try Tauri plugin updater first
+      const update = await check();
+      if (update && update.available) {
+        updateInfo = {
+          has_update: true,
+          latest_version: update.version,
+          current_version: "",
+          download_url: "",
+          release_notes: update.body || "New version available",
+          published_at: update.date,
+        };
+        updateState = "available";
+        return;
+      }
+    } catch (e) {
+      // Plugin updater not configured (no endpoint/pubkey), fall back to GitHub API
+      console.log("Plugin updater unavailable, falling back to GitHub API:", e);
+    }
+
+    try {
+      const result = await invoke("check_for_updates_github");
+      if (result.has_update) {
+        updateInfo = result;
+        updateState = "available";
+      } else {
+        updateState = "up_to_date";
+      }
+    } catch (err) {
+      updateError = err.message || String(err);
+      updateState = "error";
+    }
+  }
+
+  async function downloadAndInstall() {
+    updateState = "downloading";
+    downloadProgress = 0;
+
+    try {
+      const update = await check();
+      if (update && update.available) {
+        await update.downloadAndInstall((event) => {
+          if (event.event === "DownloadProgress") {
+            downloadProgress = Math.round((event.data.transferredBytes / event.data.totalBytes) * 100);
+          }
+        });
+        // App will restart after install
+      } else {
+        // Fallback: open release page in browser
+        if (updateInfo?.download_url) {
+          const { open } = await import("@tauri-apps/plugin-shell");
+          await open(updateInfo.download_url);
+        }
+        updateState = "available";
+      }
+    } catch (err) {
+      updateError = err.message || String(err);
+      updateState = "error";
+    }
+  }
+
   onMount(() => {
     const saved = localStorage.getItem("devnexus-theme") || "dark";
     theme = saved === "light" || saved === "dark" ? saved : "system";
@@ -39,35 +113,35 @@
 </script>
 
 <div class="mx-auto max-w-2xl">
-  <h1 class="mb-6 text-xl font-semibold text-nx-text">Settings</h1>
+  <h1 class="mb-6 text-xl font-semibold text-nx-text">{t("settings.title")}</h1>
 
   <!-- Appearance -->
   <div class="mb-6 border border-nx-border bg-nx-surface">
     <div class="border-b border-nx-border px-5 py-3">
-      <h3 class="text-sm font-medium text-nx-text">Appearance</h3>
+      <h3 class="text-sm font-medium text-nx-text">{t("settings.appearance")}</h3>
     </div>
     <div class="p-5 space-y-5">
       <!-- Theme -->
       <div class="flex items-center justify-between">
         <div>
-          <div class="text-sm text-nx-text">Theme</div>
-          <div class="text-xs text-nx-text-muted">Select your preferred theme</div>
+          <div class="text-sm text-nx-text">{t("settings.theme")}</div>
+          <div class="text-xs text-nx-text-muted">{t("settings.theme_desc")}</div>
         </div>
         <div class="flex border border-nx-border">
           <button
             class="px-3 py-1.5 text-xs font-medium {theme === 'light' ? 'bg-nx-raised text-nx-text' : 'text-nx-text-secondary'}"
             onclick={() => setTheme("light")}>
-            Light
+            {t("settings.light")}
           </button>
           <button
             class="border-l border-r border-nx-border px-3 py-1.5 text-xs font-medium {theme === 'dark' ? 'bg-nx-raised text-nx-text' : 'text-nx-text-secondary'}"
             onclick={() => setTheme("dark")}>
-            Dark
+            {t("settings.dark")}
           </button>
           <button
             class="px-3 py-1.5 text-xs font-medium {theme === 'system' ? 'bg-nx-raised text-nx-text' : 'text-nx-text-secondary'}"
             onclick={() => setTheme("system")}>
-            System
+            {t("settings.system")}
           </button>
         </div>
       </div>
@@ -77,13 +151,14 @@
       <!-- Compact Mode -->
       <div class="flex items-center justify-between">
         <div>
-          <div class="text-sm text-nx-text">Compact Mode</div>
-          <div class="text-xs text-nx-text-muted">Reduce padding and spacing</div>
+          <div class="text-sm text-nx-text">{t("settings.compact_mode")}</div>
+          <div class="text-xs text-nx-text-muted">{t("settings.compact_mode_desc")}</div>
         </div>
         <button
-          class="relative h-5 w-9 {compactMode ? 'bg-nx-success' : 'bg-nx-border'}"
-          onclick={() => compactMode = !compactMode}>
-          <span class="absolute top-0.5 h-4 w-4 bg-white {compactMode ? 'left-[18px]' : 'left-0.5'}"></span>
+          class="relative h-5 w-9 rounded-full transition-colors {compactMode ? 'bg-nx-accent' : 'bg-nx-border'}"
+          onclick={() => compactMode = !compactMode}
+          aria-label={t("settings.compact_mode")}>
+          <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all {compactMode ? 'left-[18px]' : 'left-0.5'}"></span>
         </button>
       </div>
     </div>
@@ -115,18 +190,19 @@
   <!-- Notifications -->
   <div class="mb-6 border border-nx-border bg-nx-surface">
     <div class="border-b border-nx-border px-5 py-3">
-      <h3 class="text-sm font-medium text-nx-text">Notifications</h3>
+      <h3 class="text-sm font-medium text-nx-text">{t("settings.notifications")}</h3>
     </div>
     <div class="p-5 space-y-5">
       <div class="flex items-center justify-between">
         <div>
-          <div class="text-sm text-nx-text">Build Alerts</div>
-          <div class="text-xs text-nx-text-muted">Notify on build failures</div>
+          <div class="text-sm text-nx-text">{t("settings.build_alerts")}</div>
+          <div class="text-xs text-nx-text-muted">{t("settings.build_alerts_desc")}</div>
         </div>
         <button
-          class="relative h-5 w-9 {buildAlerts ? 'bg-nx-text' : 'bg-nx-border'}"
-          onclick={() => buildAlerts = !buildAlerts}>
-          <span class="absolute top-0.5 h-4 w-4 bg-nx-text-secondary {buildAlerts ? 'left-[18px]' : 'left-0.5'}"></span>
+          class="relative h-5 w-9 rounded-full transition-colors {buildAlerts ? 'bg-nx-accent' : 'bg-nx-border'}"
+          onclick={() => buildAlerts = !buildAlerts}
+          aria-label={t("settings.build_alerts")}>
+          <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all {buildAlerts ? 'left-[18px]' : 'left-0.5'}"></span>
         </button>
       </div>
 
@@ -134,13 +210,14 @@
 
       <div class="flex items-center justify-between">
         <div>
-          <div class="text-sm text-nx-text">Security Notices</div>
-          <div class="text-xs text-nx-text-muted">Vulnerability alerts</div>
+          <div class="text-sm text-nx-text">{t("settings.security_notices")}</div>
+          <div class="text-xs text-nx-text-muted">{t("settings.security_notices_desc")}</div>
         </div>
         <button
-          class="relative h-5 w-9 {securityNotices ? 'bg-nx-text' : 'bg-nx-border'}"
-          onclick={() => securityNotices = !securityNotices}>
-          <span class="absolute top-0.5 h-4 w-4 bg-nx-text-secondary {securityNotices ? 'left-[18px]' : 'left-0.5'}"></span>
+          class="relative h-5 w-9 rounded-full transition-colors {securityNotices ? 'bg-nx-accent' : 'bg-nx-border'}"
+          onclick={() => securityNotices = !securityNotices}
+          aria-label={t("settings.security_notices")}>
+          <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all {securityNotices ? 'left-[18px]' : 'left-0.5'}"></span>
         </button>
       </div>
     </div>
@@ -149,26 +226,28 @@
   <!-- Network Proxy -->
   <div class="mb-6 border border-nx-border bg-nx-surface">
     <div class="border-b border-nx-border px-5 py-3">
-      <h3 class="text-sm font-medium text-nx-text">Network Proxy</h3>
+      <h3 class="text-sm font-medium text-nx-text">{t("settings.network_proxy")}</h3>
     </div>
     <div class="p-5 space-y-5">
       <div class="flex items-center justify-between">
         <div>
-          <div class="text-sm text-nx-text">Enable Proxy</div>
-          <div class="text-xs text-nx-text-muted">Route traffic through a proxy server</div>
+          <div class="text-sm text-nx-text">{t("settings.enable_proxy")}</div>
+          <div class="text-xs text-nx-text-muted">{t("settings.enable_proxy_desc")}</div>
         </div>
         <button
-          class="relative h-5 w-9 {proxyEnabled ? 'bg-nx-text' : 'bg-nx-border'}"
-          onclick={() => proxyEnabled = !proxyEnabled}>
-          <span class="absolute top-0.5 h-4 w-4 bg-nx-text-secondary {proxyEnabled ? 'left-[18px]' : 'left-0.5'}"></span>
+          class="relative h-5 w-9 rounded-full transition-colors {proxyEnabled ? 'bg-nx-accent' : 'bg-nx-border'}"
+          onclick={() => proxyEnabled = !proxyEnabled}
+          aria-label={t("settings.enable_proxy")}>
+          <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all {proxyEnabled ? 'left-[18px]' : 'left-0.5'}"></span>
         </button>
       </div>
 
       {#if proxyEnabled}
         <div class="grid grid-cols-3 gap-3">
           <div class="col-span-2">
-            <label class="mb-1 block text-xs text-nx-text-muted">Proxy Address</label>
+            <label class="mb-1 block text-xs text-nx-text-muted" for="proxy-address">{t("settings.proxy_address")}</label>
             <input
+              id="proxy-address"
               type="text"
               bind:value={proxyAddress}
               placeholder="127.0.0.1"
@@ -176,8 +255,9 @@
             />
           </div>
           <div>
-            <label class="mb-1 block text-xs text-nx-text-muted">Port</label>
+            <label class="mb-1 block text-xs text-nx-text-muted" for="proxy-port">{t("settings.port")}</label>
             <input
+              id="proxy-port"
               type="text"
               bind:value={proxyPort}
               placeholder="7890"
@@ -192,21 +272,96 @@
   <!-- Updates -->
   <div class="mb-6 border border-nx-border bg-nx-surface">
     <div class="border-b border-nx-border px-5 py-3">
-      <h3 class="text-sm font-medium text-nx-text">Updates</h3>
+      <h3 class="text-sm font-medium text-nx-text">{t("settings.updates")}</h3>
     </div>
     <div class="p-5">
       <div class="flex items-center justify-between">
         <div>
-          <div class="text-sm text-nx-text">Current Version</div>
+          <div class="text-sm text-nx-text">{t("settings.current_version")}</div>
           <div class="font-mono text-xs text-nx-text-secondary">v1.0.0</div>
         </div>
-        <button class="border border-nx-border bg-nx-bg px-4 py-2 text-xs font-medium text-nx-text-secondary">
-          Check for Updates
+        <button
+          class="border border-nx-border bg-nx-bg px-4 py-2 text-xs font-medium text-nx-text-secondary transition-colors hover:bg-nx-raised disabled:opacity-50"
+          onclick={checkForUpdates}
+          disabled={updateState === 'checking' || updateState === 'downloading'}
+        >
+          {#if updateState === 'checking'}
+            <span class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-sm animate-spin">refresh</span>
+              {t("settings.checking")}
+            </span>
+          {:else}
+            {t("settings.check_updates")}
+          {/if}
         </button>
       </div>
-      <div class="mt-3 flex items-center gap-2">
-        <span class="material-symbols-outlined text-nx-text-secondary text-sm">check_circle</span>
-        <span class="text-xs text-nx-text-secondary">System is up to date</span>
+
+      <!-- Update Status -->
+      <div class="mt-3">
+        {#if updateState === 'checking'}
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-nx-text-secondary text-sm animate-spin">refresh</span>
+            <span class="text-xs text-nx-text-secondary">{t("settings.checking")}...</span>
+          </div>
+        {:else if updateState === 'up_to_date'}
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-nx-success text-sm">check_circle</span>
+            <span class="text-xs text-nx-text-secondary">{t("settings.up_to_date")}</span>
+          </div>
+        {:else if updateState === 'available'}
+          <div class="mt-2 rounded border border-nx-border bg-nx-bg p-3">
+            <div class="flex items-start gap-2">
+              <span class="material-symbols-outlined text-nx-accent text-sm mt-0.5">system_update</span>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-nx-text">
+                  {t("settings.update_available")} {updateInfo?.latest_version}
+                </div>
+                {#if updateInfo?.release_notes}
+                  <div class="mt-1 max-h-20 overflow-y-auto text-xs text-nx-text-secondary whitespace-pre-wrap">
+                    {updateInfo.release_notes}
+                  </div>
+                {/if}
+                {#if updateInfo?.published_at}
+                  <div class="mt-1 text-xs text-nx-text-muted">
+                    {t("settings.released")}: {new Date(updateInfo.published_at).toLocaleDateString()}
+                  </div>
+                {/if}
+              </div>
+            </div>
+            <button
+              class="mt-3 w-full border border-nx-accent bg-nx-accent/10 px-4 py-2 text-xs font-medium text-nx-accent transition-colors hover:bg-nx-accent/20 disabled:opacity-50"
+              onclick={downloadAndInstall}
+              disabled={updateState === 'downloading'}
+            >
+              {#if updateState === 'downloading'}
+                <span class="flex items-center justify-center gap-2">
+                  <span class="material-symbols-outlined text-sm animate-spin">refresh</span>
+                  {t("settings.downloading")} {downloadProgress}%
+                </span>
+              {:else}
+                <span class="flex items-center justify-center gap-2">
+                  <span class="material-symbols-outlined text-sm">download</span>
+                  {t("settings.download_update")}
+                </span>
+              {/if}
+            </button>
+            {#if updateState === 'downloading'}
+              <div class="mt-2 h-1 w-full bg-nx-border rounded-full overflow-hidden">
+                <div class="h-full bg-nx-accent transition-all" style="width: {downloadProgress}%"></div>
+              </div>
+            {/if}
+          </div>
+        {:else if updateState === 'error'}
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-red-500 text-sm">error</span>
+            <span class="text-xs text-red-500">{t("settings.update_error")}: {updateError}</span>
+          </div>
+        {:else}
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-nx-text-secondary text-sm">check_circle</span>
+            <span class="text-xs text-nx-text-secondary">{t("settings.up_to_date")}</span>
+          </div>
+        {/if}
       </div>
     </div>
   </div>

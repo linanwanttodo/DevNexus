@@ -3,6 +3,18 @@ use std::time::Instant;
 use std::fs;
 use std::path::PathBuf;
 
+fn user_home() -> PathBuf {
+    if cfg!(target_os = "windows") {
+        std::env::var("USERPROFILE")
+            .map(PathBuf::from)
+            .unwrap_or_default()
+    } else {
+        std::env::var("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_default()
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MirrorSource {
     pub name: String,
@@ -196,7 +208,8 @@ fn get_brew_mirror() -> Option<String> {
 // ============ setters ============
 
 fn set_npm_registry(url: &str) -> Result<String, String> {
-    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
+    let home = user_home();
+    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
     let npmrc = PathBuf::from(&home).join(".npmrc");
     fs::write(&npmrc, format!("registry={}\n", url))
         .map_err(|e| format!("Failed to write .npmrc: {}", e))?;
@@ -204,7 +217,8 @@ fn set_npm_registry(url: &str) -> Result<String, String> {
 }
 
 fn set_pypi_index(url: &str) -> Result<String, String> {
-    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
+    let home = user_home();
+    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
     let pip_dir = PathBuf::from(&home).join(".pip");
     fs::create_dir_all(&pip_dir).map_err(|e| e.to_string())?;
     let pip_conf = pip_dir.join("pip.conf");
@@ -215,7 +229,8 @@ fn set_pypi_index(url: &str) -> Result<String, String> {
 
 fn set_docker_mirror(url: &str) -> Result<String, String> {
     // 优先尝试用户级配置 (~/.docker/daemon.json)，回退到系统级
-    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
+    let home = user_home();
+    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
     let docker_dir = PathBuf::from(&home).join(".docker");
     fs::create_dir_all(&docker_dir).map_err(|e| e.to_string())?;
     let daemon = docker_dir.join("daemon.json");
@@ -229,7 +244,8 @@ fn set_docker_mirror(url: &str) -> Result<String, String> {
 }
 
 fn set_cargo_mirror(url: &str) -> Result<String, String> {
-    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
+    let home = user_home();
+    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
     let cargo_dir = PathBuf::from(&home).join(".cargo");
     fs::create_dir_all(&cargo_dir).map_err(|e| e.to_string())?;
     let config = cargo_dir.join("config.toml");
@@ -247,7 +263,8 @@ fn set_brew_mirror(url: &str) -> Result<String, String> {
 }
 
 fn set_composer_mirror(url: &str) -> Result<String, String> {
-    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
+    let home = user_home();
+    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
     let composer_dir = PathBuf::from(&home).join(".composer");
     fs::create_dir_all(&composer_dir).map_err(|e| e.to_string())?;
     let config = composer_dir.join("config.json");

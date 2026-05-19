@@ -6,3 +6,4 @@ pub mod scheduler;
 pub mod password_manager;
 pub mod cookie_extractor;
 pub mod port_manager;
+pub mod updater;

@@ -1,6 +1,12 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import { showToast } from "../lib/toast.js";
+  import { showConfirm } from "../lib/confirm.js";
+  import { t, getVersion, onLangChange } from "../lib/i18n.js";
+
+  let _v = $state(getVersion());
+  $effect(() => onLangChange(v => _v = v));
 
   let tasks = $state([]);
   let loading = $state(true);
@@ -14,18 +20,18 @@
   let command = $state("");
 
   const taskTypes = [
-    { value: "script", label: "Script" },
-    { value: "command", label: "Command" },
-    { value: "shutdown", label: "Shutdown" },
-    { value: "email", label: "Email" },
+    { value: "script", label: t('scheduler.script') },
+    { value: "command", label: t('scheduler.command') },
+    { value: "shutdown", label: t('scheduler.shutdown') },
+    { value: "email", label: t('scheduler.email') },
   ];
 
   const presets = [
-    { label: "Every hour", value: "0 * * * *" },
-    { label: "Every 6 hours", value: "0 */6 * * *" },
-    { label: "Daily at midnight", value: "0 0 * * *" },
-    { label: "Weekly on Monday", value: "0 0 * * 1" },
-    { label: "Monthly on 1st", value: "0 0 1 * *" },
+    { label: t('scheduler.every_hour'), value: "0 * * * *" },
+    { label: t('scheduler.every_6h'), value: "0 */6 * * *" },
+    { label: t('scheduler.daily_midnight'), value: "0 0 * * *" },
+    { label: t('scheduler.weekly_monday'), value: "0 0 * * 1" },
+    { label: t('scheduler.monthly_1st'), value: "0 0 1 * *" },
   ];
 
   async function loadTasks() {
@@ -34,7 +40,7 @@
       tasks = await invoke("list_tasks");
     } catch (err) {
       console.error("Failed to load tasks:", err);
-      alert("Failed to load tasks");
+      showToast(t('scheduler.failed_load'));
     } finally {
       loading = false;
     }
@@ -42,7 +48,7 @@
 
   async function addTask() {
     if (!taskName || !cronExpression) {
-      alert("Please fill in all required fields");
+      showToast(t('scheduler.fill_fields'));
       return;
     }
 
@@ -58,20 +64,20 @@
       showAddModal = false;
       resetForm();
       await loadTasks();
-      alert("Task added successfully");
+      showToast(t('scheduler.add_success'));
     } catch (err) {
-      alert(`Failed to add task: ${err.message || err}`);
+      showToast(t('scheduler.add_failed').replace('{error}', err.message || err));
     }
   }
 
   async function deleteTask(id) {
-    if (!confirm("Delete this task?")) return;
+    if (!await showConfirm(t('scheduler.delete_confirm'))) return;
     
     try {
       await invoke("delete_task", { taskId: id });
       await loadTasks();
     } catch (err) {
-      alert(`Failed to delete task: ${err.message || err}`);
+      showToast(t('scheduler.delete_failed').replace('{error}', err.message || err));
     }
   }
 
@@ -80,19 +86,19 @@
       await invoke("toggle_task", { taskId: id });
       await loadTasks();
     } catch (err) {
-      alert(`Failed to toggle task: ${err.message || err}`);
+      showToast(t('scheduler.toggle_failed').replace('{error}', err.message || err));
     }
   }
 
   async function executeTask(id) {
-    if (!confirm("Execute this task now?")) return;
+    if (!await showConfirm(t('scheduler.execute_confirm'))) return;
     
     try {
       const result = await invoke("execute_task", { taskId: id });
-      alert(`Task executed successfully:\n${result}`);
+      showToast(t('scheduler.execute_success').replace('{result}', result));
       await loadTasks();
     } catch (err) {
-      alert(`Execution failed: ${err.message || err}`);
+      showToast(t('scheduler.execute_failed').replace('{error}', err.message || err));
     }
   }
 
@@ -113,14 +119,14 @@
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between">
     <div>
-      <h1 class="text-xl font-semibold text-nx-text">Task Scheduler</h1>
-      <p class="mt-1 text-xs text-nx-text-muted">Automate scripts and system tasks with cron expressions</p>
+      <h1 class="text-xl font-semibold text-nx-text">{t('scheduler.title')}</h1>
+      <p class="mt-1 text-xs text-nx-text-muted">{t('scheduler.desc')}</p>
     </div>
     <button 
       class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white"
       onclick={() => showAddModal = true}>
       <span class="material-symbols-outlined text-lg">add</span>
-      New Task
+      {t('scheduler.add')}
     </button>
   </div>
 
@@ -132,8 +138,8 @@
   {:else if tasks.length === 0}
     <div class="border border-nx-border bg-nx-surface p-12 text-center">
       <span class="material-symbols-outlined text-nx-text-muted text-4xl">schedule</span>
-      <div class="mt-4 text-sm text-nx-text-muted">No scheduled tasks</div>
-      <div class="mt-1 text-xs text-nx-text-muted">Create your first automated task</div>
+      <div class="mt-4 text-sm text-nx-text-muted">{t('scheduler.no_tasks')}</div>
+      <div class="mt-1 text-xs text-nx-text-muted">{t('scheduler.no_tasks_desc')}</div>
     </div>
   {:else}
     <div class="space-y-3">
@@ -145,7 +151,7 @@
                 <h3 class="text-sm font-medium text-nx-text">{task.name}</h3>
                 <span class="px-2 py-0.5 text-xs font-medium
                   {task.enabled ? 'bg-nx-success/15 text-nx-success' : 'bg-nx-text-muted/15 text-nx-text-muted'}">
-                  {task.enabled ? 'Active' : 'Disabled'}
+                  {task.enabled ? t('common.active') : t('common.disabled')}
                 </span>
                 <span class="bg-nx-text-secondary/15 px-2 py-0.5 text-xs font-medium text-nx-text-secondary">
                   {task.task_type}
@@ -160,18 +166,18 @@
                 {#if task.next_run}
                   <div class="flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm">calendar_today</span>
-                    <span>Next: {task.next_run}</span>
+                    <span>{t('scheduler.next')}: {task.next_run}</span>
                   </div>
                 {/if}
                 {#if task.last_run}
                   <div class="flex items-center gap-1">
                     <span class="material-symbols-outlined text-sm">history</span>
-                    <span>Last: {task.last_run}</span>
+                    <span>{t('scheduler.last')}: {task.last_run}</span>
                   </div>
                 {/if}
                 <div class="flex items-center gap-1">
                   <span class="material-symbols-outlined text-sm">repeat</span>
-                  <span>{task.run_count} runs</span>
+                  <span>{task.run_count} {t('scheduler.runs')}</span>
                 </div>
               </div>
             </div>
@@ -179,7 +185,7 @@
             <div class="flex items-center gap-1">
               <button 
                 class="p-1.5 text-nx-text-secondary"
-                title={task.enabled ? 'Disable' : 'Enable'}
+                title={task.enabled ? t('scheduler.disable') : t('scheduler.enable')}
                 onclick={() => toggleTask(task.id)}>
                 <span class="material-symbols-outlined text-lg">
                   {task.enabled ? 'pause_circle' : 'play_circle'}
@@ -187,13 +193,13 @@
               </button>
               <button 
                 class="p-1.5 text-nx-text"
-                title="Execute Now"
+                title={t('scheduler.execute_now')}
                 onclick={() => executeTask(task.id)}>
                 <span class="material-symbols-outlined text-lg">play_arrow</span>
               </button>
               <button 
                 class="p-1.5 text-nx-text-secondary"
-                title="Delete"
+                title={t('common.delete')}
                 onclick={() => deleteTask(task.id)}>
                 <span class="material-symbols-outlined text-lg">delete</span>
               </button>
@@ -209,12 +215,12 @@
 {#if showAddModal}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onclick={() => showAddModal = false}>
     <div class="w-full max-w-lg border border-nx-border bg-nx-surface p-6" onclick={(e) => e.stopPropagation()}>
-      <h2 class="mb-4 text-lg font-semibold text-nx-text">Add New Task</h2>
+      <h2 class="mb-4 text-lg font-semibold text-nx-text">{t('scheduler.add_new_task')}</h2>
       
       <div class="space-y-4">
         <!-- Task Name -->
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted">Task Name *</label>
+          <label class="mb-1 block text-xs text-nx-text-muted">{t('scheduler.name')} *</label>
           <input
             type="text"
             bind:value={taskName}
@@ -225,7 +231,7 @@
 
         <!-- Cron Expression -->
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted">Cron Expression *</label>
+          <label class="mb-1 block text-xs text-nx-text-muted">{t('scheduler.cron')} *</label>
           <input
             type="text"
             bind:value={cronExpression}
@@ -245,7 +251,7 @@
 
         <!-- Task Type -->
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted">Task Type</label>
+          <label class="mb-1 block text-xs text-nx-text-muted">{t('scheduler.type')}</label>
           <select
             bind:value={taskType}
             class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text outline-none focus:border-nx-text-secondary">
@@ -258,7 +264,7 @@
         <!-- Script Content (for script type) -->
         {#if taskType === 'script'}
           <div>
-            <label class="mb-1 block text-xs text-nx-text-muted">Script Content</label>
+            <label class="mb-1 block text-xs text-nx-text-muted">{t('scheduler.script_content')}</label>
             <textarea
               bind:value={scriptContent}
               placeholder="#!/bin/bash\necho 'Hello World'"
@@ -270,7 +276,7 @@
         <!-- Command (for command type) -->
         {#if taskType === 'command'}
           <div>
-            <label class="mb-1 block text-xs text-nx-text-muted">Shell Command</label>
+            <label class="mb-1 block text-xs text-nx-text-muted">{t('scheduler.shell_cmd')}</label>
             <input
               type="text"
               bind:value={command}
@@ -286,12 +292,12 @@
         <button
           class="border border-nx-border bg-nx-bg px-4 py-2 text-sm font-medium text-nx-text-secondary"
           onclick={() => showAddModal = false}>
-          Cancel
+          {t('scheduler.cancel')}
         </button>
         <button
           class="bg-nx-text px-4 py-2 text-sm font-medium text-nx-deep"
           onclick={addTask}>
-          Create Task
+          {t('scheduler.create')}
         </button>
       </div>
     </div>
