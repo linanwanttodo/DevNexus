@@ -109,8 +109,10 @@ pub async fn test_mirror_latency(url: String) -> u64 {
         .build()
         .unwrap_or_default();
 
-    let _ = client.head(&url).send().await;
-    start.elapsed().as_millis() as u64
+    match client.head(&url).send().await {
+        Ok(_) => start.elapsed().as_millis() as u64,
+        Err(_) => u64::MAX, // 失败时返回最大值，前端可据此显示 "Timeout"
+    }
 }
 
 #[tauri::command]
@@ -212,6 +214,7 @@ fn set_pypi_index(url: &str) -> Result<String, String> {
 }
 
 fn set_docker_mirror(url: &str) -> Result<String, String> {
+    // 优先尝试用户级配置 (~/.docker/daemon.json)，回退到系统级
     let home = std::env::var("HOME").map_err(|e| e.to_string())?;
     let docker_dir = PathBuf::from(&home).join(".docker");
     fs::create_dir_all(&docker_dir).map_err(|e| e.to_string())?;
@@ -219,7 +222,10 @@ fn set_docker_mirror(url: &str) -> Result<String, String> {
     let json = serde_json::json!({ "registry-mirrors": [url] });
     fs::write(&daemon, serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?)
         .map_err(|e| format!("Failed to write daemon.json: {}", e))?;
-    Ok(format!("Docker mirror set to {}", url))
+    Ok(format!(
+        "Docker mirror set to {}\nNote: If Docker Daemon reads from /etc/docker/daemon.json, you may need to copy this config there with sudo.",
+        url
+    ))
 }
 
 fn set_cargo_mirror(url: &str) -> Result<String, String> {

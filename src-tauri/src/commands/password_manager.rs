@@ -24,15 +24,77 @@ pub struct PasswordManager {
 
 impl PasswordManager {
     pub fn new() -> Self {
-        // 生成随机加密密钥（实际应用中应该从用户密码派生）
-        let mut key = [0u8; 32];
-        rand::thread_rng().fill(&mut key);
-        
+        let key = Self::load_or_create_key();
+
         Self {
             entries: Arc::new(Mutex::new(Vec::new())),
             next_id: Arc::new(Mutex::new(1)),
             encryption_key: key,
         }
+    }
+
+    /// 从持久化文件加载密钥，不存在则生成并保存
+    fn load_or_create_key() -> [u8; 32] {
+        let key_path = Self::key_path();
+
+        // 尝试从文件加载
+        if let Ok(data) = std::fs::read(&key_path) {
+            if data.len() == 32 {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(&data);
+                return key;
+            }
+        }
+
+        // 生成新密钥：基于机器 hostname + 随机盐
+        let host = sysinfo::System::host_name()
+            .unwrap_or_else(|| "devnexus".to_string());
+
+        let mut salt = [0u8; 16];
+        rand::thread_rng().fill(&mut salt);
+
+        let mut key = [0u8; 32];
+        pbkdf2::pbkdf2_hmac::<sha2::Sha256>(
+            host.as_bytes(),
+            &salt,
+            PBKDF2_ITERATIONS,
+            &mut key,
+        );
+
+        // 保存到文件（仅用户可读）
+        if let Some(parent) = key_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if std::fs::write(&key_path, &key).is_err() {
+            // 写文件失败退化为随机密钥（本次会话可用）
+            rand::thread_rng().fill(&mut key);
+        } else {
+            // 设置文件权限 0600
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+            }
+        }
+
+        key
+    }
+
+    fn key_path() -> std::path::PathBuf {
+        let base = if cfg!(target_os = "macos") {
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join("Library/Application Support"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        } else if cfg!(target_os = "windows") {
+            std::env::var("APPDATA")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        } else {
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join(".config"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        };
+        base.join("devnexus").join("key.bin")
     }
 
     /// 加密数据
@@ -195,14 +257,21 @@ pub fn export_chrome_csv(state: tauri::State<'_, PasswordManager>) -> Result<Str
 pub fn import_chrome_csv(
     csv_content: String,
     state: tauri::State<'_, PasswordManager>,
-) -> Result<u32, String> {
+) -> Result<String, String> {
     let mut count = 0;
+    let mut errors = 0;
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .from_reader(csv_content.as_bytes());
     
     for result in reader.records() {
-        let record = result.map_err(|e| format!("CSV parse error: {}", e))?;
+        let record = match result {
+            Ok(r) => r,
+            Err(_) => {
+                errors += 1;
+                continue;
+            }
+        };
         
         if record.len() >= 4 {
             let name = record[0].to_string();
@@ -210,20 +279,25 @@ pub fn import_chrome_csv(
             let username = record[2].to_string();
             let password = record[3].to_string();
             
-            let _ = add_password(
+            match add_password(
                 name,
                 username,
                 password,
                 if url.is_empty() { None } else { Some(url) },
                 None,
                 state.clone(),
-            );
-            
-            count += 1;
+            ) {
+                Ok(_) => count += 1,
+                Err(_) => errors += 1,
+            }
         }
     }
     
-    Ok(count)
+    if errors > 0 {
+        Ok(format!("Imported {} entries ({} skipped due to errors)", count, errors))
+    } else {
+        Ok(format!("Successfully imported {} entries", count))
+    }
 }
 
 /// 保存到文件（加密，使用 PBKDF2 + AES-256-GCM）

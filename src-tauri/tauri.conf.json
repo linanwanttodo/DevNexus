@@ -4,7 +4,7 @@
   "version": "2.4.1",
   "identifier": "com.devnexus.app",
   "build": {
-    "beforeDevCommand": "export PATH=\"/home/lin/.nvm/versions/node/v24.15.0/bin:$PATH\" && npm run dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"

@@ -266,29 +266,38 @@ fn count_cookies(path: &PathBuf) -> Result<usize, String> {
     Ok(count as usize)
 }
 
+fn map_cookie_row(row: &rusqlite::Row) -> rusqlite::Result<CookieEntry> {
+    let encrypted_value: Vec<u8> = row.get(1)?;
+    Ok(CookieEntry {
+        name: row.get(0)?,
+        value: decrypt_cookie_value(&encrypted_value),
+        domain: row.get(2)?,
+        path: row.get(3)?,
+        expires: row.get(4)?,
+        secure: row.get(5)?,
+        httponly: row.get(6)?,
+    })
+}
+
 fn read_cookies(path: &PathBuf, domain_filter: Option<String>) -> Result<Vec<CookieEntry>, String> {
     let conn = Connection::open(path).map_err(|e| format!("Failed to open database: {}", e))?;
     
-    let query = if let Some(domain) = domain_filter {
-        format!("SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies WHERE host_key LIKE '%{}%'", domain)
+    let (query, param) = if let Some(ref domain) = domain_filter {
+        let pattern = format!("%{}%", domain);
+        (format!("SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies WHERE host_key LIKE ?1"), Some(pattern))
     } else {
-        "SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies".to_string()
+        ("SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies".to_string(), None)
     };
 
     let mut stmt = conn.prepare(&query).map_err(|e| format!("Prepare failed: {}", e))?;
     
-    let cookie_iter = stmt.query_map([], |row| {
-        let encrypted_value: Vec<u8> = row.get(1)?;
-        Ok(CookieEntry {
-            name: row.get(0)?,
-            value: decrypt_cookie_value(&encrypted_value),
-            domain: row.get(2)?,
-            path: row.get(3)?,
-            expires: row.get(4)?,
-            secure: row.get(5)?,
-            httponly: row.get(6)?,
-        })
-    }).map_err(|e| format!("Query failed: {}", e))?;
+    let cookie_iter = if let Some(ref p) = param {
+        stmt.query_map(&[p.as_str()], map_cookie_row)
+            .map_err(|e| format!("Query failed: {}", e))?
+    } else {
+        stmt.query_map([], map_cookie_row)
+            .map_err(|e| format!("Query failed: {}", e))?
+    };
 
     let mut cookies = Vec::new();
     for cookie in cookie_iter {

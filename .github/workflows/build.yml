@@ -43,11 +43,14 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Setup pnpm
+        run: npm install -g pnpm
+
       - name: Install frontend deps
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build Tauri
-        run: npx tauri build --bundles deb,appimage
+        run: pnpm tauri build --bundles deb,appimage
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -89,10 +92,10 @@ jobs:
           workspaces: src-tauri
 
       - name: Install frontend deps
-        run: npm install
+        run: npm install -g pnpm && pnpm install --frozen-lockfile
 
       - name: Build Tauri
-        run: npx tauri build --target ${{ matrix.target }} --bundles dmg
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -106,7 +109,7 @@ jobs:
   # Windows (x86_64 MSI + NSIS)
   # ============================================================
   build-windows:
-    runs-on: windows-2025
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
@@ -124,10 +127,10 @@ jobs:
           workspaces: src-tauri
 
       - name: Install frontend deps
-        run: npm install
+        run: npm install -g pnpm && pnpm install --frozen-lockfile
 
       - name: Build Tauri
-        run: npx tauri build --bundles msi,nsis
+        run: pnpm tauri build --bundles msi,nsis
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
