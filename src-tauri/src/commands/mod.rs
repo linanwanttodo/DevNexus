@@ -2,7 +2,6 @@ pub mod system;
 pub mod environment;
 pub mod software;
 pub mod mirror;
-pub mod terminal;
 pub mod scheduler;
 pub mod password_manager;
 pub mod cookie_extractor;

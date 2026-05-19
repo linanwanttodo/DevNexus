@@ -677,7 +677,7 @@ dependencies = [
 
 [[package]]
 name = "devnexus"
-version = "2.4.1"
+version = "1.0.0"
 dependencies = [
  "aes-gcm",
  "base64 0.21.7",

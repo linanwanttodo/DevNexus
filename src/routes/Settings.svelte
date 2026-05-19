@@ -198,7 +198,7 @@
       <div class="flex items-center justify-between">
         <div>
           <div class="text-sm text-nx-text">Current Version</div>
-          <div class="font-mono text-xs text-nx-text-secondary">v2.4.1</div>
+          <div class="font-mono text-xs text-nx-text-secondary">v1.0.0</div>
         </div>
         <button class="border border-nx-border bg-nx-bg px-4 py-2 text-xs font-medium text-nx-text-secondary">
           Check for Updates
