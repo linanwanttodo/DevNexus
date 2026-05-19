@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use rusqlite::Connection;
-use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
+#[cfg(target_os = "windows")]
 use base64::{Engine as _, engine::general_purpose};
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -379,145 +379,82 @@ fn decrypt_windows(encrypted_data: &[u8]) -> String {
 
 #[cfg(target_os = "macos")]
 fn decrypt_macos(encrypted_data: &[u8]) -> String {
-    // macOS Chrome 使用 Keychain 存储加密密钥
-    // 密钥存储在: ~/Library/Application Support/Google/Chrome/Local State
-    let key = get_chrome_encryption_key();
-    
-    match key {
-        Some(encryption_key) => decrypt_aes_gcm(encrypted_data, &encryption_key),
+    match get_chrome_safe_storage_password() {
+        Some(password) => decrypt_chrome_aes_cbc(encrypted_data, &password),
         None => "[Failed to get encryption key from Keychain]".to_string(),
     }
 }
 
 #[cfg(target_os = "linux")]
 fn decrypt_linux(encrypted_data: &[u8]) -> String {
-    // Linux Chrome 使用 GNOME Keyring 或 KWallet
-    let key = get_chrome_encryption_key();
-    
-    match key {
-        Some(encryption_key) => decrypt_aes_gcm(encrypted_data, &encryption_key),
+    match get_chrome_safe_storage_password() {
+        Some(password) => decrypt_chrome_aes_cbc(encrypted_data, &password),
         None => "[Failed to get encryption key from keyring]".to_string(),
     }
 }
 
-// AES-GCM 解密通用函数
-fn decrypt_aes_gcm(encrypted_data: &[u8], key: &[u8; 32]) -> String {
-    if encrypted_data.len() < 12 {
-        return "[Invalid encrypted data]".to_string();
-    }
-    
-    let (nonce_bytes, ciphertext) = encrypted_data.split_at(12);
-    let nonce = Nonce::from_slice(nonce_bytes);
-    
-    let cipher = Aes256Gcm::new_from_slice(key).unwrap();
-    
-    match cipher.decrypt(nonce, ciphertext) {
-        Ok(plaintext_vec) => String::from_utf8_lossy(&plaintext_vec).to_string(),
+// AES-128-CBC 解密（Chrome macOS/Linux 使用 PBKDF2-SHA1 + AES-128-CBC）
+fn decrypt_chrome_aes_cbc(encrypted_data: &[u8], password: &str) -> String {
+    use aes::Aes128;
+    use aes::cipher::BlockDecryptMut;
+    use cbc::cipher::KeyIvInit;
+    use pbkdf2::pbkdf2_hmac;
+    use sha1::Sha1;
+
+    let mut key = [0u8; 16];
+    pbkdf2_hmac::<Sha1>(password.as_bytes(), b"saltysalt", 1003, &mut key);
+
+    let iv = [0x20u8; 16];
+    let cipher = cbc::Decryptor::<Aes128>::new(&key.into(), &iv.into());
+
+    let mut buf = encrypted_data.to_vec();
+    match cipher.decrypt_padded_mut::<cbc::cipher::block_padding::Pkcs7>(&mut buf) {
+        Ok(pt) => String::from_utf8_lossy(pt).to_string(),
         Err(_) => "[Decryption failed]".to_string(),
     }
 }
 
-// 获取 Chrome 加密密钥（从 Local State 文件）
-fn get_chrome_encryption_key() -> Option<[u8; 32]> {
+fn get_chrome_safe_storage_password() -> Option<String> {
     #[cfg(target_os = "macos")]
     {
         use keyring::Entry;
-        
-        // 尝试从 Keychain 获取
         let entry = Entry::new("Chrome Safe Storage", "Chrome");
         if let Ok(entry) = entry {
             if let Ok(password) = entry.get_password() {
-                // Chrome 使用 PBKDF2 派生密钥
-                let mut key = [0u8; 32];
-                for (i, byte) in password.bytes().take(32).enumerate() {
-                    key[i] = byte;
-                }
-                return Some(key);
-            }
-        }
-        
-        // 或者从 Local State 文件读取
-        if let Ok(home) = std::env::var("HOME") {
-            let local_state_path = PathBuf::from(home)
-                .join("Library/Application Support/Google/Chrome/Local State");
-            
-            if let Ok(content) = std::fs::read_to_string(&local_state_path) {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(encoded_key) = json["os_crypt"]["encrypted_key"].as_str() {
-                        if let Ok(decoded) = general_purpose::STANDARD.decode(encoded_key) {
-                            if decoded.len() >= 5 && &decoded[0..5] == b"DPAPI" {
-                                // DPAPI 加密的密钥，需要进一步解密
-                                // 简化处理：返回前32字节
-                                let mut key = [0u8; 32];
-                                let len = std::cmp::min(32, decoded.len() - 5);
-                                key[..len].copy_from_slice(&decoded[5..5+len]);
-                                return Some(key);
-                            }
-                        }
-                    }
-                }
+                return Some(password);
             }
         }
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         use keyring::Entry;
-        
-        // 尝试从 GNOME Keyring 获取
         let entry = Entry::new("Chrome Safe Storage", "Chrome");
         if let Ok(entry) = entry {
             if let Ok(password) = entry.get_password() {
-                let mut key = [0u8; 32];
-                for (i, byte) in password.bytes().take(32).enumerate() {
-                    key[i] = byte;
-                }
-                return Some(key);
-            }
-        }
-        
-        // 或者从 Local State 文件
-        if let Ok(home) = std::env::var("HOME") {
-            let local_state_path = PathBuf::from(home)
-                .join(".config/google-chrome/Local State");
-            
-            if let Ok(content) = std::fs::read_to_string(&local_state_path) {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(encoded_key) = json["os_crypt"]["encrypted_key"].as_str() {
-                        if let Ok(decoded) = general_purpose::STANDARD.decode(encoded_key) {
-                            if decoded.len() >= 5 && &decoded[0..5] == b"DPAPI" {
-                                let mut key = [0u8; 32];
-                                let len = std::cmp::min(32, decoded.len() - 5);
-                                key[..len].copy_from_slice(&decoded[5..5+len]);
-                                return Some(key);
-                            }
-                        }
-                    }
-                }
+                return Some(password);
             }
         }
     }
-    
+
     #[cfg(target_os = "windows")]
     {
-        // Windows 从 Local State 读取并使用 DPAPI 解密
         if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
             let local_state_path = PathBuf::from(localappdata)
                 .join("Google\\Chrome\\User Data\\Local State");
-            
+
             if let Ok(content) = std::fs::read_to_string(&local_state_path) {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                     if let Some(encoded_key) = json["os_crypt"]["encrypted_key"].as_str() {
                         if let Ok(decoded) = general_purpose::STANDARD.decode(encoded_key) {
                             if decoded.len() >= 5 && &decoded[0..5] == b"DPAPI" {
-                                // 使用 DPAPI 解密
                                 return decrypt_windows(&decoded[5..]).bytes()
                                     .take(32)
-                                    .enumerate()
-                                    .fold([0u8; 32], |mut key, (i, b)| {
-                                        key[i] = b;
-                                        key
-                                    }).into();
+                                    .collect::<Vec<_>>()
+                                    .into_iter()
+                                    .map(|b| b as char)
+                                    .collect::<String>()
+                                    .into();
                             }
                         }
                     }
@@ -525,6 +462,6 @@ fn get_chrome_encryption_key() -> Option<[u8; 32]> {
             }
         }
     }
-    
+
     None
 }

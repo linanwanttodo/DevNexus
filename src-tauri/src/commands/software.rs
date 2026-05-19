@@ -19,26 +19,41 @@ const GUI_APPS: &[&str] = &[
 
 /// 安全获取软件版本：对 GUI 应用跳过，避免启动它们
 fn safe_get_version(cmd: &str) -> String {
-    // GUI 应用不执行，避免意外启动
     if GUI_APPS.contains(&cmd) {
         return "installed".to_string();
     }
 
-    // CLI 工具安全执行（带 3 秒超时）
     match std::process::Command::new(cmd)
         .arg("--version")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
-        .output()
+        .spawn()
     {
-        Ok(output) => {
-            let ver = String::from_utf8_lossy(&output.stdout);
-            let first_line = ver.lines().next().unwrap_or("unknown");
-            // 截断过长的版本字符串
-            if first_line.len() > 60 {
-                first_line[..57].to_string() + "..."
-            } else {
-                first_line.to_string()
+        Ok(mut child) => {
+            use std::sync::mpsc;
+            let (tx, rx) = mpsc::channel();
+            let stdout = child.stdout.take();
+            std::thread::spawn(move || {
+                let _ = tx.send(child.wait());
+            });
+            match rx.recv_timeout(std::time::Duration::from_secs(3)) {
+                Ok(Ok(status)) if status.success() => {
+                    if let Some(mut stdout) = stdout {
+                        use std::io::Read;
+                        let mut buf = Vec::new();
+                        let _ = std::io::BufReader::new(&mut stdout).read_to_end(&mut buf);
+                        let ver = String::from_utf8_lossy(&buf);
+                        let first_line = ver.lines().next().unwrap_or("unknown");
+                        if first_line.len() > 60 {
+                            first_line[..57].to_string() + "..."
+                        } else {
+                            first_line.to_string()
+                        }
+                    } else {
+                        "unknown".to_string()
+                    }
+                }
+                _ => "timeout".to_string(),
             }
         }
         Err(_) => "unknown".to_string(),
@@ -72,31 +87,57 @@ fn detect_software(name: &str, cmd: &str, category: &str, package_name: &str) ->
 
 /// 检查常见安装路径（nvm、snap、/usr/local 等）
 fn check_common_paths(cmd: &str) -> bool {
-    let paths = [
-        format!("/usr/local/bin/{}", cmd),
-        format!("/opt/homebrew/bin/{}", cmd),
-        format!("/snap/bin/{}", cmd),
-    ];
+    #[cfg(unix)]
+    {
+        let paths = [
+            format!("/usr/local/bin/{}", cmd),
+            format!("/opt/homebrew/bin/{}", cmd),
+            format!("/snap/bin/{}", cmd),
+        ];
 
-    // 检查 nvm 管理的 Node.js
-    if cmd == "node" || cmd == "npm" {
-        if let Ok(home) = std::env::var("HOME") {
-            let nvm_base = format!("{}/.nvm/versions/node", home);
+        if cmd == "node" || cmd == "npm" {
+            if let Ok(home) = std::env::var("HOME") {
+                let nvm_base = format!("{}/.nvm/versions/node", home);
+                if let Ok(entries) = std::fs::read_dir(&nvm_base) {
+                    for entry in entries.flatten() {
+                        let bin = entry.path().join("bin").join(cmd);
+                        if bin.exists() {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        for path in &paths {
+            if std::path::Path::new(path).exists() {
+                return true;
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+            let nvm_base = format!("{}\\nvm", localappdata);
             if let Ok(entries) = std::fs::read_dir(&nvm_base) {
                 for entry in entries.flatten() {
-                    let bin = entry.path().join("bin").join(cmd);
+                    let bin = entry.path().join(cmd);
                     if bin.exists() {
                         return true;
                     }
                 }
             }
         }
-    }
-
-    // 检查固定路径
-    for path in &paths {
-        if std::path::Path::new(path).exists() {
-            return true;
+        if let Ok(programfiles) = std::env::var("ProgramFiles") {
+            let paths = [
+                format!("{}\\{}", programfiles, cmd),
+            ];
+            for path in &paths {
+                if std::path::Path::new(path).exists() {
+                    return true;
+                }
+            }
         }
     }
 
@@ -313,42 +354,56 @@ pub async fn install_software(package_name: String) -> Result<String, String> {
         return Err("No supported package manager found on this system".to_string());
     }
 
-    let mut last_error = String::new();
+    // 克隆到 spawn_blocking 闭包中
+    let managers_clone: Vec<_> = managers.iter().map(|pm| PackageManager {
+        name: pm.name,
+        binary: pm.binary,
+        needs_sudo: pm.needs_sudo,
+        install_args: pm.install_args,
+        uninstall_args: pm.uninstall_args,
+    }).collect();
+    let pkg_name = package_name.clone();
 
-    for pm in &managers {
-        let pkg = map_package_name(&package_name, pm.name);
+    tokio::task::spawn_blocking(move || {
+        let mut last_error = String::new();
 
-        let mut cmd = if pm.needs_sudo {
-            let mut c = Command::new("sudo");
-            c.arg(pm.binary);
-            c
-        } else {
-            Command::new(pm.binary)
-        };
+        for pm in &managers_clone {
+            let pkg = map_package_name(&pkg_name, pm.name);
 
-        cmd.args(pm.install_args).arg(pkg);
+            let mut cmd = if pm.needs_sudo {
+                let mut c = Command::new("sudo");
+                c.arg(pm.binary);
+                c
+            } else {
+                Command::new(pm.binary)
+            };
 
-        match cmd.output() {
-            Ok(output) => {
-                if output.status.success() {
-                    return Ok(format!(
-                        "Successfully installed {} via {}",
-                        package_name, pm.name
-                    ));
+            cmd.args(pm.install_args).arg(pkg);
+
+            match cmd.output() {
+                Ok(output) => {
+                    if output.status.success() {
+                        return Ok(format!(
+                            "Successfully installed {} via {}",
+                            pkg_name, pm.name
+                        ));
+                    }
+                    last_error = String::from_utf8_lossy(&output.stderr).to_string();
                 }
-                last_error = String::from_utf8_lossy(&output.stderr).to_string();
-            }
-            Err(e) => {
-                last_error = e.to_string();
+                Err(e) => {
+                    last_error = e.to_string();
+                }
             }
         }
-    }
 
-    Err(format!(
-        "Failed to install {} with all package managers. Last error: {}",
-        package_name,
-        last_error.trim()
-    ))
+        Err(format!(
+            "Failed to install {} with all package managers. Last error: {}",
+            pkg_name,
+            last_error.trim()
+        ))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// 卸载软件（跨平台，多包管理器支持）
@@ -360,40 +415,53 @@ pub async fn uninstall_software(package_name: String) -> Result<String, String> 
         return Err("No supported package manager found on this system".to_string());
     }
 
-    let mut last_error = String::new();
+    let managers_clone: Vec<_> = managers.iter().map(|pm| PackageManager {
+        name: pm.name,
+        binary: pm.binary,
+        needs_sudo: pm.needs_sudo,
+        install_args: pm.install_args,
+        uninstall_args: pm.uninstall_args,
+    }).collect();
+    let pkg_name = package_name.clone();
 
-    for pm in &managers {
-        let pkg = map_package_name(&package_name, pm.name);
+    tokio::task::spawn_blocking(move || {
+        let mut last_error = String::new();
 
-        let mut cmd = if pm.needs_sudo {
-            let mut c = Command::new("sudo");
-            c.arg(pm.binary);
-            c
-        } else {
-            Command::new(pm.binary)
-        };
+        for pm in &managers_clone {
+            let pkg = map_package_name(&pkg_name, pm.name);
 
-        cmd.args(pm.uninstall_args).arg(pkg);
+            let mut cmd = if pm.needs_sudo {
+                let mut c = Command::new("sudo");
+                c.arg(pm.binary);
+                c
+            } else {
+                Command::new(pm.binary)
+            };
 
-        match cmd.output() {
-            Ok(output) => {
-                if output.status.success() {
-                    return Ok(format!(
-                        "Successfully uninstalled {} via {}",
-                        package_name, pm.name
-                    ));
+            cmd.args(pm.uninstall_args).arg(pkg);
+
+            match cmd.output() {
+                Ok(output) => {
+                    if output.status.success() {
+                        return Ok(format!(
+                            "Successfully uninstalled {} via {}",
+                            pkg_name, pm.name
+                        ));
+                    }
+                    last_error = String::from_utf8_lossy(&output.stderr).to_string();
                 }
-                last_error = String::from_utf8_lossy(&output.stderr).to_string();
-            }
-            Err(e) => {
-                last_error = e.to_string();
+                Err(e) => {
+                    last_error = e.to_string();
+                }
             }
         }
-    }
 
-    Err(format!(
-        "Failed to uninstall {} with all package managers. Last error: {}",
-        package_name,
-        last_error.trim()
-    ))
+        Err(format!(
+            "Failed to uninstall {} with all package managers. Last error: {}",
+            pkg_name,
+            last_error.trim()
+        ))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }

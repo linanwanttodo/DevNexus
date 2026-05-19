@@ -4,8 +4,9 @@ mod commands;
 pub fn run() {
     let task_scheduler = commands::scheduler::TaskScheduler::new();
     let password_manager = commands::password_manager::PasswordManager::new();
-    
+
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .manage(task_scheduler)
         .manage(password_manager)
@@ -41,6 +42,7 @@ pub fn run() {
             commands::cookie_extractor::export_as_json,
             commands::port_manager::list_ports,
             commands::port_manager::kill_port,
+            commands::updater::check_for_updates_github,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevNexus");

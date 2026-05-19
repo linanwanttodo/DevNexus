@@ -1,6 +1,12 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import { showToast } from "../lib/toast.js";
+  import { showConfirm } from "../lib/confirm.js";
+  import { t, getVersion, onLangChange } from "../lib/i18n.js";
+
+  let _v = $state(getVersion());
+  $effect(() => onLangChange(v => _v = v));
 
   let browsers = $state([]);
   let selectedBrowser = $state(null);
@@ -17,13 +23,13 @@
       }
     } catch (err) {
       console.error("Failed to load browsers:", err);
-      alert("Failed to detect browsers");
+      showToast(t('cookies.no_browsers'));
     }
   }
 
   async function extractCookies() {
     if (!selectedBrowser) {
-      alert("Please select a browser");
+      showToast(t('cookies.select_browser_first'));
       return;
     }
 
@@ -35,7 +41,7 @@
         domainFilter: filter,
       });
     } catch (err) {
-      alert(`Extraction failed: ${err.message || err}`);
+      showToast(t('cookies.extract_failed').replace('{error}', err.message || err));
       cookies = [];
     } finally {
       extracting = false;
@@ -51,9 +57,9 @@
       });
       
       downloadFile(content, `cookies_${selectedBrowser.toLowerCase()}.txt`, 'text/plain');
-      alert("Exported as Netscape format");
+      showToast(t('cookies.export_netscape_ok'));
     } catch (err) {
-      alert(`Export failed: ${err.message || err}`);
+      showToast(t('cookies.export_failed').replace('{error}', err.message || err));
     }
   }
 
@@ -66,9 +72,9 @@
       });
       
       downloadFile(content, `cookies_${selectedBrowser.toLowerCase()}.json`, 'application/json');
-      alert("Exported as JSON format");
+      showToast(t('cookies.export_json_ok'));
     } catch (err) {
-      alert(`Export failed: ${err.message || err}`);
+      showToast(t('cookies.export_failed').replace('{error}', err.message || err));
     }
   }
 
@@ -87,19 +93,19 @@
   function copyCookie(cookie) {
     const cookieString = `${cookie.name}=${cookie.value}`;
     navigator.clipboard.writeText(cookieString).then(() => {
-      alert("Cookie copied to clipboard");
+      showToast(t('cookies.copy_single_ok'));
     });
   }
 
   function copyAllCookies() {
     const cookieStrings = cookies.map(c => `${c.name}=${c.value}`).join('; ');
     navigator.clipboard.writeText(cookieStrings).then(() => {
-      alert("All cookies copied to clipboard");
+      showToast(t('cookies.copy_all_ok'));
     });
   }
 
   function formatDate(timestamp) {
-    if (timestamp === 0 || timestamp === null) return "Session";
+    if (timestamp === 0 || timestamp === null) return t('cookies.session');
     const date = new Date((timestamp - 116444736000000000) / 10000); // Chrome epoch
     return date.toLocaleDateString();
   }
@@ -112,17 +118,17 @@
 <div class="mx-auto max-w-6xl">
   <!-- Header -->
   <div class="mb-6">
-    <h1 class="text-xl font-semibold text-nx-text">Cookie Extractor</h1>
-    <p class="mt-1 text-xs text-nx-text-muted">Extract and export cookies from your web browsers</p>
+    <h1 class="text-xl font-semibold text-nx-text">{t('cookies.title')}</h1>
+    <p class="mt-1 text-xs text-nx-text-muted">{t('cookies.desc')}</p>
   </div>
 
   <!-- Browser Selection -->
   <div class="mb-6 border border-nx-border bg-nx-surface p-5">
     <div class="mb-4 flex items-center justify-between">
-      <h2 class="text-sm font-medium text-nx-text">Select Browser</h2>
+      <h2 class="text-sm font-medium text-nx-text">{t('cookies.select_browser')}</h2>
       {#if selectedBrowser}
         <span class="text-xs text-nx-text-muted">
-          {browsers.find(b => b.name === selectedBrowser)?.cookie_count || 0} cookies found
+          {browsers.find(b => b.name === selectedBrowser)?.cookie_count || 0} {t('cookies.found')}
         </span>
       {/if}
     </div>
@@ -140,7 +146,7 @@
             </span>
             <div>
               <div class="text-sm font-medium text-nx-text">{browser.name}</div>
-              <div class="text-xs text-nx-text-muted">{browser.cookie_count} cookies</div>
+              <div class="text-xs text-nx-text-muted">{browser.cookie_count} {t('cookies.cookies_label')}</div>
             </div>
           </div>
         </button>
@@ -149,7 +155,7 @@
 
     {#if browsers.length === 0}
       <div class="mt-4 border border-nx-border bg-nx-text-secondary/10 p-3 text-xs text-nx-text-secondary">
-        No browsers detected. Make sure Chrome, Edge, or Firefox is installed.
+        {t('cookies.no_browsers')}
       </div>
     {/if}
   </div>
@@ -158,11 +164,11 @@
   <div class="mb-6 border border-nx-border bg-nx-surface p-5">
     <div class="flex items-end gap-3">
       <div class="flex-1">
-        <label class="mb-1 block text-xs text-nx-text-muted">Domain Filter (optional)</label>
+        <label class="mb-1 block text-xs text-nx-text-muted">{t('cookies.domain_filter')}</label>
         <input
           type="text"
           bind:value={domainFilter}
-          placeholder="e.g., github.com, google.com"
+          placeholder={t('cookies.filter_placeholder')}
           class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-text-secondary"
         />
       </div>
@@ -173,12 +179,12 @@
         {#if extracting}
           <span class="flex items-center gap-2">
             <span class="material-symbols-outlined animate-spin text-lg">progress_activity</span>
-            Extracting...
+            {t('cookies.extracting')}
           </span>
         {:else}
           <span class="flex items-center gap-2">
             <span class="material-symbols-outlined text-lg">download</span>
-            Extract Cookies
+            {t('cookies.extract')}
           </span>
         {/if}
       </button>
@@ -191,23 +197,23 @@
       <!-- Toolbar -->
       <div class="flex items-center justify-between border-b border-nx-border px-4 py-3">
         <div class="text-sm text-nx-text">
-          <span class="font-medium">{cookies.length}</span> cookies extracted
+          <span class="font-medium">{cookies.length}</span> {t('cookies.cookies_extracted')}
         </div>
         <div class="flex gap-2">
           <button
             class="border border-nx-border bg-nx-bg px-3 py-1.5 text-xs font-medium text-nx-text-secondary"
             onclick={copyAllCookies}>
-            Copy All
+            {t('cookies.copy_all')}
           </button>
           <button
             class="border border-nx-border bg-nx-bg px-3 py-1.5 text-xs font-medium text-nx-text-secondary"
             onclick={exportJSON}>
-            Export JSON
+            {t('cookies.export_json')}
           </button>
           <button
             class="border border-nx-border bg-nx-bg px-3 py-1.5 text-xs font-medium text-nx-text-secondary"
             onclick={exportNetscape}>
-            Export Netscape
+            {t('cookies.export_netscape')}
           </button>
         </div>
       </div>
@@ -217,11 +223,11 @@
         <table class="w-full">
           <thead class="sticky top-0 bg-nx-surface">
             <tr class="border-b border-nx-border text-xs text-nx-text-muted">
-              <th class="px-4 py-2 text-left font-medium">Name</th>
-              <th class="px-4 py-2 text-left font-medium">Value</th>
-              <th class="px-4 py-2 text-left font-medium">Domain</th>
-              <th class="px-4 py-2 text-left font-medium">Expires</th>
-              <th class="px-4 py-2 text-right font-medium">Actions</th>
+              <th class="px-4 py-2 text-left font-medium">{t('cookies.name')}</th>
+              <th class="px-4 py-2 text-left font-medium">{t('cookies.value')}</th>
+              <th class="px-4 py-2 text-left font-medium">{t('cookies.domain')}</th>
+              <th class="px-4 py-2 text-left font-medium">{t('cookies.expires')}</th>
+              <th class="px-4 py-2 text-right font-medium">{t('cookies.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -247,7 +253,7 @@
                   <div class="flex items-center justify-end gap-1">
                     <button
                       class="p-1 text-nx-text-secondary"
-                      title="Copy Cookie"
+                      title={t('cookies.copy_cookie')}
                       onclick={() => copyCookie(cookie)}>
                       <span class="material-symbols-outlined text-base">content_copy</span>
                     </button>
@@ -262,8 +268,8 @@
   {:else if extracting === false && cookies.length === 0 && selectedBrowser}
     <div class="border border-nx-border bg-nx-surface p-12 text-center">
       <span class="material-symbols-outlined text-nx-text-muted text-4xl">cookie</span>
-      <div class="mt-4 text-sm text-nx-text-muted">No cookies extracted</div>
-      <div class="mt-1 text-xs text-nx-text-muted">Click "Extract Cookies" to begin</div>
+      <div class="mt-4 text-sm text-nx-text-muted">{t('cookies.no_cookies')}</div>
+      <div class="mt-1 text-xs text-nx-text-muted">{t('cookies.extract_begin')}</div>
     </div>
   {/if}
 </div>

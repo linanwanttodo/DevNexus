@@ -1,7 +1,13 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import { showToast } from "../lib/toast.js";
+  import { showConfirm } from "../lib/confirm.js";
   import { getSearchQuery, onSearchChange, setSearchQuery } from "../lib/stores.js";
+  import { t, getVersion, onLangChange } from "../lib/i18n.js";
+
+  let _v = $state(getVersion());
+  $effect(() => onLangChange(v => _v = v));
 
   let ports = $state([]);
   let loading = $state(true);
@@ -28,14 +34,14 @@
   }
 
   async function killPort(port) {
-    if (!confirm(`Kill process on port ${port}?`)) return;
+    if (!await showConfirm(`Kill process on port ${port}?`)) return;
     killing = port;
     try {
       const msg = await invoke("kill_port", { port });
-      alert(msg);
+      showToast(msg);
       await loadPorts();
     } catch (err) {
-      alert(`Failed: ${err.message || err}`);
+      showToast(`Failed: ${err.message || err}`);
     } finally {
       killing = null;
     }
@@ -59,15 +65,15 @@
 <div class="mx-auto max-w-4xl">
   <div class="mb-6 flex items-center justify-between">
     <div>
-      <h1 class="text-xl font-semibold text-nx-text">Port Manager</h1>
-      <p class="mt-1 text-xs text-nx-text-muted">Monitor and manage network ports</p>
+      <h1 class="text-xl font-semibold text-nx-text">{_v && t("port_manager.title")}</h1>
+      <p class="mt-1 text-xs text-nx-text-muted">{_v && t("port_manager.description")}</p>
     </div>
     <button
       class="flex items-center gap-2 border border-nx-border px-4 py-2 text-sm font-medium text-nx-text-secondary"
       onclick={loadPorts}
     >
       <span class="material-symbols-outlined text-lg">refresh</span>
-      Refresh
+      {_v && t("port_manager.refresh")}
     </button>
   </div>
 
@@ -77,7 +83,7 @@
       <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-nx-text-muted">search</span>
       <input
         type="text"
-        placeholder="Search by port, process name, or PID..."
+        placeholder={_v ? t("port_manager.search_placeholder") : "Search..."}
         value={search}
         oninput={(e) => { search = e.target.value; setSearchQuery(e.target.value); }}
         class="w-full border border-nx-border bg-nx-surface px-10 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-accent"
@@ -103,24 +109,24 @@
       <div class="p-6 text-center">
         <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
         <div class="mt-2 text-sm text-nx-danger">{error}</div>
-        <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={loadPorts}>Retry</button>
+        <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={loadPorts}>{_v && t("common.retry")}</button>
       </div>
     {:else if filtered.length === 0}
       <div class="p-12 text-center">
         <span class="material-symbols-outlined text-nx-text-muted text-4xl">lan</span>
         <div class="mt-4 text-sm text-nx-text-muted">
-          {search ? "No matching ports found" : "No listening ports detected"}
+          {search ? (_v && t("port_manager.no_matching")) : (_v && t("port_manager.no_ports"))}
         </div>
       </div>
     {:else}
     <table class="w-full">
       <thead>
         <tr class="border-b border-nx-border text-xs text-nx-text-muted">
-          <th class="px-4 py-3 text-left font-medium w-20">Port</th>
-          <th class="px-4 py-3 text-left font-medium w-16">Proto</th>
-          <th class="px-4 py-3 text-left font-medium">Process</th>
-          <th class="px-4 py-3 text-left font-medium w-20">PID</th>
-          <th class="px-4 py-3 text-right font-medium w-24">Actions</th>
+          <th class="px-4 py-3 text-left font-medium w-20">{_v && t("port_manager.port")}</th>
+          <th class="px-4 py-3 text-left font-medium w-16">{_v && t("port_manager.proto")}</th>
+          <th class="px-4 py-3 text-left font-medium">{_v && t("port_manager.process")}</th>
+          <th class="px-4 py-3 text-left font-medium w-20">{_v && t("port_manager.pid")}</th>
+          <th class="px-4 py-3 text-right font-medium w-24">{_v && t("port_manager.actions")}</th>
         </tr>
       </thead>
       <tbody>
@@ -141,7 +147,7 @@
                   onclick={() => killPort(entry.port)}
                   disabled={killing !== null}
                 >
-                  {killing === entry.port ? "..." : "Kill"}
+                  {killing === entry.port ? "..." : (_v && t("port_manager.kill"))}
                 </button>
               </div>
             </td>
@@ -151,8 +157,8 @@
     </table>
 
     <div class="flex items-center justify-between border-t border-nx-border px-4 py-2">
-      <span class="text-xs text-nx-text-muted">{filtered.length} port{filtered.length !== 1 ? 's' : ''}</span>
-      <button class="text-xs text-nx-text-muted" onclick={loadPorts}>Refresh</button>
+      <span class="text-xs text-nx-text-muted">{filtered.length} {_v && t(filtered.length === 1 ? "port_manager.port" : "port_manager.ports")}</span>
+      <button class="text-xs text-nx-text-muted" onclick={loadPorts}>{_v && t("port_manager.refresh")}</button>
     </div>
     {/if}
   </div>

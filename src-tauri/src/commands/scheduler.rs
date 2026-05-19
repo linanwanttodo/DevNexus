@@ -182,13 +182,14 @@ pub async fn execute_task(task_id: u32, state: tauri::State<'_, TaskScheduler>) 
         _ => Err(format!("Unknown task type: {}", task.task_type)),
     };
 
-    // 更新任务执行记录
-    if result.is_ok() {
+    {
         let mut tasks = state.tasks.lock().map_err(|e| e.to_string())?;
         if let Some(t) = tasks.iter_mut().find(|t| t.id == task_id) {
             t.last_run = Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
             t.run_count += 1;
-            t.next_run = calculate_next_run(&t.cron_expression)?;
+            if result.is_ok() {
+                t.next_run = calculate_next_run(&t.cron_expression)?;
+            }
         }
         drop(tasks);
         state.save();

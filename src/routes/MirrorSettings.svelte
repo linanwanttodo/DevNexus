@@ -1,6 +1,11 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import { showToast } from "../lib/toast.js";
+  import { t, getVersion, onLangChange } from "../lib/i18n.js";
+
+  let _v = $state(getVersion());
+  $effect(() => onLangChange(v => _v = v));
 
   let groups = $state([]);
   let loading = $state(true);
@@ -9,12 +14,12 @@
   let selectedCountry = $state("all");
 
   const countries = [
-    { id: "all", label: "All Countries" },
-    { id: "CN", label: "China" },
-    { id: "RU", label: "Russia" },
-    { id: "US", label: "United States" },
-    { id: "EU", label: "Europe" },
-    { id: "JP", label: "Japan" },
+    { id: "all", label: t("mirrors.all_countries") },
+    { id: "CN", label: t("mirrors.china") },
+    { id: "RU", label: t("mirrors.russia") },
+    { id: "US", label: t("mirrors.us") },
+    { id: "EU", label: t("mirrors.europe") },
+    { id: "JP", label: t("mirrors.japan") },
   ];
 
   async function loadMirrors() {
@@ -58,10 +63,10 @@
   async function switchMirror(groupId, mirrorUrl) {
     try {
       const msg = await invoke("switch_mirror", { mirrorId: groupId, url: mirrorUrl });
-      alert(msg);
+      showToast(msg);
       await loadMirrors();
     } catch (err) {
-      alert(`Failed: ${err.message || err}`);
+      showToast(`Failed: ${err.message || err}`);
     }
   }
 
@@ -85,8 +90,8 @@
 <div class="mx-auto max-w-5xl">
   <div class="mb-6 flex items-center justify-between">
     <div>
-      <h1 class="text-xl font-semibold text-nx-text">Package Mirrors</h1>
-      <p class="mt-1 text-xs text-nx-text-muted">Select the fastest mirror for each package manager</p>
+      <h1 class="text-xl font-semibold text-nx-text">{_v && t("mirrors.title")}</h1>
+      <p class="mt-1 text-xs text-nx-text-muted">{_v && t("mirrors.description")}</p>
     </div>
     <div class="flex items-center gap-3">
       <select
@@ -98,7 +103,7 @@
         {/each}
       </select>
       <button class="border border-nx-border px-4 py-1.5 text-sm text-nx-text-secondary" onclick={loadMirrors}>
-        Refresh
+        {_v && t("common.refresh")}
       </button>
     </div>
   </div>
@@ -111,7 +116,7 @@
     <div class="p-6 text-center">
       <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
       <div class="mt-2 text-sm text-nx-danger">{error}</div>
-      <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={loadMirrors}>Retry</button>
+      <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={loadMirrors}>{_v && t("common.retry")}</button>
     </div>
   {:else}
     <div class="space-y-4">
@@ -120,7 +125,7 @@
           <div class="flex items-center gap-3 border-b border-nx-border px-4 py-3">
             <span class="text-nx-accent text-sm font-medium">{group.label}</span>
             {#if group.current_url}
-              <span class="text-xs text-nx-text-muted">Active: {group.current_url}</span>
+              <span class="text-xs text-nx-text-muted">{_v && t("mirrors.active_prefix")}: {group.current_url}</span>
             {/if}
           </div>
           <div class="p-3 grid grid-cols-1 gap-2">
@@ -139,16 +144,16 @@
                     onclick={() => testMirror(group.id, mirror.url)}
                     disabled={testing !== null}
                   >
-                    {testing === mirror.url ? "..." : mirror.latency_ms > 0 ? `${mirror.latency_ms}ms` : "Test"}
+                    {testing === mirror.url ? "..." : mirror.latency_ms > 0 ? `${mirror.latency_ms}ms` : (_v ? t('mirrors.test') : 'Test')}
                   </button>
                   {#if mirror.is_active}
-                    <span class="text-xs text-nx-success font-medium">Active</span>
+                    <span class="text-xs text-nx-success font-medium">{_v && t("mirrors.active")}</span>
                   {:else}
                     <button
                       class="px-2 py-1 text-xs font-medium bg-nx-accent text-white"
                       onclick={() => switchMirror(group.id, mirror.url)}
                     >
-                      Use
+                      {_v && t("mirrors.use")}
                     </button>
                   {/if}
                 </div>

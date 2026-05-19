@@ -400,7 +400,12 @@ pub fn load_from_file(
 
 /// CSV 转义辅助函数
 fn escape_csv(field: &str) -> String {
-    field.replace("\"", "\"\"")
+    let escaped = field.replace('"', "\"\"");
+    if escaped.contains(',') || escaped.contains('"') || escaped.contains('\n') || escaped.contains('\r') {
+        format!("\"{}\"", escaped)
+    } else {
+        escaped
+    }
 }
 
 // PBKDF2 迭代次数（100,000 次，平衡安全与性能）
