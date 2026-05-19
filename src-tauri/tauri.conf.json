@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "identifier": "com.devnexus.app",
   "build": {
-    "beforeDevCommand": "pnpm run dev",
+    "beforeDevCommand": "bash scripts/dev.sh",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm run build",
+    "beforeBuildCommand": "bash scripts/dev.sh build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -57,6 +57,14 @@
         "languages": ["English", "SimpChinese"],
         "installMode": "currentUser"
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/linanwanttodo/DevNexus/releases/latest/download/updates.json"
+      ],
+      "pubkey": ""
     }
   }
 }
