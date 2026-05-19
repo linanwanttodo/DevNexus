@@ -47,7 +47,7 @@ jobs:
         run: npm install -g pnpm
 
       - name: Install frontend deps
-        run: pnpm install --frozen-lockfile --allow-build esbuild
+        run: pnpm install --frozen-lockfile
 
       - name: Build Tauri
         run: pnpm tauri build --bundles deb,appimage
@@ -81,6 +81,9 @@ jobs:
       - name: Install create-dmg (for DMG bundling)
         run: brew install create-dmg || true
 
+      - name: Setup pnpm
+        run: npm install -g pnpm
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -92,7 +95,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Install frontend deps
-        run: pnpm install --frozen-lockfile --allow-build esbuild
+        run: pnpm install --frozen-lockfile
 
       - name: Build Tauri
         run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg
@@ -127,7 +130,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Install frontend deps
-        run: npm install -g pnpm && pnpm install --frozen-lockfile --allow-build esbuild
+        run: npm install -g pnpm && pnpm install --frozen-lockfile
 
       - name: Build Tauri
         run: pnpm tauri build --bundles msi,nsis
