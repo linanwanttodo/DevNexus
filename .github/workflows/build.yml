@@ -164,8 +164,6 @@ jobs:
           files: |
             linux-packages/*.deb
             linux-packages/*.AppImage
-            linux-packages/*.zip
-            linux-packages/*.app
             macos-x86_64-apple-darwin/*.dmg
             macos-aarch64-apple-darwin/*.dmg
             windows-packages/*.msi

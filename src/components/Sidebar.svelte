@@ -57,6 +57,6 @@
   </nav>
 
   <div class="border-t border-nx-border px-5 py-3">
-    <span class="text-xs text-nx-text-muted">v2.4.1</span>
+    <span class="text-xs text-nx-text-muted">v1.0.0</span>
   </div>
 </aside>

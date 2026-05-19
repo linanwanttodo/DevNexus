@@ -2,13 +2,11 @@ mod commands;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let terminal_state = commands::terminal::TerminalState::new();
     let task_scheduler = commands::scheduler::TaskScheduler::new();
     let password_manager = commands::password_manager::PasswordManager::new();
     
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(terminal_state)
         .manage(task_scheduler)
         .manage(password_manager)
         .invoke_handler(tauri::generate_handler![
@@ -23,10 +21,6 @@ pub fn run() {
             commands::mirror::list_mirrors,
             commands::mirror::test_mirror_latency,
             commands::mirror::switch_mirror,
-            commands::terminal::spawn_terminal,
-            commands::terminal::write_to_terminal,
-            commands::terminal::close_terminal,
-            commands::terminal::resize_terminal,
             commands::scheduler::add_task,
             commands::scheduler::list_tasks,
             commands::scheduler::delete_task,
