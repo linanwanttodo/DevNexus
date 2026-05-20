@@ -46,6 +46,7 @@
 
   onMount(() => {
     loadSystemInfo();
+    loadEnvironments();
     // 每5秒刷新一次资源使用情况
     const interval = setInterval(refreshResourceUsage, 5000);
     return () => clearInterval(interval);
@@ -81,11 +82,25 @@
     },
   ]);
 
-  const recentEnvs = [
-    { name: "Python", version: "v3.11.4", status: "Running", statusColor: "bg-nx-success" },
-    { name: "Node.js", version: "v18.16.0", status: "Stopped", statusColor: "bg-nx-text-muted" },
-    { name: "Go", version: "v1.20.5", status: "Running", statusColor: "bg-nx-success" },
-  ];
+  // 加载环境列表
+  let environments = $state([]);
+
+  async function loadEnvironments() {
+    try {
+      environments = await invoke("list_environments");
+    } catch (err) {
+      console.error("Error loading environments:", err);
+    }
+  }
+
+  const recentEnvs = $derived(
+    environments.slice(0, 5).map(env => ({
+      name: env.name,
+      version: env.version,
+      status: env.status === "Active" ? "Running" : "Stopped",
+      statusColor: env.status === "Active" ? "bg-nx-success" : "bg-nx-text-muted",
+    }))
+  );
 </script>
 
 <div class="mx-auto max-w-5xl">

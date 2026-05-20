@@ -51,7 +51,7 @@
       <span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-nx-text-muted text-sm">search</span>
       <input
         type="text"
-        placeholder="Search ports, processes..."
+        placeholder={_v ? t('search_ports') : 'Search ports, processes...'}
         value={searchQuery}
         oninput={handleSearchInput}
         class="h-7 w-56 border border-nx-border bg-nx-bg pl-7 pr-2 text-xs text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-accent"

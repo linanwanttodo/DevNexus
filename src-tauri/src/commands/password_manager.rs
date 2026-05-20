@@ -110,72 +110,103 @@ impl PasswordManager {
         Ok(())
     }
 
-    /// 从持久化文件加载密钥，不存在则生成并保存
-    /// 文件格式: salt(16 bytes) + derived_key(32 bytes) = 48 bytes
+    /// 从系统钥匙串（keyring）加载或创建加密密钥
+    /// 使用 OS 原生安全存储（macOS Keychain / Linux Secret Service / Windows Credential Manager）
+    /// 替代旧版 flat file 方案，避免密钥以明文形式暴露在文件系统中
     fn load_or_create_key() -> [u8; 32] {
-        let key_path = Self::key_path();
+        const SERVICE_NAME: &str = "com.devnexus.app";
+        const KEYRING_USER: &str = "encryption-key";
 
-        if let Ok(data) = std::fs::read(&key_path) {
-            if data.len() == 48 {
-                let mut key = [0u8; 32];
-                key.copy_from_slice(&data[16..]);
-                return key;
-            }
-            if data.len() == 32 {
-                let mut key = [0u8; 32];
-                key.copy_from_slice(&data);
-                return key;
+        // 1. 优先从系统钥匙串读取
+        let entry = keyring::Entry::new(SERVICE_NAME, KEYRING_USER).ok();
+        if let Some(ref entry) = entry {
+            if let Ok(pw) = entry.get_password() {
+                if let Ok(decoded) = general_purpose::STANDARD.decode(&pw) {
+                    if decoded.len() == 32 {
+                        let mut key = [0u8; 32];
+                        key.copy_from_slice(&decoded);
+                        // 迁移后清理旧版 key.bin
+                        Self::try_remove_old_keyfile();
+                        return key;
+                    }
+                }
             }
         }
 
-        let mut salt = [0u8; 16];
-        rand::thread_rng().fill(&mut salt);
+        // 2. 向后兼容：尝试从旧版 key.bin 迁移
+        if let Some(key) = Self::migrate_from_keyfile(entry.as_ref()) {
+            Self::try_remove_old_keyfile();
+            return key;
+        }
 
-        let host = sysinfo::System::host_name()
-            .unwrap_or_else(|| "devnexus".to_string());
-
+        // 3. 生成新密钥并存入钥匙串
         let mut key = [0u8; 32];
-        pbkdf2::pbkdf2_hmac::<sha2::Sha256>(
-            host.as_bytes(),
-            &salt,
-            PBKDF2_ITERATIONS,
-            &mut key,
-        );
+        rand::thread_rng().fill(&mut key);
+        let encoded = general_purpose::STANDARD.encode(&key);
 
-        let mut combined = salt.to_vec();
-        combined.extend_from_slice(&key);
-
-        if let Some(parent) = key_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if std::fs::write(&key_path, &combined).is_err() {
-            rand::thread_rng().fill(&mut key);
-        } else {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
-            }
+        if let Some(ref entry) = entry {
+            let _ = entry.set_password(&encoded);
         }
 
+        Self::try_remove_old_keyfile();
         key
     }
 
-    fn key_path() -> std::path::PathBuf {
-        let base = if cfg!(target_os = "macos") {
-            std::env::var("HOME")
-                .map(|h| std::path::PathBuf::from(h).join("Library/Application Support"))
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        } else if cfg!(target_os = "windows") {
-            std::env::var("APPDATA")
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        } else {
-            std::env::var("HOME")
-                .map(|h| std::path::PathBuf::from(h).join(".config"))
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+    /// 从旧版 key.bin 迁移密钥到钥匙串
+    fn migrate_from_keyfile(entry: Option<&keyring::Entry>) -> Option<[u8; 32]> {
+        let key_path = {
+            let base = if cfg!(target_os = "macos") {
+                std::env::var("HOME")
+                    .map(|h| std::path::PathBuf::from(h).join("Library/Application Support"))
+                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            } else if cfg!(target_os = "windows") {
+                std::env::var("APPDATA")
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            } else {
+                std::env::var("HOME")
+                    .map(|h| std::path::PathBuf::from(h).join(".config"))
+                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            };
+            base.join("devnexus").join("key.bin")
         };
-        base.join("devnexus").join("key.bin")
+
+        let data = std::fs::read(&key_path).ok()?;
+        let key = if data.len() == 48 {
+            // 旧格式: salt(16) + derived_key(32)
+            let mut k = [0u8; 32];
+            k.copy_from_slice(&data[16..]);
+            k
+        } else if data.len() == 32 {
+            let mut k = [0u8; 32];
+            k.copy_from_slice(&data);
+            k
+        } else {
+            return None;
+        };
+
+        // 写入钥匙串
+        if let Some(e) = entry {
+            let encoded = general_purpose::STANDARD.encode(&key);
+            let _ = e.set_password(&encoded);
+        }
+
+        Some(key)
+    }
+
+    fn try_remove_old_keyfile() {
+        let base = if cfg!(target_os = "macos") {
+            let Ok(home) = std::env::var("HOME") else { return };
+            std::path::PathBuf::from(home).join("Library/Application Support")
+        } else if cfg!(target_os = "windows") {
+            let Ok(appdata) = std::env::var("APPDATA") else { return };
+            std::path::PathBuf::from(appdata)
+        } else {
+            let Ok(home) = std::env::var("HOME") else { return };
+            std::path::PathBuf::from(home).join(".config")
+        };
+        let key_path = base.join("devnexus").join("key.bin");
+        let _ = std::fs::remove_file(key_path);
     }
 
     /// 加密数据
