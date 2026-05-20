@@ -214,29 +214,41 @@ fn calculate_next_run(cron_expression: &str) -> Result<Option<String>, String> {
 async fn execute_shutdown() -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
-        Command::new("sudo")
-            .args(&["shutdown", "-h", "now"])
+        let output = Command::new("osascript")
+            .args(["-e", "tell application \"Finder\" to shut down"])
             .output()
-            .map_err(|e| e.to_string())?;
-        Ok("System shutdown initiated".to_string())
+            .map_err(|e| format!("Failed to execute shutdown: {}", e))?;
+        if output.status.success() {
+            Ok("System shutdown initiated".to_string())
+        } else {
+            Err(format!("Shutdown failed: {}", String::from_utf8_lossy(&output.stderr)))
+        }
     }
     
     #[cfg(target_os = "linux")]
     {
-        Command::new("sudo")
-            .args(&["shutdown", "-h", "now"])
+        let output = Command::new("systemctl")
+            .args(["poweroff"])
             .output()
-            .map_err(|e| e.to_string())?;
-        Ok("System shutdown initiated".to_string())
+            .map_err(|e| format!("Failed to execute systemctl: {}", e))?;
+        if output.status.success() {
+            Ok("System shutdown initiated".to_string())
+        } else {
+            Err(format!("Shutdown failed (may require polkit permission): {}", String::from_utf8_lossy(&output.stderr)))
+        }
     }
     
     #[cfg(target_os = "windows")]
     {
-        Command::new("shutdown")
-            .args(&["/s", "/t", "0"])
+        let output = Command::new("shutdown")
+            .args(["/s", "/t", "0"])
             .output()
-            .map_err(|e| e.to_string())?;
-        Ok("System shutdown initiated".to_string())
+            .map_err(|e| format!("Failed to execute shutdown: {}", e))?;
+        if output.status.success() {
+            Ok("System shutdown initiated".to_string())
+        } else {
+            Err(format!("Shutdown failed: {}", String::from_utf8_lossy(&output.stderr)))
+        }
     }
 }
 

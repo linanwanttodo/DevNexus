@@ -106,6 +106,7 @@
     "country_jp": "Japan",
     "active": "Active",
     "test": "Test",
+    "timeout": "Timeout",
     "use": "Use",
     "refresh": "Refresh",
     "npm": "NPM Registry",
@@ -132,7 +133,12 @@
     "open": "Open",
     "install_confirm": "Install {name}?",
     "no_result": "No software found",
-    "no_package": "Package name not available"
+    "no_package": "Package name not available",
+    "no_pm_title": "No package manager detected",
+    "no_pm_desc": "DevNexus needs a package manager to install and uninstall software.",
+    "no_pm_suggest": "Please install one of the following package managers:",
+    "installed_filter": "Installed only",
+    "updates_filter": "Updates available"
   },
   "scheduler": {
     "title": "Task Scheduler",

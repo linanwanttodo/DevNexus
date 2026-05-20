@@ -29,38 +29,79 @@ pub fn kill_port(port: u16) -> Result<String, String> {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn list_ports_impl() -> Result<Vec<PortEntry>, String> {
-    let output = Command::new("lsof")
+    // 优先用 lsof，如果不存在则用 ss（更快且无需安装）
+    let lsof_result = Command::new("lsof")
         .args(["-i", "-P", "-n", "-sTCP:LISTEN"])
-        .output()
-        .map_err(|e| format!("Failed to run lsof: {}", e))?;
+        .output();
+
+    let output = match lsof_result {
+        Ok(o) if o.status.success() => o,
+        _ => {
+            // lsof 不存在或失败，回退到 ss
+            Command::new("ss")
+                .args(["-tlnp"])
+                .output()
+                .map_err(|e| format!("Neither lsof nor ss are available: {}", e))?
+        }
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut entries = Vec::new();
 
-    for line in stdout.lines().skip(1) {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 9 {
-            continue;
-        }
+    // 判断是 lsof 还是 ss 输出
+    let is_ss = stdout.lines().next().map(|l| l.contains("State") || l.contains("Recv-Q")).unwrap_or(false);
 
-        let process_name = parts[0].to_string();
-        let pid: u32 = parts[1].parse().unwrap_or(0);
-        if pid == 0 {
-            continue;
-        }
+    if is_ss {
+        for line in stdout.lines().skip(1) {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() < 6 {
+                continue;
+            }
 
-        // 解析地址列 (如 "localhost:3000" 或 "*:8080")
-        let addr = parts[8];
-        if let Some(port_str) = addr.split(':').last() {
-            if let Ok(port) = port_str.parse::<u16>() {
-                // 去重
-                if !entries.iter().any(|e: &PortEntry| e.port == port && e.pid == pid) {
-                    entries.push(PortEntry {
-                        port,
-                        protocol: "TCP".to_string(),
-                        process_name,
-                        pid,
-                    });
+            let local_addr = parts[3];
+            let port = local_addr.rsplit(':').next().and_then(|p| p.parse::<u16>().ok());
+            let Some(port) = port else { continue };
+
+            let process_info = parts[5..].join(" ");
+            let process_name = extract_ss_process_name(&process_info).unwrap_or_else(|| "unknown".to_string());
+            let pid = extract_ss_pid(&process_info).unwrap_or(0);
+            if pid == 0 {
+                continue;
+            }
+
+            if !entries.iter().any(|e: &PortEntry| e.port == port && e.pid == pid) {
+                entries.push(PortEntry {
+                    port,
+                    protocol: "TCP".to_string(),
+                    process_name,
+                    pid,
+                });
+            }
+        }
+    } else {
+        for line in stdout.lines().skip(1) {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() < 9 {
+                continue;
+            }
+
+            let process_name = parts[0].to_string();
+            let pid: u32 = parts[1].parse().unwrap_or(0);
+            if pid == 0 {
+                continue;
+            }
+
+            let addr = parts[8];
+            if let Some(port_str) = addr.split(':').last() {
+                if let Ok(port) = port_str.parse::<u16>() {
+                    if !entries.iter().any(|e: &PortEntry| e.port == port && e.pid == pid) {
+                        entries.push(PortEntry {
+                            port,
+                            protocol: "TCP".to_string(),
+                            process_name,
+                            pid,
+                        });
+                    }
                 }
             }
         }
@@ -70,19 +111,42 @@ fn list_ports_impl() -> Result<Vec<PortEntry>, String> {
     Ok(entries)
 }
 
+fn extract_ss_process_name(info: &str) -> Option<String> {
+    info.find("(\"").and_then(|start| {
+        info[start + 2..].find('"').map(|end| info[start + 2..start + 2 + end].to_string())
+    })
+}
+
+fn extract_ss_pid(info: &str) -> Option<u32> {
+    info.find("pid=").and_then(|start| {
+        let rest = &info[start + 4..];
+        rest.find(',').or_else(|| rest.find(')')).map(|end| rest[..end].parse::<u32>().ok()).flatten()
+    })
+}
+
 #[cfg(target_os = "windows")]
 fn list_ports_impl() -> Result<Vec<PortEntry>, String> {
     let output = Command::new("netstat")
-        .args(["-ano", "-p", "TCP"])
+        .args(["-ano"])
         .output()
         .map_err(|e| format!("Failed to run netstat: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut entries = Vec::new();
 
-    for line in stdout.lines().skip(4) {
+    for line in stdout.lines().skip(3) {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() < 5 {
+            continue;
+        }
+
+        let proto = parts[0].to_uppercase();
+        if !proto.starts_with("TCP") {
+            continue;
+        }
+
+        let state = parts[3];
+        if state != "LISTENING" {
             continue;
         }
 

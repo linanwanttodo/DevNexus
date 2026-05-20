@@ -257,13 +257,25 @@ fn get_firefox_cookie_path() -> Option<PathBuf> {
 fn count_cookies(path: &PathBuf) -> Result<usize, String> {
     let conn = Connection::open(path).map_err(|e| format!("Failed to open database: {}", e))?;
     
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM cookies",
-        [],
-        |row| row.get(0)
-    ).map_err(|e| format!("Query failed: {}", e))?;
+    let table = infer_cookie_table(&conn)?;
+    let query = format!("SELECT COUNT(*) FROM {}", table);
+    
+    let count: i64 = conn.query_row(&query, [], |row| row.get(0))
+        .map_err(|e| format!("Query failed: {}", e))?;
 
     Ok(count as usize)
+}
+
+fn infer_cookie_table(conn: &Connection) -> Result<&'static str, String> {
+    let result: Result<String, _> = conn.query_row(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='moz_cookies'",
+        [],
+        |row| row.get(0),
+    );
+    if result.is_ok() {
+        return Ok("moz_cookies");
+    }
+    Ok("cookies")
 }
 
 fn map_cookie_row(row: &rusqlite::Row) -> rusqlite::Result<CookieEntry> {
@@ -281,12 +293,22 @@ fn map_cookie_row(row: &rusqlite::Row) -> rusqlite::Result<CookieEntry> {
 
 fn read_cookies(path: &PathBuf, domain_filter: Option<String>) -> Result<Vec<CookieEntry>, String> {
     let conn = Connection::open(path).map_err(|e| format!("Failed to open database: {}", e))?;
+    let table = infer_cookie_table(&conn)?;
     
-    let (query, param) = if let Some(ref domain) = domain_filter {
-        let pattern = format!("%{}%", domain);
-        (format!("SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies WHERE host_key LIKE ?1"), Some(pattern))
+    let (query, param) = if table == "moz_cookies" {
+        if let Some(ref domain) = domain_filter {
+            let pattern = format!("%{}%", domain);
+            (format!("SELECT name, value, host, path, expiry, isSecure, isHttpOnly FROM moz_cookies WHERE host LIKE ?1"), Some(pattern))
+        } else {
+            ("SELECT name, value, host, path, expiry, isSecure, isHttpOnly FROM moz_cookies".to_string(), None)
+        }
     } else {
-        ("SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies".to_string(), None)
+        if let Some(ref domain) = domain_filter {
+            let pattern = format!("%{}%", domain);
+            (format!("SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies WHERE host_key LIKE ?1"), Some(pattern))
+        } else {
+            ("SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies".to_string(), None)
+        }
     };
 
     let mut stmt = conn.prepare(&query).map_err(|e| format!("Prepare failed: {}", e))?;

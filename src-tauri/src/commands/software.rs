@@ -23,40 +23,27 @@ fn safe_get_version(cmd: &str) -> String {
         return "installed".to_string();
     }
 
-    match std::process::Command::new(cmd)
-        .arg("--version")
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        Ok(mut child) => {
-            use std::sync::mpsc;
-            let (tx, rx) = mpsc::channel();
-            let stdout = child.stdout.take();
-            std::thread::spawn(move || {
-                let _ = tx.send(child.wait());
-            });
-            match rx.recv_timeout(std::time::Duration::from_secs(3)) {
-                Ok(Ok(status)) if status.success() => {
-                    if let Some(mut stdout) = stdout {
-                        use std::io::Read;
-                        let mut buf = Vec::new();
-                        let _ = std::io::BufReader::new(&mut stdout).read_to_end(&mut buf);
-                        let ver = String::from_utf8_lossy(&buf);
-                        let first_line = ver.lines().next().unwrap_or("unknown");
-                        if first_line.len() > 60 {
-                            first_line[..57].to_string() + "..."
-                        } else {
-                            first_line.to_string()
-                        }
-                    } else {
-                        "unknown".to_string()
-                    }
-                }
-                _ => "timeout".to_string(),
+    use std::sync::mpsc;
+    let (tx, rx) = mpsc::channel();
+    let cmd_str = cmd.to_string();
+    std::thread::spawn(move || {
+        let result = std::process::Command::new(&cmd_str)
+            .arg("--version")
+            .output();
+        let _ = tx.send(result);
+    });
+
+    match rx.recv_timeout(std::time::Duration::from_secs(3)) {
+        Ok(Ok(output)) if output.status.success() => {
+            let ver = String::from_utf8_lossy(&output.stdout);
+            let first_line = ver.lines().next().unwrap_or("unknown");
+            if first_line.len() > 60 {
+                first_line[..57].to_string() + "..."
+            } else {
+                first_line.to_string()
             }
         }
-        Err(_) => "unknown".to_string(),
+        _ => "timeout".to_string(),
     }
 }
 
@@ -220,6 +207,24 @@ struct PackageManager {
     uninstall_args: &'static [&'static str], // 不含包名
 }
 
+#[derive(Serialize, Clone)]
+pub struct PackageManagerInfo {
+    pub name: String,
+    pub binary: String,
+    pub needs_sudo: bool,
+}
+
+/// 列出系统上检测到的可用包管理器（前端用于展示引导提示）
+#[tauri::command]
+pub fn list_package_managers() -> Vec<PackageManagerInfo> {
+    let managers = detect_package_managers();
+    managers.into_iter().map(|pm| PackageManagerInfo {
+        name: pm.name.to_string(),
+        binary: pm.binary.to_string(),
+        needs_sudo: pm.needs_sudo,
+    }).collect()
+}
+
 /// 检测系统可用的包管理器（按优先级排列）
 fn detect_package_managers() -> Vec<PackageManager> {
     let mut managers = Vec::new();
@@ -327,22 +332,171 @@ fn map_package_name<'a>(generic: &'a str, pm_name: &str) -> &'a str {
         // VS Code
         ("code", "winget") => "Microsoft.VisualStudioCode",
         ("code", "chocolatey") => "vscode",
+        ("code", "brew") => "visual-studio-code",
+        ("code", "apt") => "code",
+        ("code", "dnf") => "code",
+        // Neovim
+        ("neovim", "brew") => "neovim",
+        ("neovim", "winget") => "Neovim.Neovim",
+        ("neovim", "apt") => "neovim",
+        ("neovim", "pacman") => "neovim",
         // Node.js
-        ("nodejs", "dnf") => "nodejs",
+        ("nodejs", "apt") => "nodejs",
+        ("nodejs", "brew") => "node",
+        ("nodejs", "winget") => "OpenJS.NodeJS.LTS",
         ("nodejs", "pacman") => "nodejs",
-        // Docker
-        ("docker-ce", "pacman") => "docker",
-        ("docker-ce", "dnf") => "docker-ce",
+        ("nodejs", "dnf") => "nodejs",
         // Python
-        ("python3", "pacman") => "python",
         ("python3", "apt") => "python3",
-        ("python3", "dnf") => "python3",
+        ("python3", "brew") => "python",
+        ("python3", "winget") => "Python.Python.3.12",
+        ("python3", "pacman") => "python",
+        // Go
+        ("golang", "apt") => "golang",
+        ("golang", "brew") => "go",
+        ("golang", "winget") => "GoLang.Go",
+        ("golang", "pacman") => "go",
+        ("golang", "dnf") => "golang",
+        // Rust
+        ("rust", "brew") => "rustup",
+        ("rust", "winget") => "Rustlang.Rustup",
+        ("rust", "pacman") => "rust",
+        ("rust", "apt") => "rustc",
+        // Ruby
+        ("ruby", "apt") => "ruby-full",
+        ("ruby", "brew") => "ruby",
+        // Java
+        ("openjdk-17-jdk", "apt") => "openjdk-17-jdk",
+        ("openjdk-17-jdk", "brew") => "openjdk@17",
+        ("openjdk-17-jdk", "winget") => "Microsoft.OpenJDK.17",
+        // Docker
+        ("docker-ce", "apt") => "docker-ce",
+        ("docker-ce", "dnf") => "docker-ce",
+        ("docker-ce", "pacman") => "docker",
+        // Git
+        ("git", "apt") => "git",
+        ("git", "brew") => "git",
+        ("git", "winget") => "Git.Git",
+        ("git", "pacman") => "git",
+        // curl
+        ("curl", "apt") => "curl",
+        ("curl", "brew") => "curl",
+        ("curl", "winget") => "cURL.cURL",
+        // wget
+        ("wget", "apt") => "wget",
+        ("wget", "brew") => "wget",
+        ("wget", "winget") => "GNU.Wget",
+        // OpenSSH
+        ("openssh-client", "apt") => "openssh-client",
+        ("openssh-client", "brew") => "openssh",
+        // GCC
+        ("gcc", "apt") => "gcc",
+        ("gcc", "brew") => "gcc",
+        ("gcc", "pacman") => "gcc",
+        // Clang
+        ("clang", "apt") => "clang",
+        ("clang", "brew") => "llvm",
+        ("clang", "pacman") => "clang",
+        // CMake
+        ("cmake", "apt") => "cmake",
+        ("cmake", "brew") => "cmake",
+        ("cmake", "winget") => "Kitware.CMake",
+        ("cmake", "pacman") => "cmake",
+        // ripgrep
+        ("ripgrep", "apt") => "ripgrep",
+        ("ripgrep", "brew") => "ripgrep",
+        ("ripgrep", "winget") => "BurntSushi.ripgrep.MSVC",
+        ("ripgrep", "pacman") => "ripgrep",
+        // fd
+        ("fd-find", "apt") => "fd-find",
+        ("fd-find", "brew") => "fd",
+        ("fd-find", "winget") => "sharkdp.fd",
+        ("fd-find", "pacman") => "fd",
+        // jq
+        ("jq", "apt") => "jq",
+        ("jq", "brew") => "jq",
+        ("jq", "winget") => "jqlang.jq",
+        ("jq", "pacman") => "jq",
+        // fzf
+        ("fzf", "apt") => "fzf",
+        ("fzf", "brew") => "fzf",
+        ("fzf", "winget") => "junegunn.fzf",
+        ("fzf", "pacman") => "fzf",
         // htop
+        ("htop", "apt") => "htop",
+        ("htop", "brew") => "htop",
         ("htop", "pacman") => "htop",
-        ("htop", "apk") => "htop",
-        // Default: pass through as-is
+        // tmux
+        ("tmux", "apt") => "tmux",
+        ("tmux", "brew") => "tmux",
+        ("tmux", "pacman") => "tmux",
+        // Redis
+        ("redis", "apt") => "redis-server",
+        ("redis", "brew") => "redis",
+        ("redis", "pacman") => "redis",
+        // SQLite
+        ("sqlite", "apt") => "sqlite3",
+        ("sqlite", "brew") => "sqlite",
+        ("sqlite", "winget") => "SQLite.SQLite",
+        // PostgreSQL
+        ("postgresql-client", "apt") => "postgresql-client",
+        ("postgresql-client", "brew") => "libpq",
+        ("postgresql-client", "pacman") => "postgresql-libs",
+        // Sublime Text
+        ("sublime-text", "brew") => "sublime-text",
+        ("sublime-text", "apt") => "sublime-text",
+        ("sublime-text", "winget") => "SublimeHQ.SublimeText.4",
+        // Zed
+        ("zed", "brew") => "zed",
+        ("zed", "winget") => "Zed.Zed",
+        // GParted
+        ("gparted", "apt") => "gparted",
+        ("gparted", "pacman") => "gparted",
+        // DBeaver
+        ("dbeaver-ce", "brew") => "dbeaver-community",
+        ("dbeaver-ce", "winget") => "dbeaver.dbeaver",
+        ("dbeaver-ce", "apt") => "dbeaver-ce",
+        // Postman (brew cask)
+        ("postman", "brew") => "postman",
+        ("postman", "winget") => "Postman.Postman",
+        // IntelliJ IDEA
+        ("intellij-idea-community", "brew") => "intellij-idea-ce",
+        ("intellij-idea-community", "winget") => "JetBrains.IntelliJIDEA.Community",
+        // MySQL Workbench
+        ("mysql-workbench", "brew") => "mysql-workbench",
+        ("mysql-workbench", "winget") => "Oracle.MySQLWorkbench",
+        // TablePlus
+        ("tableplus", "brew") => "tableplus",
+        ("tableplus", "winget") => "TablePlus.TablePlus",
+        // Docker Desktop
+        ("docker-desktop", "brew") => "docker",
+        ("docker-desktop", "winget") => "Docker.DockerDesktop",
+        // Default: 直接返回通用名
         _ => generic,
     }
+}
+
+#[cfg(target_os = "macos")]
+fn run_elevated(binary: &str, args: &[&str]) -> Result<std::process::Output, String> {
+    let mut cmd_str = binary.to_string();
+    for arg in args {
+        cmd_str.push(' ');
+        cmd_str.push_str(arg);
+    }
+    let escaped = cmd_str.replace('\\', "\\\\").replace('"', "\\\"");
+    std::process::Command::new("osascript")
+        .args(["-e", &format!("do shell script \"{}\" with administrator privileges", escaped)])
+        .output()
+        .map_err(|e| format!("Failed to execute osascript: {}", e))
+}
+
+#[cfg(target_os = "linux")]
+fn run_elevated(binary: &str, args: &[&str]) -> Result<std::process::Output, String> {
+    let mut cmd = std::process::Command::new("pkexec");
+    cmd.arg(binary);
+    cmd.args(args);
+    cmd.output()
+        .map_err(|e| format!("Failed to execute pkexec: {}", e))
 }
 
 /// 安装软件（跨平台，多包管理器支持）
@@ -351,10 +505,9 @@ pub async fn install_software(package_name: String) -> Result<String, String> {
     let managers = detect_package_managers();
 
     if managers.is_empty() {
-        return Err("No supported package manager found on this system".to_string());
+        return Err("No supported package manager found on this system.\n\nTo use the Software Center, please install a package manager:\n- macOS: Install Homebrew -> https://brew.sh/\n- Linux: Your distro likely has apt/dnf/pacman/zypper/apk pre-installed\n- Windows: winget comes built-in with Win 11 / Win 10 1809+. Chocolatey: https://chocolatey.org/install".to_string());
     }
 
-    // 克隆到 spawn_blocking 闭包中
     let managers_clone: Vec<_> = managers.iter().map(|pm| PackageManager {
         name: pm.name,
         binary: pm.binary,
@@ -369,31 +522,25 @@ pub async fn install_software(package_name: String) -> Result<String, String> {
 
         for pm in &managers_clone {
             let pkg = map_package_name(&pkg_name, pm.name);
+            let mut args: Vec<&str> = pm.install_args.to_vec();
+            args.push(pkg);
 
-            let mut cmd = if pm.needs_sudo {
-                let mut c = Command::new("sudo");
-                c.arg(pm.binary);
-                c
+            let output = if pm.needs_sudo {
+                run_elevated(pm.binary, &args)?
             } else {
                 Command::new(pm.binary)
+                    .args(&args)
+                    .output()
+                    .map_err(|e| format!("Failed to execute {}: {}", pm.binary, e))?
             };
 
-            cmd.args(pm.install_args).arg(pkg);
-
-            match cmd.output() {
-                Ok(output) => {
-                    if output.status.success() {
-                        return Ok(format!(
-                            "Successfully installed {} via {}",
-                            pkg_name, pm.name
-                        ));
-                    }
-                    last_error = String::from_utf8_lossy(&output.stderr).to_string();
-                }
-                Err(e) => {
-                    last_error = e.to_string();
-                }
+            if output.status.success() {
+                return Ok(format!(
+                    "Successfully installed {} via {}",
+                    pkg_name, pm.name
+                ));
             }
+            last_error = String::from_utf8_lossy(&output.stderr).to_string();
         }
 
         Err(format!(
@@ -412,7 +559,7 @@ pub async fn uninstall_software(package_name: String) -> Result<String, String> 
     let managers = detect_package_managers();
 
     if managers.is_empty() {
-        return Err("No supported package manager found on this system".to_string());
+        return Err("No supported package manager found on this system.\n\nTo use the Software Center, please install a package manager:\n- macOS: Install Homebrew -> https://brew.sh/\n- Linux: Your distro likely has apt/dnf/pacman/zypper/apk pre-installed\n- Windows: winget comes built-in with Win 11 / Win 10 1809+. Chocolatey: https://chocolatey.org/install".to_string());
     }
 
     let managers_clone: Vec<_> = managers.iter().map(|pm| PackageManager {
@@ -429,31 +576,25 @@ pub async fn uninstall_software(package_name: String) -> Result<String, String> 
 
         for pm in &managers_clone {
             let pkg = map_package_name(&pkg_name, pm.name);
+            let mut args: Vec<&str> = pm.uninstall_args.to_vec();
+            args.push(pkg);
 
-            let mut cmd = if pm.needs_sudo {
-                let mut c = Command::new("sudo");
-                c.arg(pm.binary);
-                c
+            let output = if pm.needs_sudo {
+                run_elevated(pm.binary, &args)?
             } else {
                 Command::new(pm.binary)
+                    .args(&args)
+                    .output()
+                    .map_err(|e| format!("Failed to execute {}: {}", pm.binary, e))?
             };
 
-            cmd.args(pm.uninstall_args).arg(pkg);
-
-            match cmd.output() {
-                Ok(output) => {
-                    if output.status.success() {
-                        return Ok(format!(
-                            "Successfully uninstalled {} via {}",
-                            pkg_name, pm.name
-                        ));
-                    }
-                    last_error = String::from_utf8_lossy(&output.stderr).to_string();
-                }
-                Err(e) => {
-                    last_error = e.to_string();
-                }
+            if output.status.success() {
+                return Ok(format!(
+                    "Successfully uninstalled {} via {}",
+                    pkg_name, pm.name
+                ));
             }
+            last_error = String::from_utf8_lossy(&output.stderr).to_string();
         }
 
         Err(format!(

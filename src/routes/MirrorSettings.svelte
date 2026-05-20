@@ -144,7 +144,7 @@
                     onclick={() => testMirror(group.id, mirror.url)}
                     disabled={testing !== null}
                   >
-                    {testing === mirror.url ? "..." : mirror.latency_ms > 0 ? `${mirror.latency_ms}ms` : (_v ? t('mirrors.test') : 'Test')}
+                    {testing === mirror.url ? "..." : mirror.latency_ms > 0 ? `${mirror.latency_ms}ms` : mirror.latency_ms === 0 ? (_v ? t('mirrors.timeout') : 'Timeout') : (_v ? t('mirrors.test') : 'Test')}
                   </button>
                   {#if mirror.is_active}
                     <span class="text-xs text-nx-success font-medium">{_v && t("mirrors.active")}</span>

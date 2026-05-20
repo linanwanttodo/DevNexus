@@ -26,19 +26,101 @@ impl PasswordManager {
     pub fn new() -> Self {
         let key = Self::load_or_create_key();
 
-        Self {
-            entries: Arc::new(Mutex::new(Vec::new())),
-            next_id: Arc::new(Mutex::new(1)),
+        let entries = Arc::new(Mutex::new(Vec::new()));
+        let next_id = Arc::new(Mutex::new(1));
+
+        // 启动时自动加载持久化的条目
+        let mut pm = Self {
+            entries: entries.clone(),
+            next_id,
             encryption_key: key,
+        };
+        let _ = pm.load_entries(); // 忽略加载错误（首次运行时文件不存在）
+        pm
+    }
+
+    /// 持久化数据文件路径
+    fn entries_path() -> std::path::PathBuf {
+        let base = Self::data_dir();
+        base.join("entries.enc")
+    }
+
+    fn data_dir() -> std::path::PathBuf {
+        if cfg!(target_os = "macos") {
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join("Library/Application Support/devnexus"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        } else if cfg!(target_os = "windows") {
+            std::env::var("APPDATA")
+                .map(|h| std::path::PathBuf::from(h).join("devnexus"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        } else {
+            std::env::var("XDG_DATA_HOME")
+                .map(|h| std::path::PathBuf::from(h).join("devnexus"))
+                .or_else(|_| {
+                    std::env::var("HOME")
+                        .map(|h| std::path::PathBuf::from(h).join(".local/share/devnexus"))
+                })
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
         }
     }
 
+    /// 保存所有条目到加密文件
+    fn save_entries(&self) -> Result<(), String> {
+        let path = Self::entries_path();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+
+        let entries = self.entries.lock().map_err(|e| e.to_string())?;
+        let json = serde_json::to_string(&*entries).map_err(|e| e.to_string())?;
+        let encrypted = self.encrypt(&json)?;
+        fs::write(&path, &encrypted).map_err(|e| format!("Failed to save entries: {}", e))?;
+
+        // 设置文件权限 0600
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+        }
+
+        Ok(())
+    }
+
+    /// 从加密文件加载条目
+    fn load_entries(&mut self) -> Result<(), String> {
+        let path = Self::entries_path();
+        if !path.exists() {
+            return Ok(()); // 首次运行，无文件
+        }
+
+        let encrypted = fs::read_to_string(&path).map_err(|e| format!("Failed to read entries: {}", e))?;
+        let json = self.decrypt(&encrypted)?;
+        let loaded_entries: Vec<PasswordEntry> =
+            serde_json::from_str(&json).map_err(|e| format!("Failed to parse entries: {}", e))?;
+
+        let mut entries = self.entries.lock().map_err(|e| e.to_string())?;
+        *entries = loaded_entries;
+
+        // 恢复 next_id
+        let max_id = entries.iter().map(|e| e.id).max().unwrap_or(0);
+        let mut next_id = self.next_id.lock().map_err(|e| e.to_string())?;
+        *next_id = max_id + 1;
+
+        Ok(())
+    }
+
     /// 从持久化文件加载密钥，不存在则生成并保存
+    /// 文件格式: salt(16 bytes) + derived_key(32 bytes) = 48 bytes
     fn load_or_create_key() -> [u8; 32] {
         let key_path = Self::key_path();
 
-        // 尝试从文件加载
         if let Ok(data) = std::fs::read(&key_path) {
+            if data.len() == 48 {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(&data[16..]);
+                return key;
+            }
             if data.len() == 32 {
                 let mut key = [0u8; 32];
                 key.copy_from_slice(&data);
@@ -46,12 +128,11 @@ impl PasswordManager {
             }
         }
 
-        // 生成新密钥：基于机器 hostname + 随机盐
-        let host = sysinfo::System::host_name()
-            .unwrap_or_else(|| "devnexus".to_string());
-
         let mut salt = [0u8; 16];
         rand::thread_rng().fill(&mut salt);
+
+        let host = sysinfo::System::host_name()
+            .unwrap_or_else(|| "devnexus".to_string());
 
         let mut key = [0u8; 32];
         pbkdf2::pbkdf2_hmac::<sha2::Sha256>(
@@ -61,15 +142,15 @@ impl PasswordManager {
             &mut key,
         );
 
-        // 保存到文件（仅用户可读）
+        let mut combined = salt.to_vec();
+        combined.extend_from_slice(&key);
+
         if let Some(parent) = key_path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        if std::fs::write(&key_path, &key).is_err() {
-            // 写文件失败退化为随机密钥（本次会话可用）
+        if std::fs::write(&key_path, &combined).is_err() {
             rand::thread_rng().fill(&mut key);
         } else {
-            // 设置文件权限 0600
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -169,6 +250,9 @@ pub fn add_password(
         .map_err(|e| e.to_string())?
         .push(entry);
 
+    // 自动持久化
+    state.save_entries()?;
+
     Ok(id)
 }
 
@@ -195,6 +279,8 @@ pub fn get_password(id: u32, state: tauri::State<'_, PasswordManager>) -> Result
 pub fn delete_password(id: u32, state: tauri::State<'_, PasswordManager>) -> Result<(), String> {
     let mut entries = state.entries.lock().map_err(|e| e.to_string())?;
     entries.retain(|e| e.id != id);
+    drop(entries);
+    state.save_entries()?;
     Ok(())
 }
 
@@ -222,6 +308,8 @@ pub fn update_password(
         entry.url = url;
         entry.notes = notes;
         
+        drop(entries);
+        state.save_entries()?;
         Ok(())
     } else {
         Err("Password entry not found".to_string())
