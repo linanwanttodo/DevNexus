@@ -76,12 +76,10 @@
   }
 
   let filteredGroups = $derived(
-    selectedCountry === "all"
-      ? groups
-      : groups.map(g => ({
-          ...g,
-          mirrors: g.mirrors.filter(m => m.country === selectedCountry || g.mirrors.every(x => x.country !== selectedCountry))
-        }))
+    groups.map(g => ({
+      ...g,
+      mirrors: g.mirrors.filter(m => selectedCountry === 'all' || m.country === selectedCountry)
+    }))
   );
 
   onMount(() => { loadMirrors(); });

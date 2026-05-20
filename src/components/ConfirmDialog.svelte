@@ -1,7 +1,13 @@
 <script>
   import { getConfirmations, confirmResponse, onConfirmChange } from "../lib/confirm.js";
+  import { t, getVersion, onLangChange } from "../lib/i18n.js";
 
   let confirmations = $state(getConfirmations());
+  let _v = $state(getVersion());
+
+  $effect(() => {
+    return onLangChange((v) => { _v = v; });
+  });
 
   $effect(() => {
     return onConfirmChange((c) => {
@@ -23,13 +29,13 @@
             class="px-4 py-2 text-sm font-medium text-nx-text-secondary hover:bg-nx-raised transition-colors"
             onclick={() => confirmResponse(c.id, false)}
           >
-            Cancel
+            {_v && t('common.cancel')}
           </button>
           <button
             class="px-4 py-2 text-sm font-medium border border-nx-danger text-nx-danger hover:bg-nx-danger/10 transition-colors"
             onclick={() => confirmResponse(c.id, true)}
           >
-            Confirm
+            {_v && t('common.confirm')}
           </button>
         </div>
       </div>

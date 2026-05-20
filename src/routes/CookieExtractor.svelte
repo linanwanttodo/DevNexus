@@ -164,8 +164,9 @@
   <div class="mb-6 border border-nx-border bg-nx-surface p-5">
     <div class="flex items-end gap-3">
       <div class="flex-1">
-        <label class="mb-1 block text-xs text-nx-text-muted">{t('cookies.domain_filter')}</label>
+        <label for="cookie-domain-filter" class="mb-1 block text-xs text-nx-text-muted">{t('cookies.domain_filter')}</label>
         <input
+          id="cookie-domain-filter"
           type="text"
           bind:value={domainFilter}
           placeholder={t('cookies.filter_placeholder')}

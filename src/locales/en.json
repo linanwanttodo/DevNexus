@@ -268,6 +268,7 @@
     "loading": "Loading...",
     "error": "Error",
     "retry": "Retry",
+    "confirm": "Confirm",
     "cancel": "Cancel",
     "save": "Save",
     "delete": "Delete",
