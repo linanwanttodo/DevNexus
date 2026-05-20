@@ -11,6 +11,10 @@ dist/
 *.iml
 .vscode/
 
+# Agent caches
+.atomcode/
+.sisyphus/
+
 # OS
 .DS_Store
 Thumbs.db
