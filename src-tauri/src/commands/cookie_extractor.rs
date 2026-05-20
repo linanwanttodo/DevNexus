@@ -278,11 +278,24 @@ fn infer_cookie_table(conn: &Connection) -> Result<&'static str, String> {
     Ok("cookies")
 }
 
-fn map_cookie_row(row: &rusqlite::Row) -> rusqlite::Result<CookieEntry> {
+fn map_chrome_cookie_row(row: &rusqlite::Row) -> rusqlite::Result<CookieEntry> {
     let encrypted_value: Vec<u8> = row.get(1)?;
     Ok(CookieEntry {
         name: row.get(0)?,
         value: decrypt_cookie_value(&encrypted_value),
+        domain: row.get(2)?,
+        path: row.get(3)?,
+        expires: row.get(4)?,
+        secure: row.get(5)?,
+        httponly: row.get(6)?,
+    })
+}
+
+fn map_firefox_cookie_row(row: &rusqlite::Row) -> rusqlite::Result<CookieEntry> {
+    let value: String = row.get(1)?;
+    Ok(CookieEntry {
+        name: row.get(0)?,
+        value,
         domain: row.get(2)?,
         path: row.get(3)?,
         expires: row.get(4)?,
@@ -298,14 +311,14 @@ fn read_cookies(path: &PathBuf, domain_filter: Option<String>) -> Result<Vec<Coo
     let (query, param) = if table == "moz_cookies" {
         if let Some(ref domain) = domain_filter {
             let pattern = format!("%{}%", domain);
-            (format!("SELECT name, value, host, path, expiry, isSecure, isHttpOnly FROM moz_cookies WHERE host LIKE ?1"), Some(pattern))
+            ("SELECT name, value, host, path, expiry, isSecure, isHttpOnly FROM moz_cookies WHERE host LIKE ?1".to_string(), Some(pattern))
         } else {
             ("SELECT name, value, host, path, expiry, isSecure, isHttpOnly FROM moz_cookies".to_string(), None)
         }
     } else {
         if let Some(ref domain) = domain_filter {
             let pattern = format!("%{}%", domain);
-            (format!("SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies WHERE host_key LIKE ?1"), Some(pattern))
+            ("SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies WHERE host_key LIKE ?1".to_string(), Some(pattern))
         } else {
             ("SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies".to_string(), None)
         }
@@ -313,18 +326,29 @@ fn read_cookies(path: &PathBuf, domain_filter: Option<String>) -> Result<Vec<Coo
 
     let mut stmt = conn.prepare(&query).map_err(|e| format!("Prepare failed: {}", e))?;
     
-    let cookie_iter = if let Some(ref p) = param {
-        stmt.query_map(&[p.as_str()], map_cookie_row)
-            .map_err(|e| format!("Query failed: {}", e))?
-    } else {
-        stmt.query_map([], map_cookie_row)
-            .map_err(|e| format!("Query failed: {}", e))?
-    };
-
     let mut cookies = Vec::new();
-    for cookie in cookie_iter {
-        if let Ok(c) = cookie {
-            cookies.push(c);
+
+    if table == "moz_cookies" {
+        // Firefox: value 列是 TEXT
+        if let Some(ref p) = param {
+            let mut rows = stmt.query_map([p.as_str()], map_firefox_cookie_row)
+                .map_err(|e| format!("Query failed: {}", e))?;
+            while let Some(Ok(c)) = rows.next() { cookies.push(c); }
+        } else {
+            let mut rows = stmt.query_map([], map_firefox_cookie_row)
+                .map_err(|e| format!("Query failed: {}", e))?;
+            while let Some(Ok(c)) = rows.next() { cookies.push(c); }
+        }
+    } else {
+        // Chrome/Edge: encrypted_value 列是 BLOB
+        if let Some(ref p) = param {
+            let mut rows = stmt.query_map([p.as_str()], map_chrome_cookie_row)
+                .map_err(|e| format!("Query failed: {}", e))?;
+            while let Some(Ok(c)) = rows.next() { cookies.push(c); }
+        } else {
+            let mut rows = stmt.query_map([], map_chrome_cookie_row)
+                .map_err(|e| format!("Query failed: {}", e))?;
+            while let Some(Ok(c)) = rows.next() { cookies.push(c); }
         }
     }
 

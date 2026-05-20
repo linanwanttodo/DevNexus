@@ -142,7 +142,7 @@ impl PasswordManager {
         // 3. 生成新密钥并存入钥匙串
         let mut key = [0u8; 32];
         rand::thread_rng().fill(&mut key);
-        let encoded = general_purpose::STANDARD.encode(&key);
+        let encoded = general_purpose::STANDARD.encode(key);
 
         if let Some(ref entry) = entry {
             let _ = entry.set_password(&encoded);
@@ -173,7 +173,6 @@ impl PasswordManager {
 
         let data = std::fs::read(&key_path).ok()?;
         let key = if data.len() == 48 {
-            // 旧格式: salt(16) + derived_key(32)
             let mut k = [0u8; 32];
             k.copy_from_slice(&data[16..]);
             k
@@ -187,7 +186,7 @@ impl PasswordManager {
 
         // 写入钥匙串
         if let Some(e) = entry {
-            let encoded = general_purpose::STANDARD.encode(&key);
+            let encoded = general_purpose::STANDARD.encode(key);
             let _ = e.set_password(&encoded);
         }
 

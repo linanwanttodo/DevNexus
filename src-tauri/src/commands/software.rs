@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::process::Command;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -8,7 +9,72 @@ pub struct Software {
     pub version: String,
     pub status: String,
     pub action: String,
-    pub package_name: Option<String>, // 包管理器的包名
+    pub package_name: Option<String>,
+    pub available_versions: Vec<String>,
+    pub download_supported: bool,
+}
+
+/// 版本来源：从哪里获取可用版本列表
+#[derive(Clone)]
+enum VersionSource {
+    GitHubReleases { owner: &'static str, repo: &'static str },
+    NodeDist,
+    GoDev,
+}
+
+/// 获取软件版本来源
+fn get_version_source(name: &str) -> Option<VersionSource> {
+    match name {
+        "Visual Studio Code" => Some(VersionSource::GitHubReleases { owner: "microsoft", repo: "vscode" }),
+        "Neovim" => Some(VersionSource::GitHubReleases { owner: "neovim", repo: "neovim" }),
+        "Node.js" => Some(VersionSource::NodeDist),
+        "Go" => Some(VersionSource::GoDev),
+        "Python 3" => Some(VersionSource::GitHubReleases { owner: "python", repo: "cpython" }),
+        "Git" => Some(VersionSource::GitHubReleases { owner: "git", repo: "git" }),
+        "Rust" => Some(VersionSource::GitHubReleases { owner: "rust-lang", repo: "rust" }),
+        _ => None,
+    }
+}
+
+/// 生成当前平台的下载 URL
+fn get_download_url(name: &str, version: &str) -> Option<String> {
+    match name {
+        "Visual Studio Code" => Some(format!(
+            "https://code.visualstudio.com/sha/download?build=stable&os={}",
+            if cfg!(target_os = "linux") { "linux-x64" }
+            else if cfg!(target_os = "macos") { { if cfg!(target_arch = "aarch64") { "darwin-arm64" } else { "darwin-x64" } } }
+            else { "win32-x64" }
+        )),
+        "Node.js" => {
+            let os = if cfg!(target_os = "linux") { "linux" } else if cfg!(target_os = "macos") { "darwin" } else { "win" };
+            let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+            let ext = if cfg!(target_os = "windows") { "zip" } else if cfg!(target_os = "macos") { "tar.gz" } else { "tar.xz" };
+            Some(format!("https://nodejs.org/dist/v{version}/node-v{version}-{os}-{arch}.{ext}"))
+        }
+        "Go" => {
+            let os = if cfg!(target_os = "linux") { "linux" } else if cfg!(target_os = "macos") { "darwin" } else { "windows" };
+            let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "amd64" };
+            let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
+            Some(format!("https://go.dev/dl/go{version}.{os}-{arch}.{ext}"))
+        }
+        "Neovim" => {
+            #[cfg(target_os = "linux")]
+            { Some(format!("https://github.com/neovim/neovim/releases/download/stable/nvim-linux64.tar.gz")) }
+            #[cfg(target_os = "macos")]
+            { Some(format!("https://github.com/neovim/neovim/releases/download/stable/nvim-macos-arm64.tar.gz")) }
+            #[cfg(target_os = "windows")]
+            { Some(format!("https://github.com/neovim/neovim/releases/download/stable/nvim-win64.zip")) }
+        }
+        "Git" => {
+            #[cfg(target_os = "linux")]
+            { Some(format!("https://github.com/git/git/archive/refs/tags/v{version}.tar.gz")) }
+            #[cfg(target_os = "macos")]
+            { Some(format!("https://github.com/git/git/archive/refs/tags/v{version}.tar.gz")) }
+            #[cfg(target_os = "windows")]
+            { Some(format!("https://github.com/git-for-windows/git/releases/download/v{version}.windows.1/Git-{version}-64-bit.exe")) }
+        }
+        _ => None,
+    }
 }
 
 /// GUI 应用名单：这些程序不支持 --version，执行会直接启动 GUI，跳过版本检测
@@ -135,6 +201,7 @@ pub async fn list_software() -> Vec<Software> {
             };
             let status = if found { "installed" } else { "available" };
             let action = if found { "Open" } else { "Install" };
+            let download_url = get_download_url(name, "0.0.0");
             Software {
                 name: name.to_string(),
                 category: category.to_string(),
@@ -142,6 +209,8 @@ pub async fn list_software() -> Vec<Software> {
                 status: status.to_string(),
                 action: action.to_string(),
                 package_name: Some(pkg.to_string()),
+                available_versions: Vec::new(),
+                download_supported: download_url.is_some(),
             }
         }));
     }
@@ -586,6 +655,276 @@ pub async fn install_software(package_name: String) -> Result<String, String> {
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
+/// 获取软件残留配置/缓存/数据目录的路径列表
+///
+/// 对已知的开发者工具返回精确的路径，否则基于通用模式生成候选路径。
+fn get_cleanup_paths(app_name: &str, package_name: &str) -> Vec<PathBuf> {
+let home = std::env::var("HOME").unwrap_or_default();
+let mut paths: Vec<PathBuf> = Vec::new();
+
+// ——— 已知工具的精确路径映射（不区分大小写匹配） ———
+let app_name_lower = app_name.to_lowercase();
+let pkg_lower = package_name.to_lowercase();
+
+match app_name_lower.as_str() {
+    // Node.js
+    "node.js" | "nodejs" => {
+        paths.push(PathBuf::from(&home).join(".npm"));
+        paths.push(PathBuf::from(&home).join(".node-gyp"));
+        #[cfg(unix)]
+        {
+            paths.push(PathBuf::from(&home).join(".config/configstore"));
+            paths.push(PathBuf::from("/usr/local/lib/node_modules"));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            paths.push(PathBuf::from(&home).join("Library/Preferences/node"));
+            paths.push(PathBuf::from(&home).join("Library/Caches/node"));
+        }
+        #[cfg(windows)]
+        {
+            if let Ok(appdata) = std::env::var("APPDATA") {
+                paths.push(PathBuf::from(appdata).join("npm"));
+                paths.push(PathBuf::from(appdata).join("npm-cache"));
+            }
+        }
+    }
+    // Python
+    "python 3" | "python3" | "python" => {
+        #[cfg(unix)]
+        {
+            paths.push(PathBuf::from(&home).join(".local/lib/python*"));
+            paths.push(PathBuf::from(&home).join(".cache/pip"));
+            paths.push(PathBuf::from(&home).join(".config/pip"));
+            paths.push(PathBuf::from(&home).join(".python_history"));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            paths.push(PathBuf::from(&home).join("Library/Caches/pip"));
+            paths.push(PathBuf::from(&home).join("Library/Python"));
+        }
+        #[cfg(windows)]
+        {
+            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                paths.push(PathBuf::from(localappdata).join("pip"));
+                paths.push(PathBuf::from(localappdata).join("Python"));
+            }
+        }
+    }
+    // Rust
+    "rust" | "rustc" => {
+        #[cfg(unix)]
+        {
+            paths.push(PathBuf::from(&home).join(".rustup"));
+            paths.push(PathBuf::from(&home).join(".cargo"));
+        }
+        #[cfg(windows)]
+        {
+            if let Ok(userprofile) = std::env::var("USERPROFILE") {
+                paths.push(PathBuf::from(userprofile).join(".rustup"));
+                paths.push(PathBuf::from(userprofile).join(".cargo"));
+            }
+        }
+    }
+    // Go
+    "go" | "golang" => {
+        #[cfg(unix)]
+        {
+            paths.push(PathBuf::from(&home).join("go"));
+            paths.push(PathBuf::from(&home).join(".cache/go"));
+        }
+        #[cfg(windows)]
+        {
+            if let Ok(userprofile) = std::env::var("USERPROFILE") {
+                paths.push(PathBuf::from(userprofile).join("go"));
+            }
+        }
+    }
+    // VS Code
+    "visual studio code" | "code" => {
+        #[cfg(target_os = "linux")]
+        {
+            paths.push(PathBuf::from(&home).join(".config/Code"));
+            paths.push(PathBuf::from(&home).join(".vscode"));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            paths.push(PathBuf::from(&home).join("Library/Application Support/Code"));
+            paths.push(PathBuf::from(&home).join(".vscode"));
+        }
+        #[cfg(windows)]
+        {
+            if let Ok(appdata) = std::env::var("APPDATA") {
+                paths.push(PathBuf::from(appdata).join("Code"));
+            }
+            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                paths.push(PathBuf::from(localappdata).join("Programs/Microsoft VS Code"));
+            }
+        }
+    }
+    // Firefox
+    "firefox" => {
+        #[cfg(target_os = "linux")]
+        {
+            paths.push(PathBuf::from(&home).join(".mozilla/firefox"));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            paths.push(PathBuf::from(&home).join("Library/Application Support/Firefox"));
+            paths.push(PathBuf::from(&home).join("Library/Caches/Firefox"));
+        }
+        #[cfg(windows)]
+        {
+            if let Ok(appdata) = std::env::var("APPDATA") {
+                paths.push(PathBuf::from(appdata).join("Mozilla/Firefox"));
+            }
+            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                paths.push(PathBuf::from(localappdata).join("Mozilla/Firefox"));
+            }
+        }
+    }
+    // Chrome / Chromium
+    "chrome" | "google chrome" | "chromium" | "chromium-browser" => {
+        #[cfg(target_os = "linux")]
+        {
+            paths.push(PathBuf::from(&home).join(".config/google-chrome"));
+            paths.push(PathBuf::from(&home).join(".cache/google-chrome"));
+            paths.push(PathBuf::from(&home).join(".config/chromium"));
+            paths.push(PathBuf::from(&home).join(".cache/chromium"));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            paths.push(PathBuf::from(&home).join("Library/Application Support/Google/Chrome"));
+            paths.push(PathBuf::from(&home).join("Library/Caches/Google/Chrome"));
+        }
+        #[cfg(windows)]
+        {
+            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                paths.push(PathBuf::from(localappdata).join("Google/Chrome"));
+                paths.push(PathBuf::from(localappdata).join("Google/Chrome/User Data"));
+            }
+        }
+    }
+    // Docker
+    "docker" | "docker desktop" | "docker engine" => {
+        #[cfg(target_os = "linux")]
+        {
+            paths.push(PathBuf::from(&home).join(".docker"));
+            paths.push(PathBuf::from("/var/lib/docker"));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            paths.push(PathBuf::from(&home).join("Library/Containers/com.docker.docker"));
+            paths.push(PathBuf::from(&home).join("Library/Application Support/Docker"));
+            paths.push(PathBuf::from(&home).join(".docker"));
+        }
+        #[cfg(windows)]
+        {
+            if let Ok(appdata) = std::env::var("APPDATA") {
+                paths.push(PathBuf::from(appdata).join("Docker"));
+            }
+            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                paths.push(PathBuf::from(localappdata).join("Docker"));
+            }
+        }
+    }
+    // ——— 未识别的软件：用通用模式 ———
+    _ => {
+        let name_slug = app_name_lower.replace([' ', '_'], "-");
+
+        #[cfg(unix)]
+        {
+            // ~/.config/<name>
+            paths.push(PathBuf::from(&home).join(format!(".config/{}", name_slug)));
+            paths.push(PathBuf::from(&home).join(format!(".config/{}", pkg_lower)));
+            // ~/.cache/<name>
+            paths.push(PathBuf::from(&home).join(format!(".cache/{}", name_slug)));
+            paths.push(PathBuf::from(&home).join(format!(".cache/{}", pkg_lower)));
+            // ~/.local/share/<name>
+            paths.push(PathBuf::from(&home).join(format!(".local/share/{}", name_slug)));
+            paths.push(PathBuf::from(&home).join(format!(".local/share/{}", pkg_lower)));
+            // ~/.<name>
+            paths.push(PathBuf::from(&home).join(format!(".{}", name_slug)));
+            paths.push(PathBuf::from(&home).join(format!(".{}", pkg_lower)));
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            // ~/Library/Application Support/<name>
+            paths.push(PathBuf::from(&home).join(format!("Library/Application Support/{}", name_slug)));
+            paths.push(PathBuf::from(&home).join(format!("Library/Application Support/{}", pkg_lower)));
+            // ~/Library/Caches/<name>
+            paths.push(PathBuf::from(&home).join(format!("Library/Caches/{}", name_slug)));
+            paths.push(PathBuf::from(&home).join(format!("Library/Caches/{}", pkg_lower)));
+            // ~/Library/Preferences/<name>
+            paths.push(PathBuf::from(&home).join(format!("Library/Preferences/{}", name_slug)));
+            paths.push(PathBuf::from(&home).join(format!("Library/Preferences/{}", pkg_lower)));
+        }
+
+        #[cfg(windows)]
+        {
+            if let Ok(appdata) = std::env::var("APPDATA") {
+                paths.push(PathBuf::from(appdata).join(&name_slug));
+                paths.push(PathBuf::from(appdata).join(&pkg_lower));
+            }
+            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                paths.push(PathBuf::from(localappdata).join(&name_slug));
+                paths.push(PathBuf::from(localappdata).join(&pkg_lower));
+            }
+        }
+    }
+}
+
+// 去重保留顺序
+let mut seen = std::collections::HashSet::new();
+paths.into_iter().filter(|p| seen.insert(p.clone())).collect()
+}
+
+/// 深度卸载：先执行标准卸载，再清理残留的配置文件、缓存和数据目录
+#[tauri::command]
+pub async fn uninstall_software_deep(package_name: String, app_name: String) -> Result<String, String> {
+// (a) 先执行标准卸载
+let result = uninstall_software(package_name.clone()).await?;
+
+// (b) 获取所有可能的清理路径
+let cleanup_paths = get_cleanup_paths(&app_name, &package_name);
+
+// (c) 遍历删除所有存在的目录
+let mut cleaned_dirs: Vec<String> = Vec::new();
+let mut error_dirs: Vec<String> = Vec::new();
+
+for path in &cleanup_paths {
+    if path.exists() {
+        match std::fs::remove_dir_all(path) {
+            Ok(()) => {
+                cleaned_dirs.push(path.display().to_string());
+            }
+            Err(e) => {
+                error_dirs.push(format!("{} ({})", path.display(), e));
+            }
+        }
+    }
+}
+
+// (d) 构造结果消息
+let mut message = result;
+if !cleaned_dirs.is_empty() || !error_dirs.is_empty() {
+    message.push_str("\n\n");
+}
+if !cleaned_dirs.is_empty() {
+    message.push_str(&format!("已清理目录:\n{}", cleaned_dirs.join("\n")));
+}
+if !error_dirs.is_empty() {
+    if !cleaned_dirs.is_empty() {
+        message.push('\n');
+    }
+    message.push_str(&format!("清理失败:\n{}", error_dirs.join("\n")));
+}
+
+// 至少清理了一些内容才算成功，但即使全部失败也返回 Ok（让上层决定）
+Ok(message)
+}
+
 /// 卸载软件（跨平台，多包管理器支持）
 #[tauri::command]
 pub async fn uninstall_software(package_name: String) -> Result<String, String> {
@@ -638,4 +977,312 @@ pub async fn uninstall_software(package_name: String) -> Result<String, String> 
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?
+}
+
+// ==================== 版本查询 & 直接下载安装 ====================
+
+/// 从 GitHub Releases API 获取版本列表
+async fn fetch_github_versions(owner: &str, repo: &str) -> Result<Vec<String>, String> {
+    let url = format!("https://api.github.com/repos/{}/{}/releases?per_page=30", owner, repo);
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(&url)
+        .header("User-Agent", "DevNexus/1.0")
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch versions: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("GitHub API returned {}", resp.status()));
+    }
+    let releases: Vec<serde_json::Value> = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    let versions: Vec<String> = releases
+        .iter()
+        .filter_map(|r| r.get("tag_name").and_then(|v| v.as_str()))
+        .filter(|v| !v.contains("rc") && !v.contains("beta") && !v.contains("alpha") && !v.contains("nightly"))
+        .map(|v| v.trim_start_matches('v').to_string())
+        .collect();
+    if versions.is_empty() {
+        Err("No stable releases found".to_string())
+    } else {
+        Ok(versions)
+    }
+}
+
+/// 从 Node.js 官方 dist 目录获取版本列表
+async fn fetch_node_versions() -> Result<Vec<String>, String> {
+    let url = "https://nodejs.org/dist/index.json";
+    let resp = reqwest::get(url)
+        .await
+        .map_err(|e| format!("Failed to fetch Node.js versions: {}", e))?;
+    let versions: Vec<serde_json::Value> = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    let result: Vec<String> = versions
+        .iter()
+        .filter_map(|v| v.get("version").and_then(|x| x.as_str()))
+        .map(|v| v.trim_start_matches('v').to_string())
+        .take(30)
+        .collect();
+    if result.is_empty() {
+        Err("No Node.js versions found".to_string())
+    } else {
+        Ok(result)
+    }
+}
+
+/// 从 Go 官方下载页获取版本列表
+async fn fetch_go_versions() -> Result<Vec<String>, String> {
+    let url = "https://go.dev/dl/?mode=json";
+    let resp = reqwest::get(url)
+        .await
+        .map_err(|e| format!("Failed to fetch Go versions: {}", e))?;
+    let versions: Vec<serde_json::Value> = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    let result: Vec<String> = versions
+        .iter()
+        .filter_map(|v| v.get("version").and_then(|x| x.as_str()))
+        .map(|v| v.trim_start_matches("go").to_string())
+        .collect();
+    if result.is_empty() {
+        Err("No Go versions found".to_string())
+    } else {
+        Ok(result)
+    }
+}
+
+/// 获取软件的可用版本列表（前端懒加载调用）
+#[tauri::command]
+pub async fn fetch_software_versions(package_name: String) -> Result<Vec<String>, String> {
+    let defs = build_software_defs();
+    let def = defs
+        .iter()
+        .find(|d| d.package_name == package_name || d.name == package_name)
+        .ok_or_else(|| format!("Unknown software: {}", package_name))?;
+
+    match def.name {
+        "Node.js" => fetch_node_versions().await,
+        "Go" => fetch_go_versions().await,
+        name => {
+            let (owner, repo) = match name {
+                "Visual Studio Code" => ("microsoft", "vscode"),
+                "Neovim" => ("neovim", "neovim"),
+                "Git" => ("git", "git"),
+                "Rust" => ("rust-lang", "rust"),
+                "Python 3" => ("python", "cpython"),
+                _ => return Err(format!("No version API configured for {}", name)),
+            };
+            fetch_github_versions(owner, repo).await
+        }
+    }
+}
+
+/// 获取当前平台的安装基目录
+fn get_install_base_dir() -> PathBuf {
+    #[cfg(target_os = "linux")]
+    let base = {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        PathBuf::from(home).join(".local/share/devnexus/software")
+    };
+    #[cfg(target_os = "macos")]
+    let base = {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        PathBuf::from(home).join("Library/Application Support/devnexus/software")
+    };
+    #[cfg(target_os = "windows")]
+    let base = {
+        let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
+        PathBuf::from(appdata).join("devnexus/software")
+    };
+    std::fs::create_dir_all(&base).ok();
+    base
+}
+
+/// 递归查找二进制文件（最多 5 层深度）
+fn find_binary_in_dir(dir: &std::path::Path, name: &str) -> Option<PathBuf> {
+    let exe_name = if cfg!(target_os = "windows") {
+        format!("{}.exe", name)
+    } else {
+        name.to_string()
+    };
+
+    let mut dirs_to_check = vec![dir.to_path_buf()];
+    let mut depth = 0;
+
+    while !dirs_to_check.is_empty() && depth < 5 {
+        let mut next_level = Vec::new();
+        for current in dirs_to_check {
+            if let Ok(entries) = std::fs::read_dir(&current) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        next_level.push(path);
+                    } else if let Some(fname) = path.file_name().and_then(|n| n.to_str()) {
+                        if fname == exe_name || fname == name {
+                            return Some(path);
+                        }
+                    }
+                }
+            }
+        }
+        dirs_to_check = next_level;
+        depth += 1;
+    }
+    None
+}
+
+/// 从官方源下载并安装指定版本的软件
+#[tauri::command]
+pub async fn install_software_from_url(package_name: String, version: String) -> Result<String, String> {
+    let defs = build_software_defs();
+    let def = defs
+        .iter()
+        .find(|d| d.package_name == package_name || d.name == package_name)
+        .ok_or_else(|| format!("Unknown software: {}", package_name))?;
+
+    let url = get_download_url(def.name, &version)
+        .ok_or_else(|| format!("No download URL configured for {}", def.name))?;
+
+    let install_dir = get_install_base_dir().join(&package_name).join(&version);
+    if install_dir.exists() {
+        return Err(format!("Version {} of {} is already installed at {}", version, def.name, install_dir.display()));
+    }
+
+    let temp_dir = std::env::temp_dir().join("devnexus-install");
+    std::fs::create_dir_all(&temp_dir)
+        .map_err(|e| format!("Failed to create temp dir: {}", e))?;
+
+    // 下载
+    let filename = url.rsplit('/').next().unwrap_or("download");
+    let filepath = temp_dir.join(filename);
+
+    let response = reqwest::get(&url)
+        .await
+        .map_err(|e| format!("Failed to download: {}", e))?;
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+
+    std::fs::write(&filepath, &bytes)
+        .map_err(|e| format!("Failed to save file: {}", e))?;
+
+    // 创建安装目录
+    std::fs::create_dir_all(&install_dir)
+        .map_err(|e| format!("Failed to create install dir: {}", e))?;
+
+    // 解压
+    let filename_lower = filename.to_lowercase();
+    if filename_lower.ends_with(".tar.gz") || filename_lower.ends_with(".tgz") {
+        let output = Command::new("tar")
+            .args(["-xzf", &filepath.to_string_lossy(), "-C", &install_dir.to_string_lossy()])
+            .output()
+            .map_err(|e| format!("Failed to run tar: {}", e))?;
+        if !output.status.success() {
+            return Err(format!("Extraction failed: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+    } else if filename_lower.ends_with(".tar.xz") {
+        let output = Command::new("tar")
+            .args(["-xJf", &filepath.to_string_lossy(), "-C", &install_dir.to_string_lossy()])
+            .output()
+            .map_err(|e| format!("Failed to run tar: {}", e))?;
+        if !output.status.success() {
+            return Err(format!("Extraction failed: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+    } else if filename_lower.ends_with(".zip") {
+        let output = Command::new("unzip")
+            .args(["-o", &filepath.to_string_lossy(), "-d", &install_dir.to_string_lossy()])
+            .output()
+            .map_err(|e| format!("Failed to run unzip: {}", e))?;
+        if !output.status.success() {
+            // fallback: 用 Rust zip 库解压
+            let file = std::fs::File::open(&filepath)
+                .map_err(|e| format!("Failed to open zip: {}", e))?;
+            let mut archive = zip::ZipArchive::new(file)
+                .map_err(|e| format!("Failed to read zip: {}", e))?;
+            for i in 0..archive.len() {
+                let mut entry = archive.by_index(i)
+                    .map_err(|e| format!("Failed to read zip entry: {}", e))?;
+                let outpath = install_dir.join(entry.name());
+                if entry.is_dir() {
+                    std::fs::create_dir_all(&outpath).ok();
+                } else {
+                    if let Some(parent) = outpath.parent() {
+                        std::fs::create_dir_all(parent).ok();
+                    }
+                    let mut outfile = std::fs::File::create(&outpath)
+                        .map_err(|e| format!("Failed to create {}: {}", outpath.display(), e))?;
+                    std::io::copy(&mut entry, &mut outfile)
+                        .map_err(|e| format!("Failed to extract {}: {}", outpath.display(), e))?;
+                }
+            }
+        }
+    } else if filename_lower.ends_with(".dmg") {
+        #[cfg(target_os = "macos")]
+        {
+            let mount_point = format!("/Volumes/{}", def.name);
+            let _ = Command::new("hdiutil")
+                .args(["attach", &filepath.to_string_lossy()])
+                .output();
+            let _ = Command::new("cp")
+                .args(["-R", &format!("{}/{}", mount_point, def.name), &install_dir.to_string_lossy()])
+                .output();
+            let _ = Command::new("hdiutil")
+                .args(["detach", &mount_point])
+                .output();
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            return Err("DMG files are only supported on macOS".to_string());
+        }
+    } else {
+        // 可执行文件直接复制
+        std::fs::copy(&filepath, install_dir.join(&filename))
+            .map_err(|e| format!("Failed to copy file: {}", e))?;
+    }
+
+    // 清理临时文件
+    std::fs::remove_file(&filepath).ok();
+
+    // 创建符号链接到 bin 目录
+    let bin_dir = get_install_base_dir().parent().unwrap().join("bin");
+    std::fs::create_dir_all(&bin_dir)
+        .map_err(|e| format!("Failed to create bin dir: {}", e))?;
+
+    let binary_name = match def.name {
+        "Visual Studio Code" => "code",
+        "Neovim" => "nvim",
+        "Node.js" => "node",
+        "Python 3" => "python3",
+        _ => def.cmd,
+    };
+
+    if let Some(binary_path) = find_binary_in_dir(&install_dir, binary_name) {
+        let symlink_path = bin_dir.join(binary_name);
+        let _ = std::fs::remove_file(&symlink_path);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            if symlink(&binary_path, &symlink_path).is_ok() {
+                let _ = Command::new("chmod")
+                    .args(["+x", &symlink_path.to_string_lossy()])
+                    .output();
+            }
+        }
+        #[cfg(windows)]
+        {
+            let _ = std::fs::copy(&binary_path, &symlink_path);
+        }
+    }
+
+    Ok(format!(
+        "Successfully installed {} v{}",
+        def.name, version
+    ))
 }

@@ -92,7 +92,7 @@ fn list_ports_impl() -> Result<Vec<PortEntry>, String> {
             }
 
             let addr = parts[8];
-            if let Some(port_str) = addr.split(':').last() {
+            if let Some(port_str) = addr.split(':').next_back() {
                 if let Ok(port) = port_str.parse::<u16>() {
                     if !entries.iter().any(|e: &PortEntry| e.port == port && e.pid == pid) {
                         entries.push(PortEntry {
@@ -120,7 +120,7 @@ fn extract_ss_process_name(info: &str) -> Option<String> {
 fn extract_ss_pid(info: &str) -> Option<u32> {
     info.find("pid=").and_then(|start| {
         let rest = &info[start + 4..];
-        rest.find(',').or_else(|| rest.find(')')).map(|end| rest[..end].parse::<u32>().ok()).flatten()
+        rest.find(',').or_else(|| rest.find(')')).and_then(|end| rest[..end].parse::<u32>().ok())
     })
 }
 
