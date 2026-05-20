@@ -89,14 +89,21 @@ fn find_cmd_path(cmd: &str) -> Option<String> {
     None
 }
 
+fn user_home() -> String {
+    if cfg!(target_os = "windows") {
+        std::env::var("USERPROFILE").unwrap_or_default()
+    } else {
+        std::env::var("HOME").unwrap_or_default()
+    }
+}
+
 /// 检测单个环境
 fn detect_environment(name: &str, check_cmd: &str, version_args: &[&str], config_files: &[&str]) -> Option<Environment> {
     if let Some(path) = find_cmd_path(check_cmd) {
         
         let version = get_version(check_cmd, version_args);
         
-        // 展开 ~ 为 HOME 目录
-        let home = std::env::var("HOME").unwrap_or_default();
+        let home = user_home();
         let shell_config = config_files.iter()
             .find(|&file| {
                 let resolved = if file.starts_with("~/") {

@@ -16,6 +16,8 @@
   let error = $state(null);
   let installing = $state(false);
   let currentItem = $state(null);
+  let packageManagers = $state([]);
+  let pmChecking = $state(true);
 
   const categories = [
     { id: "all", label: t("software.all") },
@@ -39,8 +41,22 @@
     }
   }
 
+  // 检测系统是否有可用的包管理器
+  async function checkPackageManagers() {
+    try {
+      pmChecking = true;
+      packageManagers = await invoke("list_package_managers");
+    } catch (err) {
+      console.error("Error checking package managers:", err);
+      packageManagers = [];
+    } finally {
+      pmChecking = false;
+    }
+  }
+
   onMount(() => {
     loadSoftware();
+    checkPackageManagers();
   });
 
   // 处理安装/卸载操作
@@ -67,10 +83,11 @@
         currentItem = null;
       }
     } else if (item.action === "Open") {
-      // 打开已安装的软件（需要实现）
       showToast(`Opening ${item.name}...\n(This feature needs platform-specific implementation)`);
     }
   }
+
+  let hasPackageManager = $derived(packageManagers.length > 0);
 
   let filteredSoftware = $derived(software.filter((s) => {
     if (selectedCategory !== "all" && s.category !== selectedCategory) return false;
@@ -130,6 +147,29 @@
     {#if loading}
       <div class="flex items-center justify-center py-12">
         <span class="material-symbols-outlined animate-spin text-nx-text-muted text-3xl">progress_activity</span>
+      </div>
+    {:else if !hasPackageManager && !pmChecking}
+      <!-- 未检测到包管理器时的引导提示 -->
+      <div class="border border-nx-border bg-nx-surface p-8 text-center">
+        <span class="material-symbols-outlined text-nx-text-muted text-4xl">package_2</span>
+        <h2 class="mt-4 text-lg font-semibold text-nx-text">{_v && t("software.no_pm_title")}</h2>
+        <p class="mt-2 max-w-md mx-auto text-sm text-nx-text-secondary">{_v && t("software.no_pm_desc")}</p>
+        <div class="mt-6 flex flex-wrap justify-center gap-4">
+          {#if packageManagers.length > 0}
+            {#each packageManagers as pm}
+              <span class="px-3 py-1 text-xs bg-nx-text/10 text-nx-text rounded">{pm.name}</span>
+            {/each}
+          {:else}
+            <div class="text-left text-sm text-nx-text-secondary">
+              <p class="font-medium mb-2">{_v && t("software.no_pm_suggest")}</p>
+              <ul class="list-disc list-inside space-y-1">
+                <li><span class="font-medium">macOS:</span> <a href="https://brew.sh" target="_blank" class="text-nx-accent underline">Homebrew</a></li>
+                <li><span class="font-medium">Linux:</span> apt, dnf, pacman, zypper, apk</li>
+                <li><span class="font-medium">Windows:</span> winget (Win 11/10 1809+)，<a href="https://chocolatey.org/install" target="_blank" class="text-nx-accent underline">Chocolatey</a></li>
+              </ul>
+            </div>
+          {/if}
+        </div>
       </div>
     {:else if error}
       <div class="p-6 text-center">

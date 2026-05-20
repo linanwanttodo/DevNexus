@@ -11,10 +11,10 @@
 
   function typeIcon(type) {
     switch (type) {
-      case "success": return "✓";
-      case "error": return "✕";
-      case "warning": return "⚠";
-      default: return "ℹ";
+      case "success": return "check_circle";
+      case "error": return "error";
+      case "warning": return "warning";
+      default: return "info";
     }
   }
 
@@ -48,7 +48,7 @@
         class="text-nx-text/50 hover:text-nx-text transition-colors"
         onclick={() => removeToast(toast.id)}
       >
-        ✕
+        <span class="material-symbols-outlined text-sm">close</span>
       </button>
     </div>
   {/each}

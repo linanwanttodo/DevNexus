@@ -92,6 +92,7 @@
     "country_jp": "日本",
     "active": "当前",
     "test": "测速",
+    "timeout": "超时",
     "use": "使用",
     "refresh": "刷新",
     "npm": "NPM 仓库",
@@ -132,7 +133,12 @@
     "open": "打开",
     "install_confirm": "确认安装 {name}？",
     "no_result": "没有找到软件",
-    "no_package": "包名不可用"
+    "no_package": "包名不可用",
+    "no_pm_title": "未检测到包管理器",
+    "no_pm_desc": "DevNexus 需要一个包管理器来安装和卸载软件。",
+    "no_pm_suggest": "请安装以下推荐的包管理器：",
+    "installed_filter": "仅显示已安装",
+    "updates_filter": "可更新"
   },
   "scheduler": {
     "title": "任务调度",
