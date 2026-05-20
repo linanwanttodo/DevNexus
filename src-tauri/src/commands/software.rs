@@ -12,29 +12,30 @@ pub struct Software {
 }
 
 /// GUI 应用名单：这些程序不支持 --version，执行会直接启动 GUI，跳过版本检测
+/// 注意: code --version 和 docker --version 可正常返回版本信息，不在此列
 const GUI_APPS: &[&str] = &[
-    "postman", "dbeaver", "dbeaver-ce", "mysql-workbench",
-    "code", "docker", "docker-ce",
+    "postman", "dbeaver", "dbeaver-ce", "mysql-workbench", "gparted",
 ];
 
 /// 安全获取软件版本：对 GUI 应用跳过，避免启动它们
-fn safe_get_version(cmd: &str) -> String {
+async fn safe_get_version(cmd: &str) -> String {
     if GUI_APPS.contains(&cmd) {
         return "installed".to_string();
     }
 
-    use std::sync::mpsc;
-    let (tx, rx) = mpsc::channel();
     let cmd_str = cmd.to_string();
-    std::thread::spawn(move || {
-        let result = std::process::Command::new(&cmd_str)
-            .arg("--version")
-            .output();
-        let _ = tx.send(result);
-    });
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        tokio::task::spawn_blocking(move || {
+            std::process::Command::new(&cmd_str)
+                .arg("--version")
+                .output()
+        }),
+    )
+    .await;
 
-    match rx.recv_timeout(std::time::Duration::from_secs(3)) {
-        Ok(Ok(output)) if output.status.success() => {
+    match result {
+        Ok(Ok(Ok(output))) if output.status.success() => {
             let ver = String::from_utf8_lossy(&output.stdout);
             let first_line = ver.lines().next().unwrap_or("unknown");
             if first_line.len() > 60 {
@@ -47,30 +48,7 @@ fn safe_get_version(cmd: &str) -> String {
     }
 }
 
-/// 检测已安装的软件（不执行命令，避免启动 GUI 程序）
-fn detect_software(name: &str, cmd: &str, category: &str, package_name: &str) -> Software {
-    let found = which::which(cmd).is_ok()
-        || check_common_paths(cmd);
 
-    let status = if found { "installed" } else { "available" };
-
-    let version = if found {
-        safe_get_version(cmd)
-    } else {
-        "N/A".to_string()
-    };
-
-    let action = if found { "Open" } else { "Install" };
-
-    Software {
-        name: name.to_string(),
-        category: category.to_string(),
-        version,
-        status: status.to_string(),
-        action: action.to_string(),
-        package_name: Some(package_name.to_string()),
-    }
-}
 
 /// 检查常见安装路径（nvm、snap、/usr/local 等）
 fn check_common_paths(cmd: &str) -> bool {
@@ -131,69 +109,114 @@ fn check_common_paths(cmd: &str) -> bool {
     false
 }
 
+struct SoftwareDef {
+    name: &'static str,
+    cmd: &'static str,
+    category: &'static str,
+    package_name: &'static str,
+}
+
 #[tauri::command]
-pub fn list_software() -> Vec<Software> {
-    let mut list = Vec::new();
+pub async fn list_software() -> Vec<Software> {
+    let defs = build_software_defs();
+    let mut handles = Vec::with_capacity(defs.len());
+
+    for s in &defs {
+        let name = s.name;
+        let cmd = s.cmd;
+        let category = s.category;
+        let pkg = s.package_name;
+        handles.push(tokio::spawn(async move {
+            let found = which::which(cmd).is_ok() || check_common_paths(cmd);
+            let version = if found {
+                safe_get_version(cmd).await
+            } else {
+                "N/A".to_string()
+            };
+            let status = if found { "installed" } else { "available" };
+            let action = if found { "Open" } else { "Install" };
+            Software {
+                name: name.to_string(),
+                category: category.to_string(),
+                version,
+                status: status.to_string(),
+                action: action.to_string(),
+                package_name: Some(pkg.to_string()),
+            }
+        }));
+    }
+
+    let mut list = Vec::with_capacity(defs.len());
+    for h in handles {
+        if let Ok(sw) = h.await {
+            list.push(sw);
+        }
+    }
+    list
+}
+
+fn build_software_defs() -> Vec<SoftwareDef> {
+    let mut defs = Vec::with_capacity(24);
 
     // ============ IDEs & Editors ============
-    list.push(detect_software("Visual Studio Code", "code", "ide", "code"));
-    list.push(detect_software("Neovim", "nvim", "ide", "neovim"));
-    list.push(detect_software("Vim", "vim", "ide", "vim"));
-    list.push(detect_software("Sublime Text", "subl", "ide", "sublime-text"));
-    list.push(detect_software("Zed", "zed", "ide", "zed"));
+    defs.push(SoftwareDef { name: "Visual Studio Code", cmd: "code", category: "ide", package_name: "code" });
+    defs.push(SoftwareDef { name: "Neovim", cmd: "nvim", category: "ide", package_name: "neovim" });
+    defs.push(SoftwareDef { name: "Vim", cmd: "vim", category: "ide", package_name: "vim" });
+    defs.push(SoftwareDef { name: "Sublime Text", cmd: "subl", category: "ide", package_name: "sublime-text" });
+    defs.push(SoftwareDef { name: "Zed", cmd: "zed", category: "ide", package_name: "zed" });
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
-        list.push(detect_software("Postman", "postman", "ide", "postman"));
-        list.push(detect_software("IntelliJ IDEA Community", "idea", "ide", "intellij-idea-community"));
+        defs.push(SoftwareDef { name: "Postman", cmd: "postman", category: "ide", package_name: "postman" });
+        defs.push(SoftwareDef { name: "IntelliJ IDEA Community", cmd: "idea", category: "ide", package_name: "intellij-idea-community" });
     }
 
     // ============ Databases ============
-    list.push(detect_software("DBeaver Community", "dbeaver", "database", "dbeaver-ce"));
-    list.push(detect_software("SQLite", "sqlite3", "database", "sqlite"));
-    list.push(detect_software("PostgreSQL Client", "psql", "database", "postgresql-client"));
-    list.push(detect_software("Redis", "redis-cli", "database", "redis"));
+    defs.push(SoftwareDef { name: "DBeaver Community", cmd: "dbeaver", category: "database", package_name: "dbeaver-ce" });
+    defs.push(SoftwareDef { name: "SQLite", cmd: "sqlite3", category: "database", package_name: "sqlite" });
+    defs.push(SoftwareDef { name: "PostgreSQL Client", cmd: "psql", category: "database", package_name: "postgresql-client" });
+    defs.push(SoftwareDef { name: "Redis", cmd: "redis-cli", category: "database", package_name: "redis" });
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
-        list.push(detect_software("MySQL Workbench", "mysql-workbench", "database", "mysql-workbench"));
-        list.push(detect_software("TablePlus", "tableplus", "database", "tableplus"));
+        defs.push(SoftwareDef { name: "MySQL Workbench", cmd: "mysql-workbench", category: "database", package_name: "mysql-workbench" });
+        defs.push(SoftwareDef { name: "TablePlus", cmd: "tableplus", category: "database", package_name: "tableplus" });
     }
 
     // ============ CLI Tools ============
-    list.push(detect_software("Git", "git", "cli", "git"));
-    list.push(detect_software("curl", "curl", "cli", "curl"));
-    list.push(detect_software("wget", "wget", "cli", "wget"));
-    list.push(detect_software("OpenSSH Client", "ssh", "cli", "openssh-client"));
-    list.push(detect_software("GCC", "gcc", "cli", "gcc"));
-    list.push(detect_software("Clang", "clang", "cli", "clang"));
-    list.push(detect_software("CMake", "cmake", "cli", "cmake"));
-    list.push(detect_software("htop", "htop", "cli", "htop"));
-    list.push(detect_software("tmux", "tmux", "cli", "tmux"));
-    list.push(detect_software("ripgrep", "rg", "cli", "ripgrep"));
-    list.push(detect_software("fd", "fd", "cli", "fd-find"));
-    list.push(detect_software("jq", "jq", "cli", "jq"));
-    list.push(detect_software("fzf", "fzf", "cli", "fzf"));
+    defs.push(SoftwareDef { name: "Git", cmd: "git", category: "cli", package_name: "git" });
+    defs.push(SoftwareDef { name: "curl", cmd: "curl", category: "cli", package_name: "curl" });
+    defs.push(SoftwareDef { name: "wget", cmd: "wget", category: "cli", package_name: "wget" });
+    defs.push(SoftwareDef { name: "OpenSSH Client", cmd: "ssh", category: "cli", package_name: "openssh-client" });
+    defs.push(SoftwareDef { name: "GCC", cmd: "gcc", category: "cli", package_name: "gcc" });
+    defs.push(SoftwareDef { name: "Clang", cmd: "clang", category: "cli", package_name: "clang" });
+    defs.push(SoftwareDef { name: "CMake", cmd: "cmake", category: "cli", package_name: "cmake" });
+    defs.push(SoftwareDef { name: "htop", cmd: "htop", category: "cli", package_name: "htop" });
+    defs.push(SoftwareDef { name: "tmux", cmd: "tmux", category: "cli", package_name: "tmux" });
+    defs.push(SoftwareDef { name: "ripgrep", cmd: "rg", category: "cli", package_name: "ripgrep" });
+    defs.push(SoftwareDef { name: "fd", cmd: "fd", category: "cli", package_name: "fd-find" });
+    defs.push(SoftwareDef { name: "jq", cmd: "jq", category: "cli", package_name: "jq" });
+    defs.push(SoftwareDef { name: "fzf", cmd: "fzf", category: "cli", package_name: "fzf" });
     #[cfg(target_os = "linux")]
     {
-        list.push(detect_software("GParted", "gparted", "cli", "gparted"));
+        defs.push(SoftwareDef { name: "GParted", cmd: "gparted", category: "cli", package_name: "gparted" });
     }
 
     // ============ Runtimes & Package Managers ============
-    list.push(detect_software("Node.js", "node", "runtime", "nodejs"));
-    list.push(detect_software("Python 3", "python3", "runtime", "python3"));
-    list.push(detect_software("Go", "go", "runtime", "golang"));
-    list.push(detect_software("Rust", "rustc", "runtime", "rust"));
-    list.push(detect_software("Ruby", "ruby", "runtime", "ruby"));
-    list.push(detect_software("Java (JDK)", "java", "runtime", "openjdk-17-jdk"));
+    defs.push(SoftwareDef { name: "Node.js", cmd: "node", category: "runtime", package_name: "nodejs" });
+    defs.push(SoftwareDef { name: "Python 3", cmd: "python3", category: "runtime", package_name: "python3" });
+    defs.push(SoftwareDef { name: "Go", cmd: "go", category: "runtime", package_name: "golang" });
+    defs.push(SoftwareDef { name: "Rust", cmd: "rustc", category: "runtime", package_name: "rust" });
+    defs.push(SoftwareDef { name: "Ruby", cmd: "ruby", category: "runtime", package_name: "ruby" });
+    defs.push(SoftwareDef { name: "Java (JDK)", cmd: "java", category: "runtime", package_name: "openjdk-17-jdk" });
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
-        list.push(detect_software("Docker Desktop", "docker", "runtime", "docker-desktop"));
+        defs.push(SoftwareDef { name: "Docker Desktop", cmd: "docker", category: "runtime", package_name: "docker-desktop" });
     }
     #[cfg(target_os = "linux")]
     {
-        list.push(detect_software("Docker Engine", "docker", "runtime", "docker-ce"));
+        defs.push(SoftwareDef { name: "Docker Engine", cmd: "docker", category: "runtime", package_name: "docker-ce" });
     }
 
-    list
+    defs
 }
 
 // ==================== 包管理器检测与包名映射 ====================
@@ -497,6 +520,16 @@ fn run_elevated(binary: &str, args: &[&str]) -> Result<std::process::Output, Str
     cmd.args(args);
     cmd.output()
         .map_err(|e| format!("Failed to execute pkexec: {}", e))
+}
+
+#[cfg(target_os = "windows")]
+fn run_elevated(binary: &str, args: &[&str]) -> Result<std::process::Output, String> {
+    // Windows 包管理器 (winget, choco) 的 needs_sudo 均为 false，
+    // 此函数仅用于编译通过，实际不会被调用。
+    std::process::Command::new(binary)
+        .args(args)
+        .output()
+        .map_err(|e| format!("Failed to execute {}: {}", binary, e))
 }
 
 /// 安装软件（跨平台，多包管理器支持）
