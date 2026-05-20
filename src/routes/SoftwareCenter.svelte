@@ -67,7 +67,7 @@
     }
 
     if (item.action === "Install") {
-      if (!await showConfirm(`Install ${item.name}?`)) return;
+      if (!await showConfirm(t('software.install_confirm', { name: item.name }) || `Install ${item.name}?`)) return;
       
       installing = true;
       currentItem = item;
@@ -78,6 +78,29 @@
         await loadSoftware();
       } catch (err) {
         showToast(`Installation failed: ${err.message || err}`);
+      } finally {
+        installing = false;
+        currentItem = null;
+      }
+    } else if (item.action === "Uninstall") {
+      if (!await showConfirm(t('software.uninstall_confirm', { name: item.name }) || `Uninstall ${item.name}?`)) return;
+
+      const removeData = await showConfirm(t('software.uninstall_data_confirm', { name: item.name }) || `Also remove config and data files for ${item.name}?`);
+
+      installing = true;
+      currentItem = item;
+
+      try {
+        let result;
+        if (removeData) {
+          result = await invoke("uninstall_software_deep", { packageName: item.package_name, appName: item.name });
+        } else {
+          result = await invoke("uninstall_software", { packageName: item.package_name });
+        }
+        showToast(result);
+        await loadSoftware();
+      } catch (err) {
+        showToast(`Uninstall failed: ${err.message || err}`);
       } finally {
         installing = false;
         currentItem = null;
@@ -197,7 +220,7 @@
             </div>
             <span class="px-2 py-0.5 text-xs font-medium
               {item.status === 'installed' ? 'bg-nx-text/15 text-nx-text' : item.status === 'available' ? 'bg-nx-text-secondary/15 text-nx-text-secondary' : 'bg-nx-overlay text-nx-text-muted'}">
-              {item.status === 'installed' ? (_v ? t('software.status_installed') : 'Installed') : item.status === 'available' ? (_v ? t('software.status_available') : 'Available') : (_v ? t('software.status_system') : 'System')}
+              {item.status === 'installed' ? (_v ? t('software.installed') : 'Installed') : item.status === 'available' ? (_v ? t('software.available') : 'Available') : (_v ? t('software.system') : 'System')}
             </span>
           </div>
           <h3 class="mb-1 text-sm font-medium text-nx-text">{item.name}</h3>

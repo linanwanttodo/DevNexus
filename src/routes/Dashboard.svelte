@@ -54,6 +54,7 @@
 
   let stats = $derived([
     { 
+      id: "cpu",
       label: "CPU Cores", 
       tkey: "dashboard.cpu_cores",
       value: systemInfo ? systemInfo.cpu_cores.toString() : "--", 
@@ -63,6 +64,7 @@
       color: "text-nx-text-secondary" 
     },
     { 
+      id: "memory",
       label: "Memory", 
       tkey: "dashboard.memory",
       value: resourceUsage ? `${resourceUsage.memory_percent.toFixed(0)}%` : "--", 
@@ -72,6 +74,7 @@
       color: "text-nx-text-secondary" 
     },
     { 
+      id: "disk",
       label: "Disk", 
       tkey: "dashboard.disk",
       value: resourceUsage ? `${resourceUsage.disk_percent.toFixed(0)}%` : "--", 
@@ -123,11 +126,11 @@
         </div>
         <div class="text-2xl font-semibold text-nx-text">{stat.value}</div>
             <div class="mt-1 text-xs text-nx-text-muted">{stat.subKey ? (_v && t(stat.subKey)) : stat.sub}</div>
-        {#if stat.label === "Memory" && resourceUsage}
+        {#if stat.id === "memory" && resourceUsage}
           <div class="mt-3 h-1.5 bg-nx-border">
             <div class="h-full bg-nx-warning" style="width: {resourceUsage.memory_percent}%"></div>
           </div>
-        {:else if stat.label === "Disk" && resourceUsage}
+        {:else if stat.id === "disk" && resourceUsage}
           <div class="mt-3 h-1.5 bg-nx-border">
             <div class="h-full bg-nx-success" style="width: {resourceUsage.disk_percent}%"></div>
           </div>

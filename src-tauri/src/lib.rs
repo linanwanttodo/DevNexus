@@ -18,6 +18,9 @@ pub fn run() {
         .manage(task_scheduler)
         .manage(password_manager)
         .setup(|app| {
+            // 启动定时调度器后台循环
+            let scheduler = app.state::<commands::scheduler::TaskScheduler>();
+            scheduler.start_background();
             let show = MenuItemBuilder::with_id("show", "Show DevNexus").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
@@ -86,6 +89,9 @@ pub fn run() {
             commands::software::list_package_managers,
             commands::software::install_software,
             commands::software::uninstall_software,
+            commands::software::uninstall_software_deep,
+            commands::software::fetch_software_versions,
+            commands::software::install_software_from_url,
             commands::mirror::list_mirrors,
             commands::mirror::test_mirror_latency,
             commands::mirror::switch_mirror,

@@ -138,7 +138,12 @@
     "no_pm_desc": "DevNexus needs a package manager to install and uninstall software.",
     "no_pm_suggest": "Please install one of the following package managers:",
     "installed_filter": "Installed only",
-    "updates_filter": "Updates available"
+    "updates_filter": "Updates available",
+    "uninstall": "Uninstall",
+    "uninstall_confirm": "Uninstall {name}?",
+    "deep_uninstall": "Deep Uninstall",
+    "uninstall_data_confirm": "Also remove configuration and data files for {name}?",
+    "deep_uninstall_success": "Uninstalled and cleaned up data files"
   },
   "scheduler": {
     "title": "Task Scheduler",

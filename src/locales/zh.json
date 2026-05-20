@@ -138,7 +138,12 @@
     "no_pm_desc": "DevNexus 需要一个包管理器来安装和卸载软件。",
     "no_pm_suggest": "请安装以下推荐的包管理器：",
     "installed_filter": "仅显示已安装",
-    "updates_filter": "可更新"
+    "updates_filter": "可更新",
+    "uninstall": "卸载",
+    "uninstall_confirm": "确认卸载 {name}？",
+    "deep_uninstall": "深度卸载",
+    "uninstall_data_confirm": "是否同时删除 {name} 的配置和缓存数据？",
+    "deep_uninstall_success": "已卸载并清理相关数据"
   },
   "scheduler": {
     "title": "任务调度",

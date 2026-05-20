@@ -106,8 +106,8 @@ fn detect_environment(name: &str, check_cmd: &str, version_args: &[&str], config
         let home = user_home();
         let shell_config = config_files.iter()
             .find(|&file| {
-                let resolved = if file.starts_with("~/") {
-                    format!("{}/{}", home, &file[2..])
+                let resolved = if let Some(stripped) = file.strip_prefix("~/") {
+                    format!("{}/{}", home, stripped)
                 } else {
                     file.to_string()
                 };

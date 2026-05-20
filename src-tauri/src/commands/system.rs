@@ -48,7 +48,9 @@ pub fn get_system_info() -> SystemInfo {
 #[tauri::command]
 pub fn get_resource_usage() -> ResourceUsage {
     let mut sys = System::new_all();
-    sys.refresh_all();
+    // 仅刷新 CPU 和内存数据，避免 refresh_all() 刷新磁盘/网络等不必要信息
+    sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::everything());
+    sys.refresh_memory();
 
     let memory_total_gb = sys.total_memory() as f64 / 1073741824.0;
     let memory_used_gb = sys.used_memory() as f64 / 1073741824.0;

@@ -14,12 +14,12 @@
   let selectedCountry = $state("all");
 
   const countries = [
-    { id: "all", label: t("mirrors.all_countries") },
-    { id: "CN", label: t("mirrors.china") },
-    { id: "RU", label: t("mirrors.russia") },
-    { id: "US", label: t("mirrors.us") },
-    { id: "EU", label: t("mirrors.europe") },
-    { id: "JP", label: t("mirrors.japan") },
+    { id: "all", label: t("mirrors.country_all") },
+    { id: "CN", label: t("mirrors.country_cn") },
+    { id: "RU", label: t("mirrors.country_ru") },
+    { id: "US", label: t("mirrors.country_us") },
+    { id: "EU", label: t("mirrors.country_eu") },
+    { id: "JP", label: t("mirrors.country_jp") },
   ];
 
   async function loadMirrors() {

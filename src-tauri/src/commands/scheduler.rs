@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use chrono::Local;
 use std::process::Command;
+use std::time::Duration;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ScheduledTask {
@@ -72,6 +73,93 @@ impl TaskScheduler {
                 if let Ok(mut t) = self.tasks.lock() {
                     *t = tasks;
                 }
+            }
+        }
+    }
+
+    /// 后台自动调度循环：每 30 秒检查一次所有已启用任务的 cron 表达式，
+    /// 自动执行到期的任务。在 app setup 阶段调用。
+    pub fn start_background(&self) {
+        const CHECK_INTERVAL_SECS: u64 = 30;
+        let tasks_arc = self.tasks.clone();
+
+        tauri::async_runtime::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(CHECK_INTERVAL_SECS));
+            interval.tick().await; // 跳过立即执行
+
+            loop {
+                interval.tick().await;
+                let now = Local::now();
+                let now_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
+                let mut due: Vec<ScheduledTask> = Vec::new();
+
+                // 收集需要执行的任务（尽量缩短持有锁的时间）
+                {
+                    let Ok(tasks) = tasks_arc.lock() else { continue };
+                    for t in tasks.iter() {
+                        if !t.enabled { continue; }
+                        let should_run = match &t.next_run {
+                            Some(nr) => nr.as_str() <= now_str.as_str(),
+                            None => true, // 从未计算过 next_run，尝试计算
+                        };
+                        if should_run {
+                            due.push(t.clone());
+                        }
+                    }
+                }
+
+                for task in &due {
+                    let result = match task.task_type.as_str() {
+                        "shutdown" => execute_shutdown().await,
+                        "email" => {
+                            Ok("Email sending simulated (needs SMTP configuration)".to_string())
+                        }
+                        "script" => {
+                            if let Some(script) = &task.script_content {
+                                execute_script(script).await
+                            } else {
+                                Err("No script content".to_string())
+                            }
+                        }
+                        "command" => {
+                            if let Some(cmd) = &task.command {
+                                execute_command(cmd).await
+                            } else {
+                                Err("No command specified".to_string())
+                            }
+                        }
+                        _ => Err(format!("Unknown task type: {}", task.task_type)),
+                    };
+
+                    // 更新任务状态
+                    {
+                        let Ok(mut tasks) = tasks_arc.lock() else { continue };
+                        if let Some(t) = tasks.iter_mut().find(|t| t.id == task.id) {
+                            t.last_run = Some(
+                                Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                            );
+                            t.run_count += 1;
+                            if result.is_ok() {
+                                let cron_str = &t.cron_expression.clone();
+                                t.next_run = calculate_next_run(cron_str).ok().flatten();
+                            }
+                        }
+                    }
+
+                    Self::save_to_disk(&tasks_arc);
+                }
+            }
+        });
+    }
+
+    fn save_to_disk(tasks_arc: &Arc<Mutex<Vec<ScheduledTask>>>) {
+        let path = Self::data_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(tasks) = tasks_arc.lock() {
+            if let Ok(json) = serde_json::to_string_pretty(&*tasks) {
+                let _ = std::fs::write(&path, json);
             }
         }
     }
