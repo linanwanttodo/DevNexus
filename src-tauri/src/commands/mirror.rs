@@ -3,6 +3,86 @@ use std::time::Instant;
 use std::fs;
 use std::path::PathBuf;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mirror_source_serialization() {
+        let source = MirrorSource {
+            name: "Test Mirror".to_string(),
+            url: "https://example.com".to_string(),
+            country: "CN".to_string(),
+            latency_ms: -1,
+            is_active: false,
+        };
+        let json = serde_json::to_string(&source).unwrap();
+        assert!(json.contains("Test Mirror"));
+        assert!(json.contains("\"latency_ms\":-1"));
+    }
+
+    #[test]
+    fn test_mirror_group_creation() {
+        let mirror = MirrorSource {
+            name: "Official".to_string(),
+            url: "https://registry.npmjs.org".to_string(),
+            country: "US".to_string(),
+            latency_ms: 100,
+            is_active: true,
+        };
+        let group = MirrorGroup {
+            id: "npm".to_string(),
+            label: "NPM Registry".to_string(),
+            icon: "npm".to_string(),
+            current_url: Some("https://registry.npmjs.org".to_string()),
+            mirrors: vec![mirror],
+        };
+        assert_eq!(group.id, "npm");
+        assert_eq!(group.mirrors.len(), 1);
+        assert!(group.mirrors[0].is_active);
+    }
+
+    #[test]
+    fn test_list_mirrors_contains_expected_groups() {
+        let groups = list_mirrors();
+        let ids: Vec<&str> = groups.iter().map(|g| g.id.as_str()).collect();
+        assert!(ids.contains(&"npm"));
+        assert!(ids.contains(&"pypi"));
+        assert!(ids.contains(&"docker"));
+        assert!(ids.contains(&"cargo"));
+        assert!(ids.contains(&"composer"));
+    }
+
+    #[test]
+    fn test_mirror_latency_default_state() {
+        let source = MirrorSource {
+            name: "Unmeasured".to_string(),
+            url: "https://example.com".to_string(),
+            country: "US".to_string(),
+            latency_ms: -1,
+            is_active: false,
+        };
+        assert_eq!(source.latency_ms, -1);
+        assert!(!source.is_active);
+    }
+
+    #[test]
+    fn test_mirror_group_serialization_roundtrip() {
+        let groups = list_mirrors();
+        let json = serde_json::to_string(&groups).unwrap();
+        let deserialized: Vec<MirrorGroup> = serde_json::from_str(&json).unwrap();
+        assert_eq!(groups.len(), deserialized.len());
+        assert_eq!(groups[0].id, deserialized[0].id);
+    }
+
+    #[test]
+    fn test_switch_mirror_unknown_type() {
+        let result = switch_mirror("unknown".to_string(), "https://example.com".to_string());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown mirror type"));
+    }
+}
+
 fn user_home() -> PathBuf {
     if cfg!(target_os = "windows") {
         std::env::var("USERPROFILE")

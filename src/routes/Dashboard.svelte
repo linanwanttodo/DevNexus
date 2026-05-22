@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t, getVersion, onLangChange } from "../lib/i18n.js";
+  import { navigate } from "../lib/stores.js";
 
   let _v = $state(getVersion());
   $effect(() => onLangChange(v => _v = v));
@@ -110,7 +111,7 @@
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-semibold text-nx-text">{_v && t("dashboard.overview")}</h1>
-    <button class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white">
+    <button class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={() => navigate("/environments")}>
       <span class="material-symbols-outlined text-lg">add</span>
       {_v && t("dashboard.new_environment")}
     </button>

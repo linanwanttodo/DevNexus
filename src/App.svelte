@@ -12,6 +12,7 @@
   import TaskScheduler from "./routes/TaskScheduler.svelte";
   import PasswordManager from "./routes/PasswordManager.svelte";
   import CookieExtractor from "./routes/CookieExtractor.svelte";
+  import AppUninstaller from "./routes/AppUninstaller.svelte";
   import Settings from "./routes/Settings.svelte";
 
   let page = $state(getRoute());
@@ -45,6 +46,8 @@
         <PasswordManager />
       {:else if page === "/cookies"}
         <CookieExtractor />
+      {:else if page === "/uninstall"}
+        <AppUninstaller />
       {:else if page === "/settings"}
         <Settings />
       {/if}

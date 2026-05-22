@@ -1,4 +1,5 @@
 mod commands;
+mod residue_scanner;
 
 use tauri::{
     image::Image,
@@ -90,8 +91,12 @@ pub fn run() {
             commands::software::install_software,
             commands::software::uninstall_software,
             commands::software::uninstall_software_deep,
+            commands::software::scan_app_residues,
+            commands::software::clean_specific_residues,
+            commands::software::force_uninstall_software,
             commands::software::fetch_software_versions,
             commands::software::install_software_from_url,
+            commands::software::list_installed_apps,
             commands::mirror::list_mirrors,
             commands::mirror::test_mirror_latency,
             commands::mirror::switch_mirror,
@@ -100,10 +105,18 @@ pub fn run() {
             commands::scheduler::delete_task,
             commands::scheduler::toggle_task,
             commands::scheduler::execute_task,
+            commands::scheduler::get_task_logs,
+            commands::scheduler::clear_task_logs,
+            commands::scheduler::update_task,
             commands::password_manager::add_password,
             commands::password_manager::list_passwords,
             commands::password_manager::get_password,
             commands::password_manager::delete_password,
+            commands::password_manager::is_locked,
+            commands::password_manager::set_master_password,
+            commands::password_manager::unlock,
+            commands::password_manager::lock,
+            commands::password_manager::has_master_password,
             commands::password_manager::update_password,
             commands::password_manager::export_chrome_csv,
             commands::password_manager::import_chrome_csv,

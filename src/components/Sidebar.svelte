@@ -1,4 +1,5 @@
 <script>
+  import BrandIcons from "../icons/BrandIcons.svelte";
   import { getRoute, navigate, onRouteChange } from "../lib/stores.js";
   import { t, getVersion, onLangChange } from "../lib/i18n.js";
 
@@ -19,6 +20,7 @@
       { route: "/scheduler", label: t("nav.scheduler"), icon: "schedule" },
       { route: "/passwords", label: t("nav.passwords"), icon: "key" },
       { route: "/cookies", label: t("nav.cookies"), icon: "cookie" },
+      { route: "/uninstall", label: t("nav.uninstall"), icon: "delete" },
       { route: "/settings", label: t("nav.settings"), icon: "settings" },
     ];
   });
@@ -48,7 +50,11 @@
               : 'text-nx-text-secondary'}"
             onclick={() => handleClick(item.route)}
           >
-            <span class="material-symbols-outlined text-xl">{item.icon}</span>
+            {#if item.route === '/cookies'}
+              <BrandIcons name="cookie" size={20} class="text-xl" />
+            {:else}
+              <span class="material-symbols-outlined text-xl">{item.icon}</span>
+            {/if}
             {item.label}
           </button>
         </li>

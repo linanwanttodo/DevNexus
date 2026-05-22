@@ -16,6 +16,7 @@ pub struct Software {
 
 /// 版本来源：从哪里获取可用版本列表
 #[derive(Clone)]
+#[allow(dead_code)]
 enum VersionSource {
     GitHubReleases { owner: &'static str, repo: &'static str },
     NodeDist,
@@ -23,6 +24,7 @@ enum VersionSource {
 }
 
 /// 获取软件版本来源
+#[allow(dead_code)]
 fn get_version_source(name: &str) -> Option<VersionSource> {
     match name {
         "Visual Studio Code" => Some(VersionSource::GitHubReleases { owner: "microsoft", repo: "vscode" }),
@@ -42,7 +44,7 @@ fn get_download_url(name: &str, version: &str) -> Option<String> {
         "Visual Studio Code" => Some(format!(
             "https://code.visualstudio.com/sha/download?build=stable&os={}",
             if cfg!(target_os = "linux") { "linux-x64" }
-            else if cfg!(target_os = "macos") { { if cfg!(target_arch = "aarch64") { "darwin-arm64" } else { "darwin-x64" } } }
+            else if cfg!(target_os = "macos") { if cfg!(target_arch = "aarch64") { "darwin-arm64" } else { "darwin-x64" } }
             else { "win32-x64" }
         )),
         "Node.js" => {
@@ -58,20 +60,22 @@ fn get_download_url(name: &str, version: &str) -> Option<String> {
             Some(format!("https://go.dev/dl/go{version}.{os}-{arch}.{ext}"))
         }
         "Neovim" => {
-            #[cfg(target_os = "linux")]
-            { Some(format!("https://github.com/neovim/neovim/releases/download/stable/nvim-linux64.tar.gz")) }
-            #[cfg(target_os = "macos")]
-            { Some(format!("https://github.com/neovim/neovim/releases/download/stable/nvim-macos-arm64.tar.gz")) }
-            #[cfg(target_os = "windows")]
-            { Some(format!("https://github.com/neovim/neovim/releases/download/stable/nvim-win64.zip")) }
+            let os = if cfg!(target_os = "linux") {
+                if cfg!(target_arch = "aarch64") { "linux-arm64" } else { "linux64" }
+            } else if cfg!(target_os = "macos") {
+                if cfg!(target_arch = "aarch64") { "macos-arm64" } else { "macos-x86_64" }
+            } else {
+                "win64"
+            };
+            let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
+            Some(format!("https://github.com/neovim/neovim/releases/download/stable/nvim-{os}.{ext}"))
         }
         "Git" => {
-            #[cfg(target_os = "linux")]
-            { Some(format!("https://github.com/git/git/archive/refs/tags/v{version}.tar.gz")) }
-            #[cfg(target_os = "macos")]
-            { Some(format!("https://github.com/git/git/archive/refs/tags/v{version}.tar.gz")) }
-            #[cfg(target_os = "windows")]
-            { Some(format!("https://github.com/git-for-windows/git/releases/download/v{version}.windows.1/Git-{version}-64-bit.exe")) }
+            if cfg!(target_os = "windows") {
+                Some(format!("https://github.com/git-for-windows/git/releases/download/v{version}.windows.1/Git-{version}-64-bit.exe"))
+            } else {
+                Some(format!("https://github.com/git/git/archive/refs/tags/v{version}.tar.gz"))
+            }
         }
         _ => None,
     }
@@ -200,7 +204,7 @@ pub async fn list_software() -> Vec<Software> {
                 "N/A".to_string()
             };
             let status = if found { "installed" } else { "available" };
-            let action = if found { "Open" } else { "Install" };
+            let action = if found { "Uninstall" } else { "Install" };
             let download_url = get_download_url(name, "0.0.0");
             Software {
                 name: name.to_string(),
@@ -389,6 +393,24 @@ fn detect_package_managers() -> Vec<PackageManager> {
                 needs_sudo: true,
                 install_args: &["add"],
                 uninstall_args: &["del"],
+            });
+        }
+        if which::which("snap").is_ok() {
+            managers.push(PackageManager {
+                name: "snap",
+                binary: "snap",
+                needs_sudo: true,
+                install_args: &["install"],
+                uninstall_args: &["remove"],
+            });
+        }
+        if which::which("flatpak").is_ok() {
+            managers.push(PackageManager {
+                name: "flatpak",
+                binary: "flatpak",
+                needs_sudo: false,
+                install_args: &["install", "-y"],
+                uninstall_args: &["uninstall", "-y"],
             });
         }
     }
@@ -979,7 +1001,287 @@ pub async fn uninstall_software(package_name: String) -> Result<String, String> 
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
-// ==================== 版本查询 & 直接下载安装 ====================
+/// 已安装的系统应用（用于应用卸载管理器）
+#[derive(Serialize, Clone)]
+pub struct InstalledApp {
+    pub name: String,
+    pub version: String,
+    pub source: String, // 包管理器名称
+}
+
+/// 获取包管理器的"列出已安装"命令参数
+fn get_pm_list_args(pm_name: &str) -> Option<&'static [&'static str]> {
+    match pm_name {
+        "apt" => Some(&["list", "--installed"]),
+        "dnf" => Some(&["list", "installed"]),
+        "pacman" => Some(&["-Q"]),
+        "zypper" => Some(&["se", "--installed-only"]),
+        "apk" => Some(&["list", "--installed"]),
+        "Homebrew" => Some(&["list", "--formula", "--versions"]),
+        "MacPorts" => Some(&["installed"]),
+        "winget" => Some(&["list", "--accept-source-agreements"]),
+        "chocolatey" => Some(&["list", "--local-only"]),
+        "snap" => Some(&["list"]),
+        "flatpak" => Some(&["list", "--app", "--columns=application,version,branch,origin"]),
+        _ => None,
+    }
+}
+
+/// 解析包管理器列表命令的输出
+fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
+    let mut apps = Vec::new();
+    match pm_name {
+        "apt" => {
+            // apt list --installed 输出: pkgname/stable,now VERSION arch [installed]
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.is_empty() || !line.contains("[installed") {
+                    continue;
+                }
+                let pkg = line.split('/').next().unwrap_or("").trim();
+                if pkg.is_empty() {
+                    continue;
+                }
+                // 提取版本：在 ",now " 之后到第一个空格
+                let version = if let Some(pos) = line.find(",now ") {
+                    let after = &line[pos + 5..];
+                    after.split_whitespace().next().unwrap_or("unknown")
+                } else if let Some(pos) = line.find("now ") {
+                    let after = &line[pos + 4..];
+                    after.split_whitespace().next().unwrap_or("unknown")
+                } else {
+                    "unknown"
+                };
+                apps.push((pkg.to_string(), version.to_string()));
+            }
+        }
+        "pacman" => {
+            // pacman -Q: "pkg VERSION"
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 && !parts[0].starts_with("local/") {
+                    apps.push((parts[0].to_string(), parts[1].to_string()));
+                } else if parts.len() == 2 {
+                    apps.push((parts[0].trim_start_matches("local/").to_string(), parts[1].to_string()));
+                }
+            }
+        }
+        "apk" => {
+            // apk list --installed: "pkgname-version arch {pkgname} ... [installed]"
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.is_empty() || !line.contains("[installed") {
+                    continue;
+                }
+                let first = line.split_whitespace().next().unwrap_or("");
+                // apk 格式: pkgname-version → 从右向左找第一个版本开始的位置
+                let mut split_pos = None;
+                for (i, c) in first.char_indices().rev() {
+                    if c == '-' && i > 0 {
+                        let prev = first.as_bytes()[i - 1];
+                        if prev.is_ascii_digit() || prev == b'.' {
+                            split_pos = Some(i);
+                            break;
+                        }
+                    }
+                }
+                if let Some(pos) = split_pos {
+                    apps.push((first[..pos].to_string(), first[pos + 1..].to_string()));
+                } else {
+                    apps.push((first.to_string(), "installed".to_string()));
+                }
+            }
+        }
+        "dnf" => {
+            // dnf list installed: "pkg.arch VERSION @repo"
+            let mut in_data = false;
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                if line.contains("Installed Packages") || line.contains("Available Packages") {
+                    in_data = line.contains("Installed Packages");
+                    continue;
+                }
+                if !in_data {
+                    continue;
+                }
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 && parts[0].contains('.') {
+                    let pkg = parts[0].rsplit_once('.').map(|(n, _)| n).unwrap_or(parts[0]);
+                    apps.push((pkg.to_string(), parts[1].to_string()));
+                }
+            }
+        }
+        "zypper" => {
+            // zypper se --installed-only: "i | pkg | summary | version | arch | repo"
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.is_empty() || !line.starts_with('i') {
+                    continue;
+                }
+                let parts: Vec<&str> = line.split('|').map(|s| s.trim()).collect();
+                if parts.len() >= 4 && parts[0] == "i" {
+                    apps.push((parts[1].to_string(), parts[3].to_string()));
+                }
+            }
+        }
+        "Homebrew" => {
+            // brew list --formula --versions: "pkg VERSION"
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                let mut parts = line.split_whitespace();
+                if let Some(pkg) = parts.next() {
+                    let ver = parts.collect::<Vec<&str>>().join(" ");
+                    if !ver.is_empty() {
+                        apps.push((pkg.to_string(), ver));
+                    }
+                }
+            }
+        }
+        "MacPorts" => {
+            // port installed: "  pkg @version"
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with("The following ports are currently installed") {
+                    continue;
+                }
+                if let Some(at_pos) = line.find(" @") {
+                    let pkg = line[..at_pos].trim();
+                    let ver = line[at_pos + 2..].split_whitespace().next().unwrap_or("unknown");
+                    if !pkg.is_empty() {
+                        apps.push((pkg.to_string(), ver.to_string()));
+                    }
+                }
+            }
+        }
+        "winget" => {
+            // winget list 输出: 表头后 "Name  Id  Version  Available  Source"
+            let mut found_header = false;
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                if !found_header {
+                    if line.contains("Name") && line.contains("Id") && line.contains("Version") {
+                        found_header = true;
+                    }
+                    continue;
+                }
+                if line.contains("---") || line.contains("──") {
+                    continue;
+                }
+                // 按制表符或多个空格拆分
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    apps.push((parts[0].to_string(), parts[2].to_string()));
+                }
+            }
+        }
+        "chocolatey" => {
+            // choco list --local-only: "pkg VERSION"
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with("Chocolatey") || line.contains("packages installed") {
+                    continue;
+                }
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    apps.push((parts[0].to_string(), parts[1].to_string()));
+                }
+            }
+        }
+        "snap" => {
+            // snap list: "Name  Version  Rev  Tracking  Publisher  Notes"
+            // Skip header line
+            for (i, line) in stdout.lines().enumerate() {
+                if i == 0 { continue; } // skip header
+                let line = line.trim();
+                if line.is_empty() { continue; }
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    apps.push((parts[0].to_string(), parts[1].to_string()));
+                }
+            }
+        }
+        "flatpak" => {
+            // flatpak list --app --columns=application,version,branch,origin
+            // "ApplicationID  Version  Branch  Origin"
+            // Skip header line
+            for (i, line) in stdout.lines().enumerate() {
+                if i == 0 { continue; } // skip header
+                let line = line.trim();
+                if line.is_empty() { continue; }
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    apps.push((parts[0].to_string(), parts[1].to_string()));
+                } else if parts.len() == 1 {
+                    apps.push((parts[0].to_string(), "installed".to_string()));
+                }
+            }
+        }
+        _ => {}
+    }
+    apps
+}
+
+/// 列出系统上所有已安装应用（跨平台，多包管理器支持）
+/// 用于"应用卸载管理器"模块
+#[tauri::command]
+pub async fn list_installed_apps() -> Result<Vec<InstalledApp>, String> {
+    let managers = detect_package_managers();
+    if managers.is_empty() {
+        return Err("未检测到支持的包管理器。请先安装包管理器。".to_string());
+    }
+
+    let mut all_apps: Vec<InstalledApp> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for pm in &managers {
+        let list_args = get_pm_list_args(pm.name);
+        if list_args.is_none() { continue; }
+        let args = list_args.unwrap();
+
+        let output = Command::new(pm.binary)
+            .args(args)
+            .env("LANG", "C")
+            .output()
+            .map_err(|e| format!("Failed to execute {}: {}", pm.binary, e))?;
+
+        if !output.status.success() {
+            continue; // 跳过失败的 PM
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let apps = parse_pm_list_output(pm.name, &stdout);
+
+        for (name, version) in apps {
+            // 去重：相同名称和来源跳过
+            let key = format!("{}:{}", name, pm.name);
+            if seen.insert(key) {
+                all_apps.push(InstalledApp {
+                    name,
+                    version,
+                    source: pm.name.to_string(),
+                });
+            }
+        }
+    }
+
+    // 按名称排序
+    all_apps.sort_by_key(|a| a.name.to_lowercase());
+
+    Ok(all_apps)
+}
 
 /// 从 GitHub Releases API 获取版本列表
 async fn fetch_github_versions(owner: &str, repo: &str) -> Result<Vec<String>, String> {
@@ -1243,7 +1545,7 @@ pub async fn install_software_from_url(package_name: String, version: String) ->
         }
     } else {
         // 可执行文件直接复制
-        std::fs::copy(&filepath, install_dir.join(&filename))
+        std::fs::copy(&filepath, install_dir.join(filename))
             .map_err(|e| format!("Failed to copy file: {}", e))?;
     }
 
@@ -1285,4 +1587,391 @@ pub async fn install_software_from_url(package_name: String, version: String) ->
         "Successfully installed {} v{}",
         def.name, version
     ))
+}
+
+/// 扫描应用残留（预览模式，不执行任何删除）
+#[tauri::command]
+pub fn scan_app_residues(app_name: String, package_name: String) -> Result<crate::residue_scanner::ResidueScan, String> {
+    let scan = crate::residue_scanner::scan_for_residues(&app_name, &package_name);
+    Ok(scan)
+}
+
+/// 强制卸载：杀死进程 → 包管理器强制卸载 → 深度清理残留
+#[tauri::command]
+pub async fn force_uninstall_software(package_name: String, app_name: String) -> Result<String, String> {
+    use crate::residue_scanner::snapshot;
+    use std::time::Duration;
+
+    let mut messages: Vec<String> = Vec::new();
+    let name_lower = app_name.to_lowercase();
+
+    // 1) 杀死相关进程
+    let killed = kill_processes_by_name(&name_lower);
+    if killed > 0 {
+        messages.push(format!("Killed {} process(es)", killed));
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+
+    // 2) 包管理器强制卸载
+    let uninstall_result = uninstall_software(package_name.clone()).await;
+    match &uninstall_result {
+        Ok(msg) => messages.push(msg.clone()),
+        Err(e) => messages.push(format!("Package manager removal: {}", e)),
+    }
+
+    // 3) 获取所有已知的残留路径（含关键词扫描）
+    let scan = crate::residue_scanner::scan_for_residues(&app_name, &package_name);
+
+    // 4) 快照记录
+    let all_paths: Vec<std::path::PathBuf> = scan
+        .directories
+        .iter()
+        .chain(scan.files.iter())
+        .map(|i| std::path::PathBuf::from(&i.path))
+        .collect();
+    let _before = snapshot::take_snapshot(&all_paths);
+
+    // 5) 记录注册表+服务路径 (Windows)
+    #[cfg(target_os = "windows")]
+    let registry_paths: Vec<String> = scan
+        .registry_keys
+        .iter()
+        .map(|r| r.path.clone())
+        .collect();
+
+    // 6) 先删文件，再删目录（递归）
+    let mut cleaned = Vec::new();
+    let mut failed = Vec::new();
+
+    // 删除文件
+    for item in &scan.files {
+        if let Err(e) = std::fs::remove_file(&item.path) {
+            failed.push(format!("{} ({})", item.path, e));
+        } else {
+            cleaned.push(item.path.clone());
+        }
+    }
+
+    // 删除目录
+    for item in &scan.directories {
+        if let Err(e) = std::fs::remove_dir_all(&item.path) {
+            failed.push(format!("{} ({})", item.path, e));
+        } else {
+            cleaned.push(item.path.clone());
+        }
+    }
+
+    // 7) 清理快捷方式
+    for item in &scan.shortcuts {
+        if item.is_safe_to_delete {
+            if let Err(e) = std::fs::remove_file(&item.path) {
+                failed.push(format!("{} ({})", item.path, e));
+            } else {
+                cleaned.push(item.path.clone());
+            }
+        }
+    }
+
+    // 8) 清理服务文件
+    for item in &scan.services {
+        if item.is_safe_to_delete {
+            if let Err(e) = std::fs::remove_file(&item.path) {
+                failed.push(format!("{} ({})", item.path, e));
+            } else {
+                cleaned.push(item.path.clone());
+            }
+        }
+    }
+
+    // 9) 总结
+    let mut result = messages.join("\n");
+    result.push_str(&format!("\n\nCleaned {} items", cleaned.len()));
+    if !failed.is_empty() {
+        result.push_str(&format!("\nFailed to clean {} items", failed.len()));
+        for f in failed.iter().take(10) {
+            result.push_str(&format!("\n  - {}", f));
+        }
+        if failed.len() > 10 {
+            result.push_str(&format!("\n  ... and {} more", failed.len() - 10));
+        }
+    }
+
+    Ok(result)
+}
+
+/// 仅清理指定的残留项目（不执行卸载），用于用户在扫描预览后选择性清理
+#[tauri::command]
+pub fn clean_specific_residues(items: Vec<String>) -> Result<String, String> {
+    let mut cleaned = Vec::new();
+    let mut failed = Vec::new();
+
+    for path in &items {
+        let p = std::path::Path::new(path);
+        if !p.exists() {
+            continue;
+        }
+        if p.is_dir() {
+            if let Err(e) = std::fs::remove_dir_all(p) {
+                failed.push(format!("{} ({})", path, e));
+            } else {
+                cleaned.push(path.clone());
+            }
+        } else {
+            if let Err(e) = std::fs::remove_file(p) {
+                failed.push(format!("{} ({})", path, e));
+            } else {
+                cleaned.push(path.clone());
+            }
+        }
+    }
+
+    let mut result = String::new();
+    if !cleaned.is_empty() {
+        result.push_str(&format!("Cleaned {} item(s)", cleaned.len()));
+    }
+    if !failed.is_empty() {
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        result.push_str(&format!("Failed: {} item(s)", failed.len()));
+        for f in failed.iter().take(10) {
+            result.push_str(&format!("\n  - {}", f));
+        }
+    }
+    if result.is_empty() {
+        result.push_str("No items to clean.");
+    }
+    Ok(result)
+}
+
+/// 按名称关键词杀死匹配的进程（跨平台）
+fn kill_processes_by_name(name_lower: &str) -> usize {
+    use sysinfo::{System, Signal};
+    let mut system = System::new();
+    system.refresh_all();
+
+    let keywords: Vec<String> = name_lower
+        .split(|c: char| c.is_whitespace() || c == '-' || c == '_')
+        .filter(|s| s.len() >= 3)
+        .map(|s| s.to_lowercase())
+        .collect();
+
+    if keywords.is_empty() {
+        return 0;
+    }
+
+    let mut killed = 0;
+    for process in system.processes().values() {
+        let pname = process.name().to_string_lossy().to_lowercase();
+        let exe = process
+            .exe()
+            .and_then(|p| p.file_stem())
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        // 关键词匹配：进程名包含至少一个关键词
+        let matches = keywords.iter().any(|kw| pname.contains(kw) || exe.contains(kw));
+        if !matches {
+            continue;
+        }
+
+        // 跳过自身
+        if let Ok(cur) = std::env::current_exe() {
+            if let Some(cur_name) = cur.file_stem().and_then(|s| s.to_str()) {
+                if pname.contains(&cur_name.to_lowercase()) {
+                    continue;
+                }
+            }
+        }
+
+        #[cfg(unix)]
+        {
+            if process.kill_with(Signal::Term).is_some() || process.kill_with(Signal::Kill).is_some() {
+                killed += 1;
+            }
+        }
+        #[cfg(windows)]
+        {
+            if process.kill() {
+                killed += 1;
+            }
+        }
+    }
+    killed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ============ parse_pm_list_output ============
+
+    #[test]
+    fn test_parse_apt_output() {
+        let output = "Listing...\nfoo/stable,now 1.2.3 amd64 [installed]\nbar/stable 0.5.0 amd64\nbaz/stable,now 3.0.0 all [installed,automatic]\n";
+        let apps = parse_pm_list_output("apt", output);
+        // Now matches both [installed] and [installed,automatic]
+        assert_eq!(apps.len(), 2);
+        assert_eq!(apps[0], ("foo".to_string(), "1.2.3".to_string()));
+        assert_eq!(apps[1], ("baz".to_string(), "3.0.0".to_string()));
+    }
+
+    #[test]
+    fn test_parse_pacman_output() {
+        let output = "foo 1.2.3\nbar 0.5.0\nlocal/baz 3.0.0\n";
+        let apps = parse_pm_list_output("pacman", output);
+        assert_eq!(apps.len(), 3);
+        assert_eq!(apps[0], ("foo".to_string(), "1.2.3".to_string()));
+        assert_eq!(apps[1], ("bar".to_string(), "0.5.0".to_string()));
+        assert_eq!(apps[2], ("baz".to_string(), "3.0.0".to_string()));
+    }
+
+    #[test]
+    fn test_parse_dnf_output() {
+        let output = "\nInstalled Packages\nfoo.x86_64 1.2.3 @repo\nbar.noarch 0.5.0 @other\nAvailable Packages\nbaz.x86_64 4.0.0 @extra\n";
+        let apps = parse_pm_list_output("dnf", output);
+        assert_eq!(apps.len(), 2);
+        assert_eq!(apps[0], ("foo".to_string(), "1.2.3".to_string()));
+        assert_eq!(apps[1], ("bar".to_string(), "0.5.0".to_string()));
+    }
+
+    #[test]
+    fn test_parse_homebrew_output() {
+        let output = "foo 1.2.3\nbar 0.5.0\n";
+        let apps = parse_pm_list_output("Homebrew", output);
+        assert_eq!(apps.len(), 2);
+        assert_eq!(apps[0], ("foo".to_string(), "1.2.3".to_string()));
+        assert_eq!(apps[1], ("bar".to_string(), "0.5.0".to_string()));
+    }
+
+    #[test]
+    fn test_parse_winget_output() {
+        let output = "Name Id Version Available Source\n--- --- --- --- ---\nFoo Foo.Id 1.2.3 winget\nBar Bar.Id 0.5.0 winget\n";
+        let apps = parse_pm_list_output("winget", output);
+        assert_eq!(apps.len(), 2);
+        assert_eq!(apps[0], ("Foo".to_string(), "1.2.3".to_string()));
+        assert_eq!(apps[1], ("Bar".to_string(), "0.5.0".to_string()));
+    }
+
+    #[test]
+    fn test_parse_snap_output() {
+        let output = "Name Version Rev Tracking Publisher Notes\ncore20 2024-01-01 1234 latest/stable canonical✓ -\nfirefox 123.0 5678 latest/stable mozilla✓ -\n";
+        let apps = parse_pm_list_output("snap", output);
+        assert_eq!(apps.len(), 2);
+        assert_eq!(apps[0], ("core20".to_string(), "2024-01-01".to_string()));
+        assert_eq!(apps[1], ("firefox".to_string(), "123.0".to_string()));
+    }
+
+    #[test]
+    fn test_parse_flatpak_output() {
+        let output = "ApplicationID Version Branch Origin\norg.mozilla.firefox 123.0 stable flathub\norg.gimp.GIMP 3.0 stable flathub\n";
+        let apps = parse_pm_list_output("flatpak", output);
+        assert_eq!(apps.len(), 2);
+        assert_eq!(apps[0], ("org.mozilla.firefox".to_string(), "123.0".to_string()));
+        assert_eq!(apps[1], ("org.gimp.GIMP".to_string(), "3.0".to_string()));
+    }
+
+    #[test]
+    fn test_parse_apk_output() {
+        let output = "foo-1.2.3 x86_64 {foo} [instited]\nbar-0.5.0 x86_64 {bar} [installed]\n";
+        let apps = parse_pm_list_output("apk", output);
+        // only [installed] lines are parsed, not [instited]
+        assert_eq!(apps.len(), 1);
+        // "bar-0.5.0" - the parser requires prev char before '-' to be digit/dot
+        // 'r' is not digit, so it falls through to the full-name fallback
+        assert_eq!(apps[0], ("bar-0.5.0".to_string(), "installed".to_string()));
+    }
+
+    #[test]
+    fn test_parse_zypper_output() {
+        // zypper se --installed-only format: i | Name | Summary | Version | Arch | Repository
+        let output = "S | Name | Summary | Type\n--+------+---------+-----\ni | foo | Foo pkg | 1.2.3 | x86_64 | repo\ni | bar | Bar pkg | 0.5.0 | noarch | repo\n";
+        let apps = parse_pm_list_output("zypper", output);
+        assert_eq!(apps.len(), 2);
+        assert_eq!(apps[0], ("foo".to_string(), "1.2.3".to_string()));
+        assert_eq!(apps[1], ("bar".to_string(), "0.5.0".to_string()));
+    }
+
+    #[test]
+    fn test_parse_unknown_pm() {
+        let apps = parse_pm_list_output("unknown-pm", "some output");
+        assert!(apps.is_empty());
+    }
+
+    // ============ map_package_name ============
+
+    #[test]
+    fn test_map_vscode() {
+        assert_eq!(map_package_name("code", "winget"), "Microsoft.VisualStudioCode");
+        assert_eq!(map_package_name("code", "apt"), "code");
+        assert_eq!(map_package_name("code", "brew"), "visual-studio-code");
+    }
+
+    #[test]
+    fn test_map_nodejs() {
+        assert_eq!(map_package_name("nodejs", "apt"), "nodejs");
+        assert_eq!(map_package_name("nodejs", "brew"), "node");
+        assert_eq!(map_package_name("nodejs", "winget"), "OpenJS.NodeJS.LTS");
+    }
+
+    #[test]
+    fn test_map_python() {
+        assert_eq!(map_package_name("python3", "apt"), "python3");
+        assert_eq!(map_package_name("python3", "brew"), "python");
+        assert_eq!(map_package_name("python3", "winget"), "Python.Python.3.12");
+    }
+
+    #[test]
+    fn test_map_golang() {
+        assert_eq!(map_package_name("golang", "apt"), "golang");
+        assert_eq!(map_package_name("golang", "brew"), "go");
+        assert_eq!(map_package_name("golang", "winget"), "GoLang.Go");
+    }
+
+    #[test]
+    fn test_map_git() {
+        assert_eq!(map_package_name("git", "apt"), "git");
+        assert_eq!(map_package_name("git", "brew"), "git");
+        assert_eq!(map_package_name("git", "winget"), "Git.Git");
+    }
+
+    #[test]
+    fn test_map_unknown() {
+        assert_eq!(map_package_name("unknown-pkg", "apt"), "unknown-pkg");
+        assert_eq!(map_package_name("git", "unknown-pm"), "git");
+    }
+
+    // ============ get_pm_list_args ============
+
+    #[test]
+    fn test_get_pm_list_args_all() {
+        assert_eq!(get_pm_list_args("apt"), Some(&["list", "--installed"] as &[&str]));
+        assert_eq!(get_pm_list_args("pacman"), Some(&["-Q"] as &[&str]));
+        assert_eq!(get_pm_list_args("dnf"), Some(&["list", "installed"] as &[&str]));
+        assert_eq!(get_pm_list_args("Homebrew"), Some(&["list", "--formula", "--versions"] as &[&str]));
+        assert_eq!(get_pm_list_args("winget"), Some(&["list", "--accept-source-agreements"] as &[&str]));
+        assert_eq!(get_pm_list_args("snap"), Some(&["list"] as &[&str]));
+        assert_eq!(get_pm_list_args("flatpak"), Some(&["list", "--app", "--columns=application,version,branch,origin"] as &[&str]));
+        assert_eq!(get_pm_list_args("chocolatey"), Some(&["list", "--local-only"] as &[&str]));
+        assert_eq!(get_pm_list_args("unknown"), None);
+    }
+
+    // ============ get_version_source ============
+
+    #[test]
+    fn test_get_version_source_known() {
+        assert!(get_version_source("Node.js").is_some());
+        assert!(get_version_source("Go").is_some());
+        assert!(get_version_source("Visual Studio Code").is_some());
+        assert!(get_version_source("Neovim").is_some());
+        assert!(get_version_source("Python 3").is_some());
+        assert!(get_version_source("Git").is_some());
+        assert!(get_version_source("Rust").is_some());
+    }
+
+    #[test]
+    fn test_get_version_source_unknown() {
+        assert!(get_version_source("NonExistentApp").is_none());
+    }
 }

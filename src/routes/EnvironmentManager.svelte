@@ -11,6 +11,10 @@
   let environments = $state([]);
   let loading = $state(true);
   let error = $state(null);
+  let showCreateModal = $state(false);
+  let newEnvName = $state("");
+  let newEnvPath = $state("");
+  let creating = $state(false);
 
   // 加载环境列表
   async function loadEnvironments() {
@@ -65,6 +69,28 @@
     }
   }
 
+  // 创建环境（将检测到的运行时注册为环境）
+  async function createEnvironment() {
+    if (!newEnvName.trim() || !newEnvPath.trim()) return;
+    creating = true;
+    try {
+      // 尝试将其注册到 PATH
+      const result = await invoke("add_to_path", { 
+        envName: newEnvName.trim(), 
+        path: newEnvPath.trim() 
+      });
+      showToast(result);
+      showCreateModal = false;
+      newEnvName = "";
+      newEnvPath = "";
+      await loadEnvironments();
+    } catch (err) {
+      showToast(`Error: ${err.message || err}`);
+    } finally {
+      creating = false;
+    }
+  }
+
   onMount(() => {
     loadEnvironments();
   });
@@ -74,7 +100,7 @@
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-semibold text-nx-text">{_v && t("environments.title")}</h1>
-    <button class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white">
+    <button class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={() => showCreateModal = true}>
       <span class="material-symbols-outlined text-lg">add</span>
       {_v && t("environments.new")}
     </button>
@@ -165,3 +191,50 @@
     {/if}
   </div>
 </div>
+
+<!-- Create Environment Modal -->
+{#if showCreateModal}
+  <!-- eslint-disable-next-line a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="button" tabindex="-1" onclick={() => showCreateModal = false} onkeydown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') showCreateModal = false; }}>
+    <div class="w-full max-w-md border border-nx-border bg-nx-surface p-6" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
+      <h3 class="text-base font-semibold text-nx-text">{_v && t("environments.title")} - {_v && t("environments.new")}</h3>
+      <div class="mt-4 space-y-4">
+        <div>
+          <label for="envName" class="block text-sm text-nx-text-secondary">{_v && t("environments.name")}</label>
+          <input
+            id="envName"
+            type="text"
+            bind:value={newEnvName}
+            placeholder="e.g. Node.js v20"
+            class="mt-1 w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text outline-none focus:border-nx-accent"
+          />
+        </div>
+        <div>
+          <label for="envPath" class="block text-sm text-nx-text-secondary">{_v && t("environments.path")}</label>
+          <input
+            id="envPath"
+            type="text"
+            bind:value={newEnvPath}
+            placeholder="e.g. /usr/local/bin"
+            class="mt-1 w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text outline-none focus:border-nx-accent"
+          />
+        </div>
+      </div>
+      <div class="mt-6 flex justify-end gap-2">
+        <button
+          class="border border-nx-border px-4 py-2 text-sm text-nx-text-secondary"
+          onclick={() => showCreateModal = false}
+        >
+          {_v && t("common.cancel")}
+        </button>
+        <button
+          class="bg-nx-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          onclick={createEnvironment}
+          disabled={!newEnvName.trim() || !newEnvPath.trim() || creating}
+        >
+          {creating ? "..." : (_v && t("environments.new"))}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
