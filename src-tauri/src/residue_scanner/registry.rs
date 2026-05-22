@@ -40,7 +40,6 @@ pub fn scan_registry(app_name: &str) -> Vec<ResidueItem> {
                 }
             }
         }
-    }
 
     // 也搜索 Services
     if let Ok(key) = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE).open_subkey_with_flags(
@@ -64,7 +63,6 @@ pub fn scan_registry(app_name: &str) -> Vec<ResidueItem> {
                 }
             }
         }
-    }
 
     // 搜索 Uninstall 键下的 DisplayName 匹配 （已安装程序中匹配）
     let uninstall_paths = [
@@ -94,7 +92,6 @@ pub fn scan_registry(app_name: &str) -> Vec<ResidueItem> {
                 }
             }
         }
-    }
 
     results
 }
