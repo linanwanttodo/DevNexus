@@ -5,6 +5,8 @@ use std::path::PathBuf;
 pub fn scan_by_keywords(app_name: &str, home: &str) -> (Vec<ResidueItem>, Vec<ResidueItem>) {
     let keywords = build_keywords(app_name);
     let home_path = std::path::Path::new(home);
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let _ = &home_path;
 
     // 定义要扫描的根目录
     let mut roots: Vec<PathBuf> = Vec::new();

@@ -1,5 +1,4 @@
 use crate::residue_scanner::ResidueItem;
-use std::path::PathBuf;
 
 /// 在 Windows 注册表中扫描应用残留键
 /// 搜索 HKCU\Software, HKLM\SOFTWARE, HKLM\SOFTWARE\WOW6432Node
@@ -22,8 +21,7 @@ pub fn scan_registry(app_name: &str) -> Vec<ResidueItem> {
             subkey,
             winreg::enums::KEY_READ,
         ) {
-            if let Ok(keys) = key.enum_keys() {
-                for k in keys.flatten() {
+            for k in key.enum_keys().flatten() {
                     let k_lower = k.to_lowercase();
                     let k_flat = k_lower.replace([' ', '_', '-'], "");
                     for candidate in &candidates {
@@ -49,8 +47,7 @@ pub fn scan_registry(app_name: &str) -> Vec<ResidueItem> {
         "SYSTEM\\CurrentControlSet\\Services",
         winreg::enums::KEY_READ,
     ) {
-        if let Ok(services) = key.enum_keys() {
-            for svc in services.flatten() {
+        for svc in key.enum_keys().flatten() {
                 let s_lower = svc.to_lowercase();
                 for candidate in &candidates {
                     if s_lower.contains(candidate) {
@@ -78,8 +75,7 @@ pub fn scan_registry(app_name: &str) -> Vec<ResidueItem> {
         if let Ok(key) = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE)
             .open_subkey_with_flags(unsub, winreg::enums::KEY_READ)
         {
-            if let Ok(keys) = key.enum_keys() {
-                for subk in keys.flatten() {
+            for subk in key.enum_keys().flatten() {
                     if let Ok(app_key) = key.open_subkey_with_flags(&subk, winreg::enums::KEY_READ) {
                         if let Ok(display_name) = app_key.get_value::<String, _>("DisplayName") {
                             let dn_lower = display_name.to_lowercase();

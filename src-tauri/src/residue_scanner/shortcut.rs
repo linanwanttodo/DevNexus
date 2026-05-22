@@ -6,6 +6,8 @@ pub fn scan_shortcuts(app_name: &str) -> Vec<ResidueItem> {
     let name_lower = app_name.to_lowercase();
     let keywords: Vec<&str> = name_lower.split(|c: char| c.is_whitespace() || c == '-' || c == '_').collect();
     let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).unwrap_or_default();
+    #[cfg(target_os = "windows")]
+    let _ = &home;
 
     // Linux: ~/.local/share/applications/*.desktop
     #[cfg(target_os = "linux")]
@@ -88,7 +90,7 @@ pub fn scan_shortcuts(app_name: &str) -> Vec<ResidueItem> {
                         let fname = path.file_stem().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
                         if matches_name(&fname, &keywords) {
                             // macOS app 是目录包，计算大小但不标记为自动删除（用户可能想保留）
-                            let size = dir_size(&path);
+                            let size = crate::residue_scanner::dir_size(&path);
                             results.push(ResidueItem {
                                 path: path.display().to_string(),
                                 size,
