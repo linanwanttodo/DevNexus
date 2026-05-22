@@ -132,7 +132,9 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
                 MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/npm/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "Tencent (China)".into(), url: "https://mirrors.cloud.tencent.com/npm/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "Huawei (China)".into(), url: "https://mirrors.huaweicloud.com/repository/npm/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official".into(), url: "https://registry.npmjs.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Europe (Germany)".into(), url: "https://registry.npmjs.eu/".into(), country: "EU".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Australia".into(), url: "https://registry.npmjs.org.au/".into(), country: "AU".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Official (US)".into(), url: "https://registry.npmjs.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
             ],
         },
         MirrorGroup {
@@ -145,7 +147,8 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
                 MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/pypi/simple/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "Tencent (China)".into(), url: "https://mirrors.cloud.tencent.com/pypi/simple/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "Huawei (China)".into(), url: "https://mirrors.huaweicloud.com/repository/pypi/simple/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official".into(), url: "https://pypi.org/simple/".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Official (US)".into(), url: "https://pypi.org/simple/".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Google Cloud (Global)".into(), url: "https://pypi-google-cloud-mirror.example.com/simple".into(), country: "US".into(), latency_ms: -1, is_active: false },
             ],
         },
         MirrorGroup {
@@ -161,7 +164,9 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
                 MirrorSource { name: "Tsinghua (China)".into(), url: "https://docker.mirrors.tuna.tsinghua.edu.cn/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "USTC (China)".into(), url: "https://docker.mirrors.ustc.edu.cn/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "NJU (China)".into(), url: "https://docker.nju.edu.cn/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official".into(), url: "https://registry-1.docker.io".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Google (Global)".into(), url: "https://mirror.gcr.io".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "AWS (Global)".into(), url: "https://public.ecr.aws".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Official (US)".into(), url: "https://registry-1.docker.io".into(), country: "US".into(), latency_ms: -1, is_active: false },
             ],
         },
         MirrorGroup {
@@ -175,7 +180,8 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
                 MirrorSource { name: "RsProxy (China)".into(), url: "https://rsproxy.cn".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "SJTU (China)".into(), url: "https://mirrors.sjtug.sjtu.edu.cn/git/crates.io-index".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/crates.io-index/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official".into(), url: "https://static.rust-lang.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Official (US)".into(), url: "https://static.rust-lang.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "GitHub (Global)".into(), url: "https://github.com/rust-lang/crates.io-index".into(), country: "US".into(), latency_ms: -1, is_active: false },
             ],
         },
         #[cfg(target_os = "macos")]
@@ -187,7 +193,7 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             mirrors: vec![
                 MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/homebrew/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "USTC (China)".into(), url: "https://mirrors.ustc.edu.cn/homebrew/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official".into(), url: "https://github.com/Homebrew/brew".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Official (US)".into(), url: "https://github.com/Homebrew/brew".into(), country: "US".into(), latency_ms: -1, is_active: false },
             ],
         },
         MirrorGroup {
@@ -198,7 +204,7 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             mirrors: vec![
                 MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/composer/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "Tencent (China)".into(), url: "https://mirrors.cloud.tencent.com/composer/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official".into(), url: "https://repo.packagist.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Official (US)".into(), url: "https://repo.packagist.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
             ],
         },
         MirrorGroup {
@@ -211,7 +217,8 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
                 MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/goproxy/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/goproxy/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "USTC (China)".into(), url: "https://mirrors.ustc.edu.cn/goproxy/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official".into(), url: "https://proxy.golang.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Official (US)".into(), url: "https://proxy.golang.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "goproxy.io (Global)".into(), url: "https://goproxy.io".into(), country: "US".into(), latency_ms: -1, is_active: false },
             ],
         },
         MirrorGroup {
@@ -223,7 +230,7 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
                 MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/rubygems/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "USTC (China)".into(), url: "https://mirrors.ustc.edu.cn/rubygems/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/rubygems/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official".into(), url: "https://rubygems.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Official (US)".into(), url: "https://rubygems.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
             ],
         },
         MirrorGroup {
@@ -236,7 +243,8 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
                 MirrorSource { name: "Tencent (China)".into(), url: "https://mirrors.cloud.tencent.com/maven/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/maven/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "Huawei (China)".into(), url: "https://mirrors.huaweicloud.com/repository/maven/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official".into(), url: "https://repo.maven.apache.org/maven2".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Official (US)".into(), url: "https://repo.maven.apache.org/maven2".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Google Cloud (Global)".into(), url: "https://storage-download.googleapis.com/maven-central".into(), country: "US".into(), latency_ms: -1, is_active: false },
             ],
         },
         MirrorGroup {
@@ -248,7 +256,7 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
                 MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/anaconda/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "USTC (China)".into(), url: "https://mirrors.ustc.edu.cn/anaconda/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/anaconda/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official".into(), url: "https://repo.anaconda.com".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Official (US)".into(), url: "https://repo.anaconda.com".into(), country: "US".into(), latency_ms: -1, is_active: false },
             ],
         },
         MirrorGroup {
@@ -259,7 +267,7 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             mirrors: vec![
                 MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/nuget/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/nuget/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official".into(), url: "https://api.nuget.org/v3/index.json".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Official (US)".into(), url: "https://api.nuget.org/v3/index.json".into(), country: "US".into(), latency_ms: -1, is_active: false },
             ],
         },
         MirrorGroup {
@@ -270,7 +278,7 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             mirrors: vec![
                 MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/dart-pub/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
                 MirrorSource { name: "USTC (China)".into(), url: "https://mirrors.ustc.edu.cn/dart-pub/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official".into(), url: "https://pub.dev".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource { name: "Official (US)".into(), url: "https://pub.dev".into(), country: "US".into(), latency_ms: -1, is_active: false },
             ],
         },
     ]
