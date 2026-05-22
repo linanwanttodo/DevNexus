@@ -2,6 +2,7 @@ pub mod fs_scanner;
 pub mod known_paths;
 pub mod shortcut;
 pub mod snapshot;
+pub use snapshot::dir_size;
 
 #[cfg(target_os = "windows")]
 pub mod registry;
@@ -54,7 +55,7 @@ pub fn scan_for_residues(app_name: &str, package_name: &str) -> ResidueScan {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     let services = service::scan_services(app_name);
     #[cfg(target_os = "windows")]
-    let services = Vec::new();
+    let services: Vec<ResidueItem> = Vec::new();
 
     // 5) Windows 注册表扫描
     #[cfg(target_os = "windows")]
@@ -181,31 +182,6 @@ fn category_for_path(p: &std::path::Path) -> String {
     } else {
         "data".into()
     }
-}
-
-/// 递归计算目录大小
-pub fn dir_size(path: &std::path::Path) -> u64 {
-    if path.is_file() {
-        return path.metadata().map(|m| m.len()).unwrap_or(0);
-    }
-    if !path.is_dir() {
-        return 0;
-    }
-    let mut total = 0u64;
-    if let Ok(entries) = std::fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let meta = match entry.metadata() {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-            if meta.is_dir() {
-                total += dir_size(&entry.path());
-            } else {
-                total += meta.len();
-            }
-        }
-    }
-    total
 }
 
 #[cfg(test)]

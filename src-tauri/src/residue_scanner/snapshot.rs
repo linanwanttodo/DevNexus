@@ -75,7 +75,7 @@ pub fn surviving_size(entries: &[SnapshotEntry]) -> u64 {
 }
 
 // 复用 residue_scanner::dir_size
-fn dir_size(path: &std::path::Path) -> u64 {
+pub fn dir_size(path: &std::path::Path) -> u64 {
     if path.is_file() {
         return path.metadata().map(|m| m.len()).unwrap_or(0);
     }

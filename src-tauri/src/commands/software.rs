@@ -706,7 +706,7 @@ match app_name_lower.as_str() {
         #[cfg(windows)]
         {
             if let Ok(appdata) = std::env::var("APPDATA") {
-                paths.push(PathBuf::from(appdata).join("npm"));
+                paths.push(PathBuf::from(appdata.clone()).join("npm"));
                 paths.push(PathBuf::from(appdata).join("npm-cache"));
             }
         }
@@ -728,7 +728,7 @@ match app_name_lower.as_str() {
         #[cfg(windows)]
         {
             if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-                paths.push(PathBuf::from(localappdata).join("pip"));
+                paths.push(PathBuf::from(localappdata.clone()).join("pip"));
                 paths.push(PathBuf::from(localappdata).join("Python"));
             }
         }
@@ -743,7 +743,7 @@ match app_name_lower.as_str() {
         #[cfg(windows)]
         {
             if let Ok(userprofile) = std::env::var("USERPROFILE") {
-                paths.push(PathBuf::from(userprofile).join(".rustup"));
+                paths.push(PathBuf::from(userprofile.clone()).join(".rustup"));
                 paths.push(PathBuf::from(userprofile).join(".cargo"));
             }
         }
@@ -822,7 +822,7 @@ match app_name_lower.as_str() {
         #[cfg(windows)]
         {
             if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-                paths.push(PathBuf::from(localappdata).join("Google/Chrome"));
+                paths.push(PathBuf::from(localappdata.clone()).join("Google/Chrome"));
                 paths.push(PathBuf::from(localappdata).join("Google/Chrome/User Data"));
             }
         }
@@ -886,11 +886,11 @@ match app_name_lower.as_str() {
         #[cfg(windows)]
         {
             if let Ok(appdata) = std::env::var("APPDATA") {
-                paths.push(PathBuf::from(appdata).join(&name_slug));
+                paths.push(PathBuf::from(appdata.clone()).join(&name_slug));
                 paths.push(PathBuf::from(appdata).join(&pkg_lower));
             }
             if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-                paths.push(PathBuf::from(localappdata).join(&name_slug));
+                paths.push(PathBuf::from(localappdata.clone()).join(&name_slug));
                 paths.push(PathBuf::from(localappdata).join(&pkg_lower));
             }
         }
@@ -1633,7 +1633,7 @@ pub async fn force_uninstall_software(package_name: String, app_name: String) ->
 
     // 5) 记录注册表+服务路径 (Windows)
     #[cfg(target_os = "windows")]
-    let registry_paths: Vec<String> = scan
+    let _registry_paths: Vec<String> = scan
         .registry_keys
         .iter()
         .map(|r| r.path.clone())

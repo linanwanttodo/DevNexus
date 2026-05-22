@@ -29,7 +29,7 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             }
             #[cfg(windows)] {
                 if let Ok(a) = std::env::var("APPDATA") {
-                    push!(PathBuf::from(a).join("npm"));
+                    push!(PathBuf::from(a.clone()).join("npm"));
                     push!(PathBuf::from(a).join("npm-cache"));
                 }
             }
@@ -52,10 +52,10 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             }
             #[cfg(windows)] {
                 if let Ok(l) = std::env::var("LOCALAPPDATA") {
-                    push!(PathBuf::from(l).join("pip"));
-                    push!(PathBuf::from(l).join("Python"));
-                    push!(PathBuf::from(l).join("Continuum"));
-                    push!(PathBuf::from(l).join("miniconda3"));
+                    push!(PathBuf::from(l.clone()).join("pip"));
+                    push!(PathBuf::from(l.clone()).join("Python"));
+                    push!(PathBuf::from(l.clone()).join("Continuum"));
+                    push!(PathBuf::from(l.clone()).join("miniconda3"));
                     push!(PathBuf::from(l).join("anaconda3"));
                 }
             }
@@ -68,7 +68,7 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             }
             #[cfg(windows)] {
                 if let Ok(u) = std::env::var("USERPROFILE") {
-                    push!(PathBuf::from(u).join(".rustup"));
+                    push!(PathBuf::from(u.clone()).join(".rustup"));
                     push!(PathBuf::from(u).join(".cargo"));
                 }
             }
@@ -101,7 +101,7 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             }
             #[cfg(windows)] {
                 if let Ok(a) = std::env::var("APPDATA") {
-                    push!(PathBuf::from(a).join("Oracle"));
+                    push!(PathBuf::from(a.clone()).join("Oracle"));
                     push!(PathBuf::from(a).join("Java"));
                 }
             }
@@ -115,7 +115,7 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             }
             #[cfg(windows)] {
                 if let Ok(u) = std::env::var("USERPROFILE") {
-                    push!(PathBuf::from(u).join(".dotnet"));
+                    push!(PathBuf::from(u.clone()).join(".dotnet"));
                     push!(PathBuf::from(u).join(".nuget"));
                 }
             }
@@ -137,7 +137,7 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             }
             #[cfg(windows)] {
                 if let Ok(l) = std::env::var("LOCALAPPDATA") {
-                    push!(PathBuf::from(l).join("Google/Chrome"));
+                    push!(PathBuf::from(l.clone()).join("Google/Chrome"));
                     push!(PathBuf::from(l).join("Google/Chrome/User Data"));
                 }
                 if let Ok(a) = std::env::var("APPDATA") {
@@ -176,7 +176,7 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             }
             #[cfg(windows)] {
                 if let Ok(l) = std::env::var("LOCALAPPDATA") {
-                    push!(PathBuf::from(l).join("Microsoft/Edge"));
+                    push!(PathBuf::from(l.clone()).join("Microsoft/Edge"));
                     push!(PathBuf::from(l).join("Microsoft/Edge/User Data"));
                 }
             }
@@ -257,7 +257,7 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             }
             #[cfg(windows)] {
                 if let Ok(a) = std::env::var("APPDATA") {
-                    push!(PathBuf::from(a).join("Code"));
+                    push!(PathBuf::from(a.clone()).join("Code"));
                     push!(PathBuf::from(a).join("Code - Insiders"));
                 }
                 if let Ok(l) = std::env::var("LOCALAPPDATA") {
@@ -335,7 +335,7 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             }
             #[cfg(windows)] {
                 if let Ok(u) = std::env::var("USERPROFILE") {
-                    push!(PathBuf::from(u).join(".android"));
+                    push!(PathBuf::from(u.clone()).join(".android"));
                     push!(PathBuf::from(u).join("AndroidStudioProjects"));
                 }
             }
@@ -365,7 +365,7 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             }
             #[cfg(windows)] {
                 if let Ok(l) = std::env::var("LOCALAPPDATA") {
-                    push!(PathBuf::from(l).join("nvim"));
+                    push!(PathBuf::from(l.clone()).join("nvim"));
                     push!(PathBuf::from(l).join("nvim-data"));
                 }
             }
@@ -378,7 +378,7 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             }
             #[cfg(windows)] {
                 if let Ok(u) = std::env::var("USERPROFILE") {
-                    push!(PathBuf::from(u).join(".vim"));
+                    push!(PathBuf::from(u.clone()).join(".vim"));
                     push!(PathBuf::from(u).join("vimfiles"));
                 }
             }
@@ -392,7 +392,7 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             }
             #[cfg(windows)] {
                 if let Ok(a) = std::env::var("APPDATA") {
-                    push!(PathBuf::from(a).join(".emacs"));
+                    push!(PathBuf::from(a.clone()).join(".emacs"));
                     push!(PathBuf::from(a).join(".emacs.d"));
                 }
             }
@@ -844,15 +844,15 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
 
             #[cfg(windows)] {
                 if let Ok(a) = std::env::var("APPDATA") {
-                    push!(PathBuf::from(a).join(&slug));
+                    push!(PathBuf::from(a.clone()).join(&slug));
                     push!(PathBuf::from(a).join(&pkg_slug));
                 }
                 if let Ok(l) = std::env::var("LOCALAPPDATA") {
-                    push!(PathBuf::from(l).join(&slug));
+                    push!(PathBuf::from(l.clone()).join(&slug));
                     push!(PathBuf::from(l).join(&pkg_slug));
                 }
                 if let Ok(p) = std::env::var("PROGRAMDATA") {
-                    push!(PathBuf::from(p).join(&slug));
+                    push!(PathBuf::from(p.clone()).join(&slug));
                     push!(PathBuf::from(p).join(&pkg_slug));
                 }
             }
