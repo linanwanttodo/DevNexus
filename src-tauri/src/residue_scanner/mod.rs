@@ -54,9 +54,6 @@ pub fn scan_for_residues(app_name: &str, package_name: &str) -> ResidueScan {
     // 4) 服务扫描
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     let services = service::scan_services(app_name);
-    #[cfg(target_os = "windows")]
-    let services: Vec<ResidueItem> = Vec::new();
-
     // 5) Windows 注册表扫描
     #[cfg(target_os = "windows")]
     let registry_items = registry::scan_registry(app_name);

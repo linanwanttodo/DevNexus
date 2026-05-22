@@ -1746,7 +1746,9 @@ pub fn clean_specific_residues(items: Vec<String>) -> Result<String, String> {
 
 /// 按名称关键词杀死匹配的进程（跨平台）
 fn kill_processes_by_name(name_lower: &str) -> usize {
-    use sysinfo::{System, Signal};
+    use sysinfo::System;
+    #[cfg(unix)]
+    use sysinfo::Signal;
     let mut system = System::new();
     system.refresh_all();
 
