@@ -1,6 +1,63 @@
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_environment_serialization() {
+        let env = Environment {
+            name: "Python".to_string(),
+            version: "Python 3.11.0".to_string(),
+            path: "/usr/local/bin/python3".to_string(),
+            status: "Active".to_string(),
+            shell_config: Some("~/.zshrc".to_string()),
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(json.contains("Python"));
+        assert!(json.contains("\"status\":\"Active\""));
+    }
+
+    #[test]
+    fn test_environment_no_shell_config() {
+        let env = Environment {
+            name: "Go".to_string(),
+            version: "go1.21.0".to_string(),
+            path: "/usr/local/go/bin/go".to_string(),
+            status: "Active".to_string(),
+            shell_config: None,
+        };
+        assert!(env.shell_config.is_none());
+        // serde serializes None as null by default
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(json.contains("\"shell_config\":null"));
+    }
+
+    #[test]
+    fn test_environment_not_found_status() {
+        let env = Environment {
+            name: "Missing".to_string(),
+            version: "not found".to_string(),
+            path: String::new(),
+            status: "Inactive".to_string(),
+            shell_config: None,
+        };
+        assert_eq!(env.version, "not found");
+        assert_eq!(env.status, "Inactive");
+    }
+
+    #[test]
+    fn test_user_home_unix_format() {
+        // Just verify function exists and returns something valid
+        let home = user_home();
+        assert!(!home.is_empty());
+        // Home should be an absolute path on unix
+        #[cfg(unix)]
+        assert!(home.starts_with('/'));
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Environment {
     pub name: String,

@@ -16,10 +16,14 @@ pub struct PasswordEntry {
     pub created_at: String,
 }
 
+type VerifierState = Option<(Vec<u8>, Vec<u8>)>;
+
 pub struct PasswordManager {
     pub entries: Arc<Mutex<Vec<PasswordEntry>>>,
     pub next_id: Arc<Mutex<u32>>,
     encryption_key: [u8; 32], // AES-256 key
+    pub locked: Arc<Mutex<bool>>,
+    password_verifier: Arc<Mutex<VerifierState>>, // (salt, hash) for master password verification
 }
 
 impl PasswordManager {
@@ -29,13 +33,28 @@ impl PasswordManager {
         let entries = Arc::new(Mutex::new(Vec::new()));
         let next_id = Arc::new(Mutex::new(1));
 
-        // 启动时自动加载持久化的条目
+        // 不自动加载条目，等待 unlock
         let mut pm = Self {
             entries: entries.clone(),
             next_id,
             encryption_key: key,
+            locked: Arc::new(Mutex::new(true)),
+            password_verifier: Arc::new(Mutex::new(None)),
         };
-        let _ = pm.load_entries(); // 忽略加载错误（首次运行时文件不存在）
+
+        // 尝试加载已保存的密码验证器
+        let _ = pm.load_verifier();
+        // 如果没有设置主密码，则保持解锁状态用于首次设置
+        let verifier = pm.password_verifier.lock().unwrap();
+        let has_verifier = verifier.is_some();
+        drop(verifier);
+
+        if !has_verifier {
+            // 没有设置主密码时自动解锁（首次使用）
+            *pm.locked.lock().unwrap() = false;
+            let _ = pm.load_entries();
+        }
+
         pm
     }
 
@@ -88,7 +107,7 @@ impl PasswordManager {
     }
 
     /// 从加密文件加载条目
-    fn load_entries(&mut self) -> Result<(), String> {
+    fn load_entries(&self) -> Result<(), String> {
         let path = Self::entries_path();
         if !path.exists() {
             return Ok(()); // 首次运行，无文件
@@ -247,6 +266,136 @@ impl PasswordManager {
         String::from_utf8(plaintext)
             .map_err(|e| format!("UTF-8 error: {}", e))
     }
+
+    /// 主密码验证器文件路径
+    fn verifier_path() -> std::path::PathBuf {
+        let base = Self::data_dir();
+        base.join("master.verifier")
+    }
+
+    /// 保存主密码验证器（salt + hash）
+    fn save_verifier(&self, salt: Vec<u8>, hash: Vec<u8>) -> Result<(), String> {
+        let path = Self::verifier_path();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        // 格式: salt(16 bytes) + hash(32 bytes)
+        let mut data = salt;
+        data.extend_from_slice(&hash);
+        fs::write(&path, data).map_err(|e| format!("Failed to save verifier: {}", e))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+        }
+        Ok(())
+    }
+
+    /// 加载主密码验证器
+    fn load_verifier(&mut self) -> Result<(), String> {
+        let path = Self::verifier_path();
+        if !path.exists() {
+            return Ok(());
+        }
+        let data = fs::read(&path).map_err(|e| format!("Failed to read verifier: {}", e))?;
+        if data.len() != 48 {
+            return Err("Invalid verifier file".to_string());
+        }
+        let salt = data[..16].to_vec();
+        let hash = data[16..48].to_vec();
+        *self.password_verifier.lock().map_err(|e| e.to_string())? = Some((salt, hash));
+        Ok(())
+    }
+
+    /// 检查是否锁定，如果锁定则返回错误
+    fn check_locked(&self) -> Result<(), String> {
+        if *self.locked.lock().map_err(|e| e.to_string())? {
+            Err("Password manager is locked. Please unlock first.".to_string())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// 查询密码管理器是否锁定
+#[tauri::command]
+pub fn is_locked(state: tauri::State<'_, PasswordManager>) -> bool {
+    state.locked.lock().map(|l| *l).unwrap_or(true)
+}
+
+/// 设置主密码（首次使用）
+#[tauri::command]
+pub fn set_master_password(
+    master_password: String,
+    state: tauri::State<'_, PasswordManager>,
+) -> Result<(), String> {
+    // 检查是否已设置主密码
+    let verifier = state.password_verifier.lock().map_err(|e| e.to_string())?;
+    if verifier.is_some() {
+        return Err("Master password already set. Use unlock to access.".to_string());
+    }
+    drop(verifier);
+
+    // 生成 salt 并使用 PBKDF2 哈希密码
+    let salt = generate_salt();
+    use pbkdf2::pbkdf2_hmac;
+    use sha2::Sha256;
+    let mut hash = [0u8; 32];
+    pbkdf2_hmac::<Sha256>(master_password.as_bytes(), &salt, PBKDF2_ITERATIONS, &mut hash);
+
+    state.save_verifier(salt.to_vec(), hash.to_vec())?;
+
+    // 解锁状态
+    *state.locked.lock().map_err(|e| e.to_string())? = false;
+    // 加载已保存的条目
+    let _ = state.load_entries();
+
+    Ok(())
+}
+
+/// 用主密码解锁密码管理器
+#[tauri::command]
+pub fn unlock(
+    master_password: String,
+    state: tauri::State<'_, PasswordManager>,
+) -> Result<bool, String> {
+    let verifier = state.password_verifier.lock().map_err(|e| e.to_string())?;
+    let (salt, stored_hash) = verifier.as_ref()
+        .ok_or_else(|| "No master password set. Please set one first.".to_string())?;
+    let salt = salt.clone();
+    let stored_hash = stored_hash.clone();
+    drop(verifier);
+
+    // 验证密码
+    use pbkdf2::pbkdf2_hmac;
+    use sha2::Sha256;
+    let mut hash = [0u8; 32];
+    pbkdf2_hmac::<Sha256>(master_password.as_bytes(), &salt, PBKDF2_ITERATIONS, &mut hash);
+
+    if hash.as_slice() != stored_hash.as_slice() {
+        return Ok(false);
+    }
+
+    // 解锁并加载条目
+    *state.locked.lock().map_err(|e| e.to_string())? = false;
+    let _ = state.load_entries();
+
+    Ok(true)
+}
+
+/// 锁定密码管理器
+#[tauri::command]
+pub fn lock(state: tauri::State<'_, PasswordManager>) -> Result<(), String> {
+    // 清空内存中的条目
+    state.entries.lock().map_err(|e| e.to_string())?.clear();
+    *state.locked.lock().map_err(|e| e.to_string())? = true;
+    Ok(())
+}
+
+/// 是否已设置主密码
+#[tauri::command]
+pub fn has_master_password(state: tauri::State<'_, PasswordManager>) -> bool {
+    state.password_verifier.lock().map(|v| v.is_some()).unwrap_or(false)
 }
 
 /// 添加密码条目
@@ -259,6 +408,7 @@ pub fn add_password(
     notes: Option<String>,
     state: tauri::State<'_, PasswordManager>,
 ) -> Result<u32, String> {
+    state.check_locked()?;
     let encrypted = state.encrypt(&password)?;
     
     let mut next_id = state.next_id.lock().map_err(|e| e.to_string())?;
@@ -289,6 +439,9 @@ pub fn add_password(
 /// 获取所有密码条目（不返回解密后的密码）
 #[tauri::command]
 pub fn list_passwords(state: tauri::State<'_, PasswordManager>) -> Vec<PasswordEntry> {
+    if state.check_locked().is_err() {
+        return Vec::new();
+    }
     state.entries.lock()
         .map(|entries| entries.clone())
         .unwrap_or_else(|_| Vec::new())
@@ -297,6 +450,7 @@ pub fn list_passwords(state: tauri::State<'_, PasswordManager>) -> Vec<PasswordE
 /// 获取解密后的密码
 #[tauri::command]
 pub fn get_password(id: u32, state: tauri::State<'_, PasswordManager>) -> Result<String, String> {
+    state.check_locked()?;
     let entries = state.entries.lock().map_err(|e| e.to_string())?;
     let entry = entries.iter().find(|e| e.id == id)
         .ok_or_else(|| "Password entry not found".to_string())?;
@@ -307,6 +461,7 @@ pub fn get_password(id: u32, state: tauri::State<'_, PasswordManager>) -> Result
 /// 删除密码条目
 #[tauri::command]
 pub fn delete_password(id: u32, state: tauri::State<'_, PasswordManager>) -> Result<(), String> {
+    state.check_locked()?;
     let mut entries = state.entries.lock().map_err(|e| e.to_string())?;
     entries.retain(|e| e.id != id);
     drop(entries);
@@ -325,6 +480,7 @@ pub fn update_password(
     notes: Option<String>,
     state: tauri::State<'_, PasswordManager>,
 ) -> Result<(), String> {
+    state.check_locked()?;
     let mut entries = state.entries.lock().map_err(|e| e.to_string())?;
     
     if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
@@ -349,6 +505,7 @@ pub fn update_password(
 /// 导出为 Chrome CSV 格式
 #[tauri::command]
 pub fn export_chrome_csv(state: tauri::State<'_, PasswordManager>) -> Result<String, String> {
+    state.check_locked()?;
     let entries = state.entries.lock().map_err(|e| e.to_string())?;
     
     let mut csv_content = String::from("name,url,username,password\n");
@@ -376,6 +533,7 @@ pub fn import_chrome_csv(
     csv_content: String,
     state: tauri::State<'_, PasswordManager>,
 ) -> Result<String, String> {
+    state.check_locked()?;
     let mut count = 0;
     let mut errors = 0;
     let mut reader = csv::ReaderBuilder::new()
@@ -523,6 +681,69 @@ fn escape_csv(field: &str) -> String {
         format!("\"{}\"", escaped)
     } else {
         escaped
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_salt_length() {
+        let salt = generate_salt();
+        assert_eq!(salt.len(), 16);
+        // 两次调用应该产生不同的 salt
+        let salt2 = generate_salt();
+        assert_ne!(salt, salt2);
+    }
+
+    #[test]
+    fn test_derive_key_deterministic() {
+        let salt = b"0123456789abcdef";
+        let key1 = derive_key("my_password", salt);
+        let key2 = derive_key("my_password", salt);
+        assert_eq!(key1, key2);
+        assert_eq!(key1.len(), 32);
+    }
+
+    #[test]
+    fn test_derive_key_different_passwords() {
+        let salt = b"0123456789abcdef";
+        let key1 = derive_key("password1", salt);
+        let key2 = derive_key("password2", salt);
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_derive_key_different_salts() {
+        let key1 = derive_key("password", b"1111111111111111");
+        let key2 = derive_key("password", b"2222222222222222");
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_escape_csv_no_special() {
+        assert_eq!(escape_csv("hello"), "hello");
+    }
+
+    #[test]
+    fn test_escape_csv_with_comma() {
+        assert_eq!(escape_csv("hello,world"), "\"hello,world\"");
+    }
+
+    #[test]
+    fn test_escape_csv_with_quotes() {
+        assert_eq!(escape_csv("say \"hi\""), "\"say \"\"hi\"\"\"");
+    }
+
+    #[test]
+    fn test_escape_csv_with_newline() {
+        assert_eq!(escape_csv("line1\nline2"), "\"line1\nline2\"");
+    }
+
+    #[test]
+    fn test_escape_csv_empty() {
+        assert_eq!(escape_csv(""), "");
     }
 }
 

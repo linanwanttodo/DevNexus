@@ -8,6 +8,11 @@ import { invoke } from "@tauri-apps/api/core";
   let _v = $state(getVersion());
   $effect(() => onLangChange(v => _v = v));
 
+  let locked = $state(true);
+  let hasMasterPassword = $state(false);
+  let masterPassword = $state("");
+  let setupPassword = $state("");
+  let setupPasswordConfirm = $state("");
   let passwords = $state([]);
   let loading = $state(true);
   let showAddModal = $state(false);
@@ -19,6 +24,69 @@ import { invoke } from "@tauri-apps/api/core";
   let password = $state("");
   let url = $state("");
   let notes = $state("");
+
+  async function checkState() {
+    try {
+      const lockedState = await invoke("is_locked");
+      const hasPwd = await invoke("has_master_password");
+      locked = lockedState;
+      hasMasterPassword = hasPwd;
+    } catch (err) {
+      console.error("Failed to check password manager state:", err);
+    }
+  }
+
+  async function setupMasterPassword() {
+    if (!setupPassword || setupPassword.length < 4) {
+      showToast("Master password must be at least 4 characters");
+      return;
+    }
+    if (setupPassword !== setupPasswordConfirm) {
+      showToast("Passwords do not match");
+      return;
+    }
+
+    try {
+      await invoke("set_master_password", { masterPassword: setupPassword });
+      locked = false;
+      hasMasterPassword = true;
+      setupPassword = "";
+      setupPasswordConfirm = "";
+      await loadPasswords();
+      showToast("Master password set successfully");
+    } catch (err) {
+      showToast("Failed to set master password: " + (err.message || err));
+    }
+  }
+
+  async function unlock() {
+    if (!masterPassword) return;
+
+    try {
+      const success = await invoke("unlock", { masterPassword });
+      if (success) {
+        locked = false;
+        masterPassword = "";
+        await loadPasswords();
+        showToast("Password manager unlocked");
+      } else {
+        showToast("Incorrect master password");
+      }
+    } catch (err) {
+      showToast("Failed to unlock: " + (err.message || err));
+    }
+  }
+
+  async function lockVault() {
+    try {
+      await invoke("lock");
+      locked = true;
+      passwords = [];
+      showToast("Password manager locked");
+    } catch (err) {
+      console.error("Failed to lock:", err);
+    }
+  }
 
   async function loadPasswords() {
     try {
@@ -164,8 +232,13 @@ import { invoke } from "@tauri-apps/api/core";
     });
   }
 
-  onMount(() => {
-    loadPasswords();
+  onMount(async () => {
+    await checkState();
+    if (!locked) {
+      await loadPasswords();
+    } else {
+      loading = false;
+    }
   });
 </script>
 
@@ -177,34 +250,96 @@ import { invoke } from "@tauri-apps/api/core";
       <p class="mt-1 text-xs text-nx-text-muted">{t('passwords.desc')}</p>
     </div>
     <div class="flex gap-2">
-      <button 
-        class="flex items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text"
-        onclick={exportCSV}>
-        <span class="material-symbols-outlined text-lg">download</span>
-        {t('passwords.export_csv')}
-      </button>
-      <label class="flex cursor-pointer items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text">
-        <span class="material-symbols-outlined text-lg">upload</span>
-        {t('passwords.import_csv')}
-        <input type="file" accept=".csv" class="hidden" onchange={importCSV} />
-      </label>
-      <button 
-        class="flex items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text"
-        onclick={saveToFile}>
-        <span class="material-symbols-outlined text-lg">save</span>
-        {t('passwords.save_encrypted')}
-      </button>
-      <button 
-        class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white"
-        onclick={() => showAddModal = true}>
-        <span class="material-symbols-outlined text-lg">add</span>
-        {t('passwords.add')}
-      </button>
+      {#if locked}
+        <span></span>
+      {:else}
+        <button 
+          class="flex items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text"
+          onclick={exportCSV}>
+          <span class="material-symbols-outlined text-lg">download</span>
+          {t('passwords.export_csv')}
+        </button>
+        <label class="flex cursor-pointer items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text">
+          <span class="material-symbols-outlined text-lg">upload</span>
+          {t('passwords.import_csv')}
+          <input type="file" accept=".csv" class="hidden" onchange={importCSV} />
+        </label>
+        <button 
+          class="flex items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text"
+          onclick={saveToFile}>
+          <span class="material-symbols-outlined text-lg">save</span>
+          {t('passwords.save_encrypted')}
+        </button>
+        <button 
+          class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white"
+          onclick={() => showAddModal = true}>
+          <span class="material-symbols-outlined text-lg">add</span>
+          {t('passwords.add')}
+        </button>
+        <button 
+          class="flex items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text-secondary"
+          onclick={lockVault}>
+          <span class="material-symbols-outlined text-lg">lock</span>
+          {t('passwords.lock')}
+        </button>
+      {/if}
     </div>
   </div>
 
-  <!-- Password List -->
-  {#if loading}
+  <!-- Lock/Setup Screen -->
+  {#if locked}
+    {#if hasMasterPassword}
+      <!-- Unlock -->
+      <div class="mx-auto mt-16 max-w-md border border-nx-border bg-nx-surface p-8 text-center">
+        <div class="mb-4">
+          <span class="material-symbols-outlined text-nx-text-secondary text-5xl">lock</span>
+        </div>
+        <h2 class="mb-2 text-lg font-semibold text-nx-text">{t('passwords.title_locked')}</h2>
+        <p class="mb-6 text-sm text-nx-text-muted">{t('passwords.desc_locked')}</p>
+        <input
+          type="password"
+          bind:value={masterPassword}
+          placeholder={t('passwords.master_password_placeholder')}
+          class="mb-4 w-full border border-nx-border bg-nx-bg px-4 py-3 text-sm text-nx-text outline-none focus:border-nx-text-secondary"
+          onkeydown={(e) => e.key === 'Enter' && unlock()}
+        />
+        <button
+          class="w-full bg-nx-text px-4 py-3 text-sm font-medium text-nx-deep disabled:opacity-50"
+          onclick={unlock}
+          disabled={!masterPassword}>
+          {t('passwords.unlock')}
+        </button>
+      </div>
+    {:else}
+      <!-- Setup Master Password -->
+      <div class="mx-auto mt-16 max-w-md border border-nx-border bg-nx-surface p-8 text-center">
+        <div class="mb-4">
+          <span class="material-symbols-outlined text-nx-text-secondary text-5xl">lock_reset</span>
+        </div>
+        <h2 class="mb-2 text-lg font-semibold text-nx-text">{t('passwords.title_setup')}</h2>
+        <p class="mb-6 text-sm text-nx-text-muted">{t('passwords.desc_setup')}</p>
+        <input
+          type="password"
+          bind:value={setupPassword}
+          placeholder={t('passwords.setup_password_placeholder')}
+          class="mb-3 w-full border border-nx-border bg-nx-bg px-4 py-3 text-sm text-nx-text outline-none focus:border-nx-text-secondary"
+        />
+        <input
+          type="password"
+          bind:value={setupPasswordConfirm}
+          placeholder={t('passwords.setup_password_confirm_placeholder')}
+          class="mb-4 w-full border border-nx-border bg-nx-bg px-4 py-3 text-sm text-nx-text outline-none focus:border-nx-text-secondary"
+          onkeydown={(e) => e.key === 'Enter' && setupMasterPassword()}
+        />
+        <button
+          class="w-full bg-nx-text px-4 py-3 text-sm font-medium text-nx-deep disabled:opacity-50"
+          onclick={setupMasterPassword}
+          disabled={!setupPassword || !setupPasswordConfirm}>
+          {t('passwords.setup')}
+        </button>
+      </div>
+    {/if}
+  {:else if loading}
     <div class="flex items-center justify-center py-12">
       <span class="material-symbols-outlined animate-spin text-nx-text-muted text-3xl">progress_activity</span>
     </div>
@@ -276,14 +411,15 @@ import { invoke } from "@tauri-apps/api/core";
 
 <!-- Add Password Modal -->
 {#if showAddModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onclick={() => showAddModal = false}>
-    <div class="w-full max-w-lg border border-nx-border bg-nx-surface p-6" onclick={(e) => e.stopPropagation()}>
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showAddModal = false)} onclick={() => showAddModal = false}>
+    <div class="w-full max-w-lg border border-nx-border bg-nx-surface p-6" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
       <h2 class="mb-4 text-lg font-semibold text-nx-text">{t('passwords.add')}</h2>
       
       <div class="space-y-4">
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted">{t('passwords.name')} *</label>
+          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-name-add">{t('passwords.name')} *</label>
           <input
+            id="pm-name-add"
             type="text"
             bind:value={entryName}
             placeholder="GitHub Account"
@@ -292,8 +428,9 @@ import { invoke } from "@tauri-apps/api/core";
         </div>
 
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted">{t('passwords.username')} *</label>
+          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-username-add">{t('passwords.username')} *</label>
           <input
+            id="pm-username-add"
             type="text"
             bind:value={username}
             placeholder="user@example.com"
@@ -302,8 +439,9 @@ import { invoke } from "@tauri-apps/api/core";
         </div>
 
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted">{t('passwords.password')} *</label>
+          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-password-add">{t('passwords.password')} *</label>
           <input
+            id="pm-password-add"
             type="password"
             bind:value={password}
             placeholder="••••••••"
@@ -312,8 +450,9 @@ import { invoke } from "@tauri-apps/api/core";
         </div>
 
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted">URL</label>
+          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-url-add">URL</label>
           <input
+            id="pm-url-add"
             type="url"
             bind:value={url}
             placeholder="https://github.com"
@@ -322,8 +461,9 @@ import { invoke } from "@tauri-apps/api/core";
         </div>
 
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted">{t('passwords.notes')}</label>
+          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-notes-add">{t('passwords.notes')}</label>
           <textarea
+            id="pm-notes-add"
             bind:value={notes}
             placeholder="Additional information..."
             rows="3"
@@ -349,8 +489,8 @@ import { invoke } from "@tauri-apps/api/core";
 
 <!-- View Password Modal -->
 {#if showPassword}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onclick={() => showPassword = null}>
-    <div class="w-full max-w-md border border-nx-border bg-nx-surface p-6" onclick={(e) => e.stopPropagation()}>
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showPassword = null)} onclick={() => showPassword = null}>
+    <div class="w-full max-w-md border border-nx-border bg-nx-surface p-6" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
       <h2 class="mb-4 text-lg font-semibold text-nx-text">{t('passwords.details')}</h2>
       
       <div class="border border-nx-border bg-nx-bg p-4">

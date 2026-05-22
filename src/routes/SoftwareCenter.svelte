@@ -3,7 +3,8 @@
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.js";
   import { showConfirm } from "../lib/confirm.js";
-  import { t, getVersion, onLangChange } from "../lib/i18n.js";
+  import { t, tFormat, getVersion, onLangChange } from "../lib/i18n.js";
+  import BrandIcons from "../icons/BrandIcons.svelte";
 
   let _v = $state(getVersion());
   $effect(() => onLangChange(v => _v = v));
@@ -26,6 +27,48 @@
     { id: "cli", label: t("software.cli") },
     { id: "runtime", label: t("software.runtime") },
   ];
+
+  function brandIconName(sw) {
+    const map = {
+      'Visual Studio Code':'vscode',
+      'Neovim':'neovim',
+      'Vim':'vim',
+      'Node.js':'nodejs',
+      'Python 3':'python',
+      'Go':'go',
+      'Rust':'rust',
+      'Git':'git',
+      'Docker Desktop':'docker',
+      'Docker Engine':'docker',
+      'Redis':'redis',
+      'SQLite':'sqlite',
+      'DBeaver Community':'dbeaver',
+      'PostgreSQL Client':'postgresql',
+      'Java (JDK)':'java',
+      'Ruby':'ruby',
+      'curl':'default',
+      'wget':'default',
+      'OpenSSH Client':'default',
+      'GCC':'default',
+      'Clang':'default',
+      'CMake':'default',
+      'htop':'default',
+      'tmux':'default',
+      'ripgrep':'default',
+      'fd':'default',
+      'jq':'default',
+      'fzf':'default',
+      'GParted':'default',
+      'Sublime Text':'default',
+      'Zed':'default',
+      'Postman':'default',
+      'IntelliJ IDEA Community':'default',
+      'MySQL Workbench':'default',
+      'TablePlus':'default',
+      'Homebrew':'default'
+    };
+    return map[sw] || 'default';
+  }
 
   // 加载软件列表
   async function loadSoftware() {
@@ -67,7 +110,7 @@
     }
 
     if (item.action === "Install") {
-      if (!await showConfirm(t('software.install_confirm', { name: item.name }) || `Install ${item.name}?`)) return;
+      if (!await showConfirm(tFormat('software.install_confirm', { name: item.name }) || `Install ${item.name}?`)) return;
       
       installing = true;
       currentItem = item;
@@ -83,9 +126,9 @@
         currentItem = null;
       }
     } else if (item.action === "Uninstall") {
-      if (!await showConfirm(t('software.uninstall_confirm', { name: item.name }) || `Uninstall ${item.name}?`)) return;
+      if (!await showConfirm(tFormat('software.uninstall_confirm', { name: item.name }) || `Uninstall ${item.name}?`)) return;
 
-      const removeData = await showConfirm(t('software.uninstall_data_confirm', { name: item.name }) || `Also remove config and data files for ${item.name}?`);
+      const removeData = await showConfirm(tFormat('software.uninstall_data_confirm', { name: item.name }) || `Also remove config and data files for ${item.name}?`);
 
       installing = true;
       currentItem = item;
@@ -216,7 +259,7 @@
         <div class="border border-nx-border bg-nx-surface p-4">
           <div class="mb-3 flex items-start justify-between">
             <div class="flex h-10 w-10 items-center justify-center bg-nx-bg">
-              <span class="material-symbols-outlined text-nx-text-secondary">package</span>
+              <BrandIcons name={brandIconName(item.name)} size={22} class="text-nx-text-secondary" />
             </div>
             <span class="px-2 py-0.5 text-xs font-medium
               {item.status === 'installed' ? 'bg-nx-text/15 text-nx-text' : item.status === 'available' ? 'bg-nx-text-secondary/15 text-nx-text-secondary' : 'bg-nx-overlay text-nx-text-muted'}">

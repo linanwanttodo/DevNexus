@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.js";
   import { showConfirm } from "../lib/confirm.js";
+  import BrandIcons from "../icons/BrandIcons.svelte";
   import { t, getVersion, onLangChange } from "../lib/i18n.js";
 
   let _v = $state(getVersion());
@@ -32,6 +33,13 @@
       showToast(t('cookies.select_browser_first'));
       return;
     }
+
+    // 安全警告：用户必须确认了解风险后才可提取
+    const confirmed = await showConfirm(
+      t('cookies.security_warning').replace('{browser}', selectedBrowser),
+      t('cookies.security_warning_title')
+    );
+    if (!confirmed) return;
 
     extracting = true;
     try {
@@ -141,9 +149,7 @@
             : 'border-nx-border bg-nx-bg'}"
           onclick={() => selectedBrowser = browser.name}>
           <div class="flex items-center gap-3">
-            <span class="material-symbols-outlined text-2xl {selectedBrowser === browser.name ? 'text-nx-accent' : 'text-nx-text-secondary'}">
-              {browser.name === 'Chrome' ? 'chrome' : browser.name === 'Firefox' ? 'firefox' : 'edge'}
-            </span>
+            <BrandIcons name={browser.name.toLowerCase()} size={28} class={'text-2xl ' + (selectedBrowser === browser.name ? 'text-nx-accent' : 'text-nx-text-secondary')} />
             <div>
               <div class="text-sm font-medium text-nx-text">{browser.name}</div>
               <div class="text-xs text-nx-text-muted">{browser.cookie_count} {t('cookies.cookies_label')}</div>

@@ -1,6 +1,77 @@
 use serde::Serialize;
 use sysinfo::System;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_system_info_serialization() {
+        let info = SystemInfo {
+            os_name: "TestOS".to_string(),
+            os_version: "1.0".to_string(),
+            kernel_version: "6.0".to_string(),
+            cpu_model: "Test CPU".to_string(),
+            cpu_cores: 4,
+            total_memory_gb: 16.0,
+            total_disk_gb: 512.0,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("TestOS"));
+        assert!(json.contains("\"cpu_cores\":4"));
+        assert!(json.contains("\"total_memory_gb\":16.0"));
+    }
+
+    #[test]
+    fn test_resource_usage_serialization() {
+        let usage = ResourceUsage {
+            cpu_usage: 45.5,
+            memory_used_gb: 8.0,
+            memory_total_gb: 16.0,
+            memory_percent: 50.0,
+            disk_used_gb: 200.0,
+            disk_total_gb: 512.0,
+            disk_percent: 39.0,
+            uptime_secs: 3600,
+        };
+        let json = serde_json::to_string(&usage).unwrap();
+        assert!(json.contains("\"cpu_usage\":45.5"));
+        assert!(json.contains("\"uptime_secs\":3600"));
+    }
+
+    #[test]
+    fn test_system_info_default_fields() {
+        let info = SystemInfo {
+            os_name: String::new(),
+            os_version: String::new(),
+            kernel_version: String::new(),
+            cpu_model: String::new(),
+            cpu_cores: 0,
+            total_memory_gb: 0.0,
+            total_disk_gb: 0.0,
+        };
+        assert_eq!(info.cpu_cores, 0);
+        assert_eq!(info.total_memory_gb, 0.0);
+    }
+
+    #[test]
+    fn test_resource_usage_zero_values() {
+        let usage = ResourceUsage {
+            cpu_usage: 0.0,
+            memory_used_gb: 0.0,
+            memory_total_gb: 0.0,
+            memory_percent: 0.0,
+            disk_used_gb: 0.0,
+            disk_total_gb: 0.0,
+            disk_percent: 0.0,
+            uptime_secs: 0,
+        };
+        let json = serde_json::to_string(&usage).unwrap();
+        assert!(json.contains("\"cpu_usage\":0.0"));
+        assert!(json.contains("\"memory_percent\":0.0"));
+    }
+}
+
 #[derive(Serialize)]
 pub struct SystemInfo {
     os_name: String,

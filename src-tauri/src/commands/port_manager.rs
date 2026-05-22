@@ -1,6 +1,65 @@
 use serde::Serialize;
 use std::process::Command;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_port_entry_serialization() {
+        let entry = PortEntry {
+            port: 8080,
+            protocol: "TCP".to_string(),
+            process_name: "nginx".to_string(),
+            pid: 12345,
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(json.contains("\"port\":8080"));
+        assert!(json.contains("\"pid\":12345"));
+    }
+
+    #[test]
+    fn test_port_entry_sort_key() {
+        let entries = vec![
+            PortEntry { port: 443, protocol: "TCP".to_string(), process_name: "a".to_string(), pid: 1 },
+            PortEntry { port: 80, protocol: "TCP".to_string(), process_name: "b".to_string(), pid: 2 },
+            PortEntry { port: 8080, protocol: "TCP".to_string(), process_name: "c".to_string(), pid: 3 },
+        ];
+        let mut sorted = entries.clone();
+        sorted.sort_by_key(|e| e.port);
+        assert_eq!(sorted[0].port, 80);
+        assert_eq!(sorted[1].port, 443);
+        assert_eq!(sorted[2].port, 8080);
+    }
+
+    #[test]
+    fn test_extract_ss_process_name_normal() {
+        let info = r#"users:(("nginx",pid=12345,fd=3))"#;
+        let name = extract_ss_process_name(info);
+        assert_eq!(name, Some("nginx".to_string()));
+    }
+
+    #[test]
+    fn test_extract_ss_process_name_no_match() {
+        assert_eq!(extract_ss_process_name("no quotes here"), None);
+        assert_eq!(extract_ss_process_name(""), None);
+    }
+
+    #[test]
+    fn test_extract_ss_pid_normal() {
+        let info = r#"users:(("nginx",pid=12345,fd=3))"#;
+        let pid = extract_ss_pid(info);
+        assert_eq!(pid, Some(12345));
+    }
+
+    #[test]
+    fn test_extract_ss_pid_no_match() {
+        assert_eq!(extract_ss_pid("no pid here"), None);
+        assert_eq!(extract_ss_pid(""), None);
+        assert_eq!(extract_ss_pid("pid=abc"), None); // non-numeric
+    }
+}
+
 #[derive(Serialize, Clone)]
 pub struct PortEntry {
     pub port: u16,
