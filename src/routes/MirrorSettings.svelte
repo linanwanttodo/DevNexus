@@ -11,6 +11,7 @@
   let loading = $state(true);
   let error = $state(null);
   let testing = $state(null);
+  let testingGroup = $state(null);
   let selectedCountry = $state("all");
 
   const countries = [
@@ -20,6 +21,7 @@
     { id: "US", label: t("mirrors.country_us") },
     { id: "EU", label: t("mirrors.country_eu") },
     { id: "JP", label: t("mirrors.country_jp") },
+    { id: "AU", label: t("mirrors.country_au") },
   ];
 
   async function loadMirrors() {
@@ -70,8 +72,41 @@
     }
   }
 
+  async function testAllMirrors(group) {
+    testingGroup = group.id;
+    // 清除之前的推荐标记
+    for (const m of group.mirrors) {
+      m.recommended = false;
+    }
+    try {
+      const results = await Promise.all(
+        group.mirrors.map(async (m) => {
+          try {
+            const latency = await invoke("test_mirror_latency", { url: m.url });
+            m.latency_ms = latency;
+            return { mirror: m, latency };
+          } catch {
+            m.latency_ms = 0;
+            return { mirror: m, latency: Infinity };
+          }
+        })
+      );
+      // 找到最快的（排除超时）
+      const fastest = results.reduce((best, cur) =>
+        cur.latency > 0 && cur.latency < best.latency ? cur : best
+      , { latency: Infinity });
+      if (fastest.mirror) {
+        fastest.mirror.recommended = true;
+      }
+    } catch (err) {
+      console.error("Batch test failed:", err);
+    } finally {
+      testingGroup = null;
+    }
+  }
+
   function getCountryFlag(code) {
-    const flags = { CN: "CN", RU: "RU", US: "US", EU: "EU", JP: "JP" };
+    const flags = { CN: "CN", RU: "RU", US: "US", EU: "EU", JP: "JP", AU: "AU" };
     return flags[code] || code;
   }
 
@@ -146,9 +181,17 @@
                   </button>
                   {#if mirror.is_active}
                     <span class="text-xs text-nx-success font-medium">{_v && t("mirrors.active")}</span>
-                  {:else}
+                  {:else if mirror.recommended}
+                    <span class="text-xs text-nx-accent font-medium">{_v && t("mirrors.recommended")}</span>
                     <button
                       class="px-2 py-1 text-xs font-medium bg-nx-accent text-white"
+                      onclick={() => switchMirror(group.id, mirror.url)}
+                    >
+                      {_v && t("mirrors.use")}
+                    </button>
+                  {:else}
+                    <button
+                      class="px-2 py-1 text-xs border border-nx-border text-nx-text-secondary"
                       onclick={() => switchMirror(group.id, mirror.url)}
                     >
                       {_v && t("mirrors.use")}
@@ -157,6 +200,15 @@
                 </div>
               </div>
             {/each}
+          </div>
+          <div class="border-t border-nx-border px-3 py-2">
+            <button
+              class="px-2 py-1 text-xs text-nx-text-muted border border-nx-border"
+              onclick={() => testAllMirrors(group)}
+              disabled={testingGroup !== null}
+            >
+              {testingGroup === group.id ? "..." : _v && t("mirrors.test_all")}
+            </button>
           </div>
         </div>
       {/each}
