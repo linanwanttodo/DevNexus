@@ -1,25 +1,15 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
-  import { showToast } from "../lib/toast.js";
-  import { showConfirm } from "../lib/confirm.js";
-  import { getSearchQuery, onSearchChange, setSearchQuery } from "../lib/stores.js";
-  import { t, getVersion, onLangChange } from "../lib/i18n.js";
-
-  let _v = $state(getVersion());
-  $effect(() => onLangChange(v => _v = v));
+  import { showToast } from "../lib/toast.svelte.js";
+  import { showConfirm } from "../lib/confirm.svelte.js";
+  import { getSearchQuery, setSearchQuery } from "../lib/stores.svelte.js";
+  import { t } from "../lib/i18n.svelte.js";
 
   let ports = $state([]);
   let loading = $state(true);
   let error = $state(null);
-  let search = $state(getSearchQuery());
-  let killing = $state(null);
-
-  $effect(() => {
-    return onSearchChange((q) => {
-      search = q;
-    });
-  });
+  let search = $derived(getSearchQuery());
 
   async function loadPorts() {
     try {
@@ -65,15 +55,15 @@
 <div class="mx-auto max-w-4xl">
   <div class="mb-6 flex items-center justify-between">
     <div>
-      <h1 class="text-xl font-semibold text-nx-text">{_v && t("port_manager.title")}</h1>
-      <p class="mt-1 text-xs text-nx-text-muted">{_v && t("port_manager.description")}</p>
+      <h1 class="text-xl font-semibold text-nx-text">{t("port_manager.title")}</h1>
+      <p class="mt-1 text-xs text-nx-text-muted">{t("port_manager.description")}</p>
     </div>
     <button
       class="flex items-center gap-2 border border-nx-border px-4 py-2 text-sm font-medium text-nx-text-secondary"
       onclick={loadPorts}
     >
       <span class="material-symbols-outlined text-lg">refresh</span>
-      {_v && t("port_manager.refresh")}
+      {t("port_manager.refresh")}
     </button>
   </div>
 
@@ -83,15 +73,15 @@
       <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-nx-text-muted">search</span>
       <input
         type="text"
-        placeholder={_v ? t("port_manager.search_placeholder") : "Search..."}
+        placeholder={t("port_manager.search_placeholder")}
         value={search}
-        oninput={(e) => { search = e.target.value; setSearchQuery(e.target.value); }}
+        oninput={(e) => { setSearchQuery(e.target.value); }}
         class="w-full border border-nx-border bg-nx-surface px-10 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-accent"
       />
       {#if search}
         <button
           class="absolute right-3 top-1/2 -translate-y-1/2 text-nx-text-muted"
-          onclick={() => search = ""}
+          onclick={() => { setSearchQuery(""); }}
         >
           <span class="material-symbols-outlined text-sm">close</span>
         </button>
@@ -109,24 +99,24 @@
       <div class="p-6 text-center">
         <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
         <div class="mt-2 text-sm text-nx-danger">{error}</div>
-        <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={loadPorts}>{_v && t("common.retry")}</button>
+        <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={loadPorts}>{t("common.retry")}</button>
       </div>
     {:else if filtered.length === 0}
       <div class="p-12 text-center">
         <span class="material-symbols-outlined text-nx-text-muted text-4xl">lan</span>
         <div class="mt-4 text-sm text-nx-text-muted">
-          {search ? (_v && t("port_manager.no_matching")) : (_v && t("port_manager.no_ports"))}
+          {search ? t("port_manager.no_matching") : t("port_manager.no_ports")}
         </div>
       </div>
     {:else}
     <table class="w-full">
       <thead>
         <tr class="border-b border-nx-border text-xs text-nx-text-muted">
-          <th class="px-4 py-3 text-left font-medium w-20">{_v && t("port_manager.port")}</th>
-          <th class="px-4 py-3 text-left font-medium w-16">{_v && t("port_manager.proto")}</th>
-          <th class="px-4 py-3 text-left font-medium">{_v && t("port_manager.process")}</th>
-          <th class="px-4 py-3 text-left font-medium w-20">{_v && t("port_manager.pid")}</th>
-          <th class="px-4 py-3 text-right font-medium w-24">{_v && t("port_manager.actions")}</th>
+          <th class="px-4 py-3 text-left font-medium w-20">{t("port_manager.port")}</th>
+          <th class="px-4 py-3 text-left font-medium w-16">{t("port_manager.proto")}</th>
+          <th class="px-4 py-3 text-left font-medium">{t("port_manager.process")}</th>
+          <th class="px-4 py-3 text-left font-medium w-20">{t("port_manager.pid")}</th>
+          <th class="px-4 py-3 text-right font-medium w-24">{t("port_manager.actions")}</th>
         </tr>
       </thead>
       <tbody>
@@ -147,7 +137,7 @@
                   onclick={() => killPort(entry.port)}
                   disabled={killing !== null}
                 >
-                  {killing === entry.port ? "..." : (_v && t("port_manager.kill"))}
+                  {killing === entry.port ? "..." : t("port_manager.kill")}
                 </button>
               </div>
             </td>
@@ -157,8 +147,8 @@
     </table>
 
     <div class="flex items-center justify-between border-t border-nx-border px-4 py-2">
-      <span class="text-xs text-nx-text-muted">{filtered.length} {_v && t(filtered.length === 1 ? "port_manager.port" : "port_manager.ports")}</span>
-      <button class="text-xs text-nx-text-muted" onclick={loadPorts}>{_v && t("port_manager.refresh")}</button>
+      <span class="text-xs text-nx-text-muted">{filtered.length} {t(filtered.length === 1 ? "port_manager.port" : "port_manager.ports")}</span>
+      <button class="text-xs text-nx-text-muted" onclick={loadPorts}>{t("port_manager.refresh")}</button>
     </div>
     {/if}
   </div>
