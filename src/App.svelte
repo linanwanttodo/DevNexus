@@ -1,5 +1,5 @@
 <script>
-  import { getRoute, onRouteChange } from "./lib/stores.js";
+  import { getRoute } from "./lib/stores.svelte.js";
   import Sidebar from "./components/Sidebar.svelte";
   import TopBar from "./components/TopBar.svelte";
   import Toast from "./components/Toast.svelte";
@@ -15,13 +15,7 @@
   import AppUninstaller from "./routes/AppUninstaller.svelte";
   import Settings from "./routes/Settings.svelte";
 
-  let page = $state(getRoute());
-
-  $effect(() => {
-    return onRouteChange((r) => {
-      page = r;
-    });
-  });
+  let page = $derived(getRoute());
 </script>
 
 <div class="flex h-screen w-screen flex-col bg-nx-bg overflow-hidden">

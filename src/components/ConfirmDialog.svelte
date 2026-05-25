@@ -1,19 +1,8 @@
 <script>
-  import { getConfirmations, confirmResponse, onConfirmChange } from "../lib/confirm.js";
-  import { t, getVersion, onLangChange } from "../lib/i18n.js";
+  import { getConfirmations, confirmResponse } from "../lib/confirm.svelte.js";
+  import { t } from "../lib/i18n.svelte.js";
 
-  let confirmations = $state(getConfirmations());
-  let _v = $state(getVersion());
-
-  $effect(() => {
-    return onLangChange((v) => { _v = v; });
-  });
-
-  $effect(() => {
-    return onConfirmChange((c) => {
-      confirmations = c;
-    });
-  });
+  let confirmations = $derived(getConfirmations());
 </script>
 
 {#if confirmations.length > 0}
@@ -29,13 +18,13 @@
             class="px-4 py-2 text-sm font-medium text-nx-text-secondary hover:bg-nx-raised transition-colors"
             onclick={() => confirmResponse(c.id, false)}
           >
-            {_v && t('common.cancel')}
+            {t('common.cancel')}
           </button>
           <button
             class="px-4 py-2 text-sm font-medium border border-nx-danger text-nx-danger hover:bg-nx-danger/10 transition-colors"
             onclick={() => confirmResponse(c.id, true)}
           >
-            {_v && t('common.confirm')}
+            {t('common.confirm')}
           </button>
         </div>
       </div>

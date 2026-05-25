@@ -1,16 +1,9 @@
 <script>
   import BrandIcons from "../icons/BrandIcons.svelte";
-  import { getRoute, navigate, onRouteChange } from "../lib/stores.js";
-  import { t, getVersion, onLangChange } from "../lib/i18n.js";
-
-  let _v = $state(getVersion());
-
-  $effect(() => {
-    return onLangChange((v) => { _v = v; });
-  });
+  import { getRoute, navigate } from "../lib/stores.svelte.js";
+  import { t } from "../lib/i18n.svelte.js";
 
   let navItems = $derived.by(() => {
-    _v; // 依赖 _v，语言切换时强制重算
     return [
       { route: "/dashboard", label: t("nav.dashboard"), icon: "dashboard" },
       { route: "/environments", label: t("nav.environments"), icon: "code" },
@@ -25,13 +18,7 @@
     ];
   });
 
-  let currentRoute = $state(getRoute());
-
-    $effect(() => {
-    return onRouteChange((r) => {
-      currentRoute = r;
-    });
-  });
+  let currentRoute = $derived(getRoute());
 
   function handleClick(route) {
     navigate(route);
@@ -65,6 +52,6 @@
   </nav>
 
   <div class="border-t border-nx-border px-5 py-3">
-    <span class="text-xs text-nx-text-muted">{_v && t("version")} 1.0.0</span>
+    <span class="text-xs text-nx-text-muted">{t("version")} 1.0.0</span>
   </div>
 </aside>
