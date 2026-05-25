@@ -153,7 +153,7 @@ mod tests {
 
         // Deserialize back
         let deserialized: UpdateInfo = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.has_update, true);
+        assert!(deserialized.has_update);
         assert_eq!(deserialized.latest_version, "v2.0.0");
         assert_eq!(deserialized.release_notes.unwrap(), "Bug fixes and improvements");
     }
