@@ -591,17 +591,44 @@ fn map_package_name<'a>(generic: &'a str, pm_name: &str) -> &'a str {
 }
 
 #[cfg(target_os = "macos")]
-fn run_elevated(binary: &str, args: &[&str]) -> Result<std::process::Output, String> {
-    let mut cmd_str = binary.to_string();
-    for arg in args {
-        cmd_str.push(' ');
-        cmd_str.push_str(arg);
+mod elevated {
+    pub(super) fn run(binary: &str, args: &[&str]) -> Result<std::process::Output, String> {
+        let mut script = String::from("do shell script \"");
+        script.push_str(&shell_escape(binary));
+        for a in args {
+            script.push(' ');
+            script.push_str(&shell_escape(a));
+        }
+        script.push_str("\" with administrator privileges");
+
+        std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .output()
+            .map_err(|e| format!("Failed to execute osascript: {}", e))
     }
-    let escaped = cmd_str.replace('\\', "\\\\").replace('"', "\\\"");
-    std::process::Command::new("osascript")
-        .args(["-e", &format!("do shell script \"{}\" with administrator privileges", escaped)])
-        .output()
-        .map_err(|e| format!("Failed to execute osascript: {}", e))
+
+    fn shell_escape(s: &str) -> String {
+        let mut out = String::with_capacity(s.len() + 2);
+        out.push('"');
+        for c in s.chars() {
+            match c {
+                '\\' => out.push_str("\\\\"),
+                '"' => out.push_str("\\\""),
+                '$' => out.push_str("\\$"),
+                '`' => out.push_str("\\`"),
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                other => out.push(other),
+            }
+        }
+        out.push('"');
+        out
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn run_elevated(binary: &str, args: &[&str]) -> Result<std::process::Output, String> {
+    elevated::run(binary, args)
 }
 
 #[cfg(target_os = "linux")]
@@ -715,7 +742,6 @@ match app_name_lower.as_str() {
     "python 3" | "python3" | "python" => {
         #[cfg(unix)]
         {
-            paths.push(PathBuf::from(&home).join(".local/lib/python*"));
             paths.push(PathBuf::from(&home).join(".cache/pip"));
             paths.push(PathBuf::from(&home).join(".config/pip"));
             paths.push(PathBuf::from(&home).join(".python_history"));
