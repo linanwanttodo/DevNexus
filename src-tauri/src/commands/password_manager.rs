@@ -684,6 +684,24 @@ fn escape_csv(field: &str) -> String {
     }
 }
 
+// PBKDF2 迭代次数（100,000 次，平衡安全与性能）
+const PBKDF2_ITERATIONS: u32 = 100_000;
+
+fn derive_key(password: &str, salt: &[u8]) -> [u8; 32] {
+    use pbkdf2::pbkdf2_hmac;
+    use sha2::Sha256;
+
+    let mut key = [0u8; 32];
+    pbkdf2_hmac::<Sha256>(password.as_bytes(), salt, PBKDF2_ITERATIONS, &mut key);
+    key
+}
+
+fn generate_salt() -> [u8; 16] {
+    let mut salt = [0u8; 16];
+    rand::Rng::fill(&mut rand::thread_rng(), &mut salt);
+    salt
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -692,7 +710,6 @@ mod tests {
     fn test_generate_salt_length() {
         let salt = generate_salt();
         assert_eq!(salt.len(), 16);
-        // 两次调用应该产生不同的 salt
         let salt2 = generate_salt();
         assert_ne!(salt, salt2);
     }
@@ -745,24 +762,4 @@ mod tests {
     fn test_escape_csv_empty() {
         assert_eq!(escape_csv(""), "");
     }
-}
-
-// PBKDF2 迭代次数（100,000 次，平衡安全与性能）
-const PBKDF2_ITERATIONS: u32 = 100_000;
-
-/// 使用 PBKDF2-HMAC-SHA256 从密码派生 32 字节密钥
-fn derive_key(password: &str, salt: &[u8]) -> [u8; 32] {
-    use pbkdf2::pbkdf2_hmac;
-    use sha2::Sha256;
-
-    let mut key = [0u8; 32];
-    pbkdf2_hmac::<Sha256>(password.as_bytes(), salt, PBKDF2_ITERATIONS, &mut key);
-    key
-}
-
-/// 生成随机 salt
-fn generate_salt() -> [u8; 16] {
-    let mut salt = [0u8; 16];
-    rand::Rng::fill(&mut rand::thread_rng(), &mut salt);
-    salt
 }
