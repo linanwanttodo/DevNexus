@@ -516,6 +516,13 @@ fn decrypt_cookie_value(encrypted: &[u8]) -> String {
 
 #[cfg(target_os = "windows")]
 fn decrypt_windows(encrypted_data: &[u8]) -> String {
+    String::from_utf8_lossy(&decrypt_windows_raw(encrypted_data)).to_string()
+}
+
+/// DPAPI decrypt bytes directly, preserving raw binary output.
+/// Used by Chrome cookie encryption where the decrypted key is raw bytes, not text.
+#[cfg(target_os = "windows")]
+fn decrypt_windows_raw(encrypted_data: &[u8]) -> Vec<u8> {
     use windows::Win32::Security::Cryptography::{
         CryptUnprotectData, CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN,
     };
@@ -542,14 +549,11 @@ fn decrypt_windows(encrypted_data: &[u8]) -> String {
         ) {
             Ok(()) => {
                 if data_out.pbData.is_null() || data_out.cbData == 0 {
-                    return String::from_utf8_lossy(encrypted_data).to_string();
+                    return encrypted_data.to_vec();
                 }
-                let result = String::from_utf8_lossy(
-                    std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize),
-                ).to_string();
-                result
+                std::slice::from_raw_parts(data_out.pbData, data_out.cbData as usize).to_vec()
             }
-            Err(_) => String::from_utf8_lossy(encrypted_data).to_string(),
+            Err(_) => encrypted_data.to_vec(),
         }
     }
 }
@@ -625,13 +629,9 @@ fn get_chrome_safe_storage_password() -> Option<String> {
                     if let Some(encoded_key) = json["os_crypt"]["encrypted_key"].as_str() {
                         if let Ok(decoded) = general_purpose::STANDARD.decode(encoded_key) {
                             if decoded.len() >= 5 && &decoded[0..5] == b"DPAPI" {
-                                return decrypt_windows(&decoded[5..]).bytes()
-                                    .take(32)
-                                    .collect::<Vec<_>>()
-                                    .into_iter()
-                                    .map(|b| b as char)
-                                    .collect::<String>()
-                                    .into();
+                                let raw_key = decrypt_windows_raw(&decoded[5..]);
+                                // Chrome AES key is 32 raw bytes; wrap via lossy for PBKDF2
+                                return Some(String::from_utf8_lossy(&raw_key).into_owned());
                             }
                         }
                     }
