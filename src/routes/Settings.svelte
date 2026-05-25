@@ -1,6 +1,6 @@
 <script>
   import { onMount } from "svelte";
-  import { t, initI18n, getLang } from "../lib/i18n.js";
+  import { t, initI18n, getLang } from "../lib/i18n.svelte.js";
   import { invoke } from "@tauri-apps/api/core";
   import { check } from "@tauri-apps/plugin-updater";
 
