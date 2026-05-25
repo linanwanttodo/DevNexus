@@ -1,12 +1,9 @@
 <script>
 import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
-  import { showToast } from "../lib/toast.js";
-  import { showConfirm } from "../lib/confirm.js";
-  import { t, getVersion, onLangChange } from "../lib/i18n.js";
-
-  let _v = $state(getVersion());
-  $effect(() => onLangChange(v => _v = v));
+  import { showToast } from "../lib/toast.svelte.js";
+  import { showConfirm } from "../lib/confirm.svelte.js";
+  import { t } from "../lib/i18n.svelte.js";
 
   let locked = $state(true);
   let hasMasterPassword = $state(false);
