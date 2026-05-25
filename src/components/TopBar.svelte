@@ -1,15 +1,8 @@
 <script>
-  import { getRoute, onRouteChange, getSearchQuery, setSearchQuery } from "../lib/stores.js";
-  import { t, getVersion, onLangChange } from "../lib/i18n.js";
-
-  let _v = $state(getVersion());
-
-  $effect(() => {
-    return onLangChange((v) => { _v = v; });
-  });
+  import { getRoute, getSearchQuery, setSearchQuery } from "../lib/stores.svelte.js";
+  import { t } from "../lib/i18n.svelte.js";
 
   let routeTitles = $derived.by(() => {
-    _v;
     return {
       "/dashboard": t("nav.dashboard"),
       "/environments": t("nav.environments"),
@@ -23,19 +16,12 @@
     };
   });
 
-  let currentRoute = $state(getRoute());
-  let searchQuery = $state(getSearchQuery());
+  let currentRoute = $derived(getRoute());
+  let searchQuery = $derived(getSearchQuery());
 
   function handleSearchInput(e) {
-    searchQuery = e.target.value;
     setSearchQuery(e.target.value);
   }
-
-  $effect(() => {
-    return onRouteChange((r) => {
-      currentRoute = r;
-    });
-  });
 </script>
 
 <header class="flex h-10 flex-shrink-0 items-center justify-between border-b border-nx-border bg-nx-surface px-4">
@@ -51,7 +37,7 @@
       <span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-nx-text-muted text-sm">search</span>
       <input
         type="text"
-        placeholder={_v ? t("search_ports") : "Search ports, processes..."}
+        placeholder={t("search_ports")}
         value={searchQuery}
         oninput={handleSearchInput}
         class="h-7 w-56 border border-nx-border bg-nx-bg pl-7 pr-2 text-xs text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-accent"

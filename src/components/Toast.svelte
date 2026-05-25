@@ -1,13 +1,7 @@
 <script>
-  import { getToasts, removeToast, onToastChange } from "../lib/toast.js";
+  import { getToasts, removeToast } from "../lib/toast.svelte.js";
 
-  let toasts = $state(getToasts());
-
-  $effect(() => {
-    return onToastChange((t) => {
-      toasts = t;
-    });
-  });
+  let toasts = $derived(getToasts());
 
   function typeIcon(type) {
     switch (type) {
