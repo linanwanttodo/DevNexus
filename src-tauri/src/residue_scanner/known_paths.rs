@@ -36,7 +36,6 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
         }
         "python 3" | "python3" | "python" | "python 2" | "python2" => {
             #[cfg(unix)] {
-                push!(home_p.join(".local/lib/python*"));
                 push!(home_p.join(".cache/pip"));
                 push!(home_p.join(".config/pip"));
                 push!(home_p.join(".python_history"));
@@ -149,7 +148,7 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
             #[cfg(target_os = "linux")] {
                 push!(home_p.join(".mozilla/firefox"));
                 push!(home_p.join(".cache/mozilla/firefox"));
-                push!(home_p.join(".mozilla/firefox/*.default*"));
+                // keyword scanner catches *default* profiles under .mozilla/firefox/
             }
             #[cfg(target_os = "macos")] {
                 push!(home_p.join("Library/Application Support/Firefox"));
