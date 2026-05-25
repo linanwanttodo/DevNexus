@@ -1,3 +1,4 @@
+use crate::utils;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
@@ -120,64 +121,7 @@ async fn safe_get_version(cmd: &str) -> String {
 
 
 
-/// 检查常见安装路径（nvm、snap、/usr/local 等）
-fn check_common_paths(cmd: &str) -> bool {
-    #[cfg(unix)]
-    {
-        let paths = [
-            format!("/usr/local/bin/{}", cmd),
-            format!("/opt/homebrew/bin/{}", cmd),
-            format!("/snap/bin/{}", cmd),
-        ];
 
-        if cmd == "node" || cmd == "npm" {
-            if let Ok(home) = std::env::var("HOME") {
-                let nvm_base = format!("{}/.nvm/versions/node", home);
-                if let Ok(entries) = std::fs::read_dir(&nvm_base) {
-                    for entry in entries.flatten() {
-                        let bin = entry.path().join("bin").join(cmd);
-                        if bin.exists() {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-
-        for path in &paths {
-            if std::path::Path::new(path).exists() {
-                return true;
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-            let nvm_base = format!("{}\\nvm", localappdata);
-            if let Ok(entries) = std::fs::read_dir(&nvm_base) {
-                for entry in entries.flatten() {
-                    let bin = entry.path().join(cmd);
-                    if bin.exists() {
-                        return true;
-                    }
-                }
-            }
-        }
-        if let Ok(programfiles) = std::env::var("ProgramFiles") {
-            let paths = [
-                format!("{}\\{}", programfiles, cmd),
-            ];
-            for path in &paths {
-                if std::path::Path::new(path).exists() {
-                    return true;
-                }
-            }
-        }
-    }
-
-    false
-}
 
 struct SoftwareDef {
     name: &'static str,
@@ -197,7 +141,7 @@ pub async fn list_software() -> Vec<Software> {
         let category = s.category;
         let pkg = s.package_name;
         handles.push(tokio::spawn(async move {
-            let found = which::which(cmd).is_ok() || check_common_paths(cmd);
+            let found = utils::find_cmd_path(cmd).is_some();
             let version = if found {
                 safe_get_version(cmd).await
             } else {

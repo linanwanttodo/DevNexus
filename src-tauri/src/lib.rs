@@ -1,5 +1,6 @@
 mod commands;
 mod residue_scanner;
+mod utils;
 
 use tauri::{
     image::Image,
