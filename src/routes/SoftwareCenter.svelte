@@ -1,13 +1,10 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
-  import { showToast } from "../lib/toast.js";
-  import { showConfirm } from "../lib/confirm.js";
-  import { t, tFormat, getVersion, onLangChange } from "../lib/i18n.js";
+  import { showToast } from "../lib/toast.svelte.js";
+  import { showConfirm } from "../lib/confirm.svelte.js";
+  import { t, tFormat } from "../lib/i18n.svelte.js";
   import BrandIcons from "../icons/BrandIcons.svelte";
-
-  let _v = $state(getVersion());
-  $effect(() => onLangChange(v => _v = v));
 
   let selectedCategory = $state("all");
   let filterInstalled = $state(false);
@@ -167,7 +164,7 @@
   <!-- Sidebar Filters -->
   <aside class="w-48 flex-shrink-0">
     <div class="mb-6">
-      <h3 class="mb-2 text-xs font-medium uppercase tracking-wider text-nx-text-muted">{_v && t("software.categories")}</h3>
+      <h3 class="mb-2 text-xs font-medium uppercase tracking-wider text-nx-text-muted">{t("software.categories")}</h3>
       <ul class="space-y-px">
         {#each categories as cat}
           <li>
@@ -184,15 +181,15 @@
     </div>
 
     <div>
-      <h3 class="mb-2 text-xs font-medium uppercase tracking-wider text-nx-text-muted">{_v && t("software.status")}</h3>
+      <h3 class="mb-2 text-xs font-medium uppercase tracking-wider text-nx-text-muted">{t("software.status")}</h3>
       <div class="space-y-2">
         <label class="flex items-center gap-2 text-sm text-nx-text-secondary cursor-pointer">
           <input type="checkbox" bind:checked={filterInstalled} class="border-nx-border bg-nx-bg text-nx-text" />
-          {_v && t("software.installed_filter")}
+          {t("software.installed_filter")}
         </label>
         <label class="flex items-center gap-2 text-sm text-nx-text-secondary cursor-pointer">
           <input type="checkbox" bind:checked={filterUpdates} class="border-nx-border bg-nx-bg text-nx-text" />
-          {_v && t("software.updates_filter")}
+          {t("software.updates_filter")}
         </label>
       </div>
     </div>
@@ -201,12 +198,12 @@
   <!-- Software Grid -->
   <div class="flex-1">
     <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-xl font-semibold text-nx-text">{_v && t("software.title")}</h1>
+      <h1 class="text-xl font-semibold text-nx-text">{t("software.title")}</h1>
       <button 
         class="border border-nx-border px-4 py-2 text-sm font-medium text-nx-text-secondary"
         onclick={loadSoftware}>
         <span class="material-symbols-outlined text-lg inline-block align-middle mr-1">refresh</span>
-        {_v && t("common.refresh")}
+        {t("common.refresh")}
       </button>
     </div>
 
@@ -218,8 +215,8 @@
       <!-- 未检测到包管理器时的引导提示 -->
       <div class="border border-nx-border bg-nx-surface p-8 text-center">
         <span class="material-symbols-outlined text-nx-text-muted text-4xl">package_2</span>
-        <h2 class="mt-4 text-lg font-semibold text-nx-text">{_v && t("software.no_pm_title")}</h2>
-        <p class="mt-2 max-w-md mx-auto text-sm text-nx-text-secondary">{_v && t("software.no_pm_desc")}</p>
+        <h2 class="mt-4 text-lg font-semibold text-nx-text">{t("software.no_pm_title")}</h2>
+        <p class="mt-2 max-w-md mx-auto text-sm text-nx-text-secondary">{t("software.no_pm_desc")}</p>
         <div class="mt-6 flex flex-wrap justify-center gap-4">
           {#if packageManagers.length > 0}
             {#each packageManagers as pm}
@@ -227,7 +224,7 @@
             {/each}
           {:else}
             <div class="text-left text-sm text-nx-text-secondary">
-              <p class="font-medium mb-2">{_v && t("software.no_pm_suggest")}</p>
+              <p class="font-medium mb-2">{t("software.no_pm_suggest")}</p>
               <ul class="list-disc list-inside space-y-1">
                 <li><span class="font-medium">macOS:</span> <a href="https://brew.sh" target="_blank" class="text-nx-accent underline">Homebrew</a></li>
                 <li><span class="font-medium">Linux:</span> apt, dnf, pacman, zypper, apk</li>
@@ -250,8 +247,8 @@
     {:else if filteredSoftware.length === 0}
       <div class="p-6 text-center">
         <span class="material-symbols-outlined text-nx-text-muted text-3xl">search_off</span>
-        <div class="mt-2 text-sm text-nx-text-muted">{_v && t("software.none")}</div>
-        <div class="mt-1 text-xs text-nx-text-muted">{_v && t("software.none_hint")}</div>
+        <div class="mt-2 text-sm text-nx-text-muted">{t("software.none")}</div>
+        <div class="mt-1 text-xs text-nx-text-muted">{t("software.none_hint")}</div>
       </div>
     {:else}
     <div class="grid grid-cols-2 gap-4 xl:grid-cols-3">
@@ -263,7 +260,7 @@
             </div>
             <span class="px-2 py-0.5 text-xs font-medium
               {item.status === 'installed' ? 'bg-nx-text/15 text-nx-text' : item.status === 'available' ? 'bg-nx-text-secondary/15 text-nx-text-secondary' : 'bg-nx-overlay text-nx-text-muted'}">
-              {item.status === 'installed' ? (_v ? t('software.installed') : 'Installed') : item.status === 'available' ? (_v ? t('software.available') : 'Available') : (_v ? t('software.system') : 'System')}
+              {item.status === 'installed' ? t('software.installed') : item.status === 'available' ? t('software.available') : t('software.system')}
             </span>
           </div>
           <h3 class="mb-1 text-sm font-medium text-nx-text">{item.name}</h3>
@@ -279,7 +276,7 @@
                   : 'border border-nx-border bg-nx-bg text-nx-text-secondary'}"
             disabled={item.action === 'System Managed' || installing}
             onclick={() => handleAction(item)}>
-            {installing && currentItem?.name === item.name ? (_v ? t('software.processing') : 'Processing...') : item.action}
+            {installing && currentItem?.name === item.name ? t('software.processing') : item.action}
           </button>
         </div>
       {/each}

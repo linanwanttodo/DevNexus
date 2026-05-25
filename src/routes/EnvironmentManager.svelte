@@ -1,12 +1,9 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
-  import { showToast } from "../lib/toast.js";
-  import { showConfirm } from "../lib/confirm.js";
-  import { t, getVersion, onLangChange } from "../lib/i18n.js";
-
-  let _v = $state(getVersion());
-  $effect(() => onLangChange(v => _v = v));
+  import { showToast } from "../lib/toast.svelte.js";
+  import { showConfirm } from "../lib/confirm.svelte.js";
+  import { t } from "../lib/i18n.svelte.js";
 
   let environments = $state([]);
   let loading = $state(true);
@@ -99,10 +96,10 @@
 <div class="mx-auto max-w-5xl">
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between">
-    <h1 class="text-xl font-semibold text-nx-text">{_v && t("environments.title")}</h1>
+    <h1 class="text-xl font-semibold text-nx-text">{t("environments.title")}</h1>
     <button class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={() => showCreateModal = true}>
       <span class="material-symbols-outlined text-lg">add</span>
-      {_v && t("environments.new")}
+      {t("environments.new")}
     </button>
   </div>
 
@@ -119,23 +116,23 @@
         <button 
           class="mt-4 bg-nx-text px-4 py-2 text-sm font-medium text-nx-deep"
           onclick={loadEnvironments}>
-          {_v && t("common.retry")}
+          {t("common.retry")}
         </button>
       </div>
     {:else if environments.length === 0}
       <div class="p-6 text-center">
         <span class="material-symbols-outlined text-nx-text-muted text-3xl">inbox</span>
-        <div class="mt-2 text-sm text-nx-text-muted">{_v && t("environments.none")}</div>
-        <div class="mt-1 text-xs text-nx-text-muted">{_v && t("environments.none_hint")}</div>
+        <div class="mt-2 text-sm text-nx-text-muted">{t("environments.none")}</div>
+        <div class="mt-1 text-xs text-nx-text-muted">{t("environments.none_hint")}</div>
       </div>
     {:else}
     <table class="w-full">
       <thead>
         <tr class="border-b border-nx-border text-xs text-nx-text-muted">
-          <th class="px-4 py-3 text-left font-medium">{_v && t("environments.name")}</th>
-          <th class="px-4 py-3 text-left font-medium">{_v && t("environments.path")}</th>
-          <th class="px-4 py-3 text-left font-medium">{_v && t("software.status")}</th>
-          <th class="px-4 py-3 text-right font-medium">{_v && t("port_manager.actions")}</th>
+          <th class="px-4 py-3 text-left font-medium">{t("environments.name")}</th>
+          <th class="px-4 py-3 text-left font-medium">{t("environments.path")}</th>
+          <th class="px-4 py-3 text-left font-medium">{t("software.status")}</th>
+          <th class="px-4 py-3 text-right font-medium">{t("port_manager.actions")}</th>
         </tr>
       </thead>
       <tbody>
@@ -158,19 +155,19 @@
               <div class="flex items-center justify-end gap-1">
                 <button 
                   class="p-1.5 text-nx-text-secondary" 
-                  title={_v ? t("environments.add_to_path") : "Add to PATH"}
+                  title={t("environments.add_to_path")}
                   onclick={() => addToPath(env)}>
                   <span class="material-symbols-outlined text-lg">add_road</span>
                 </button>
                 <button 
                   class="p-1.5 text-nx-text-secondary" 
-                  title={_v ? t("environments.remove_from_path") : "Remove from PATH"}
+                  title={t("environments.remove_from_path")}
                   onclick={() => removeFromPath(env)}>
                   <span class="material-symbols-outlined text-lg">remove_road</span>
                 </button>
                 <button 
                   class="p-1.5 text-nx-text-secondary" 
-                  title={_v ? t("environments.view_config") : "View Config"}
+                  title={t("environments.view_config")}
                   onclick={() => viewConfig(env)}>
                   <span class="material-symbols-outlined text-lg">description</span>
                 </button>
@@ -183,7 +180,7 @@
 
     <!-- Footer -->
     <div class="flex items-center justify-between border-t border-nx-border px-4 py-3">
-      <span class="text-xs text-nx-text-muted">{_v && t("environments.count", { count: environments.length })}</span>
+      <span class="text-xs text-nx-text-muted">{t("environments.count", { count: environments.length })}</span>
       <div class="flex items-center gap-2 text-xs text-nx-text-muted">
         <span>1 of 1</span>
       </div>
@@ -197,10 +194,10 @@
   <!-- eslint-disable-next-line a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="button" tabindex="-1" onclick={() => showCreateModal = false} onkeydown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') showCreateModal = false; }}>
     <div class="w-full max-w-md border border-nx-border bg-nx-surface p-6" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
-      <h3 class="text-base font-semibold text-nx-text">{_v && t("environments.title")} - {_v && t("environments.new")}</h3>
+      <h3 class="text-base font-semibold text-nx-text">{t("environments.title")} - {t("environments.new")}</h3>
       <div class="mt-4 space-y-4">
         <div>
-          <label for="envName" class="block text-sm text-nx-text-secondary">{_v && t("environments.name")}</label>
+          <label for="envName" class="block text-sm text-nx-text-secondary">{t("environments.name")}</label>
           <input
             id="envName"
             type="text"
@@ -210,7 +207,7 @@
           />
         </div>
         <div>
-          <label for="envPath" class="block text-sm text-nx-text-secondary">{_v && t("environments.path")}</label>
+          <label for="envPath" class="block text-sm text-nx-text-secondary">{t("environments.path")}</label>
           <input
             id="envPath"
             type="text"
@@ -225,14 +222,14 @@
           class="border border-nx-border px-4 py-2 text-sm text-nx-text-secondary"
           onclick={() => showCreateModal = false}
         >
-          {_v && t("common.cancel")}
+          {t("common.cancel")}
         </button>
         <button
           class="bg-nx-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           onclick={createEnvironment}
           disabled={!newEnvName.trim() || !newEnvPath.trim() || creating}
         >
-          {creating ? "..." : (_v && t("environments.new"))}
+          {creating ? "..." : t("environments.new")}
         </button>
       </div>
     </div>

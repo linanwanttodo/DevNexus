@@ -1,11 +1,8 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
-  import { showToast } from "../lib/toast.js";
-  import { t, getVersion, onLangChange } from "../lib/i18n.js";
-
-  let _v = $state(getVersion());
-  $effect(() => onLangChange(v => _v = v));
+  import { showToast } from "../lib/toast.svelte.js";
+  import { t } from "../lib/i18n.svelte.js";
 
   let groups = $state([]);
   let loading = $state(true);
@@ -123,8 +120,8 @@
 <div class="mx-auto max-w-5xl">
   <div class="mb-6 flex items-center justify-between">
     <div>
-      <h1 class="text-xl font-semibold text-nx-text">{_v && t("mirrors.title")}</h1>
-      <p class="mt-1 text-xs text-nx-text-muted">{_v && t("mirrors.description")}</p>
+      <h1 class="text-xl font-semibold text-nx-text">{t("mirrors.title")}</h1>
+      <p class="mt-1 text-xs text-nx-text-muted">{t("mirrors.description")}</p>
     </div>
     <div class="flex items-center gap-3">
       <select
@@ -136,7 +133,7 @@
         {/each}
       </select>
       <button class="border border-nx-border px-4 py-1.5 text-sm text-nx-text-secondary" onclick={loadMirrors}>
-        {_v && t("common.refresh")}
+        {t("common.refresh")}
       </button>
     </div>
   </div>
@@ -149,7 +146,7 @@
     <div class="p-6 text-center">
       <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
       <div class="mt-2 text-sm text-nx-danger">{error}</div>
-      <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={loadMirrors}>{_v && t("common.retry")}</button>
+      <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={loadMirrors}>{t("common.retry")}</button>
     </div>
   {:else}
     <div class="space-y-4">
@@ -158,7 +155,7 @@
           <div class="flex items-center gap-3 border-b border-nx-border px-4 py-3">
             <span class="text-nx-accent text-sm font-medium">{group.label}</span>
             {#if group.current_url}
-              <span class="text-xs text-nx-text-muted">{_v && t("mirrors.active_prefix")}: {group.current_url}</span>
+              <span class="text-xs text-nx-text-muted">{t("mirrors.active_prefix")}: {group.current_url}</span>
             {/if}
           </div>
           <div class="p-3 grid grid-cols-1 gap-2">
@@ -177,24 +174,24 @@
                     onclick={() => testMirror(group.id, mirror.url)}
                     disabled={testing !== null}
                   >
-                    {testing === mirror.url ? "..." : mirror.latency_ms > 0 ? `${mirror.latency_ms}ms` : mirror.latency_ms === 0 ? (_v ? t('mirrors.timeout') : 'Timeout') : (_v ? t('mirrors.test') : 'Test')}
+                    {testing === mirror.url ? "..." : mirror.latency_ms > 0 ? `${mirror.latency_ms}ms` : mirror.latency_ms === 0 ? t('mirrors.timeout') : t('mirrors.test')}
                   </button>
                   {#if mirror.is_active}
-                    <span class="text-xs text-nx-success font-medium">{_v && t("mirrors.active")}</span>
+                    <span class="text-xs text-nx-success font-medium">{t("mirrors.active")}</span>
                   {:else if mirror.recommended}
-                    <span class="text-xs text-nx-accent font-medium">{_v && t("mirrors.recommended")}</span>
+                    <span class="text-xs text-nx-accent font-medium">{t("mirrors.recommended")}</span>
                     <button
                       class="px-2 py-1 text-xs font-medium bg-nx-accent text-white"
                       onclick={() => switchMirror(group.id, mirror.url)}
                     >
-                      {_v && t("mirrors.use")}
+                      {t("mirrors.use")}
                     </button>
                   {:else}
                     <button
                       class="px-2 py-1 text-xs border border-nx-border text-nx-text-secondary"
                       onclick={() => switchMirror(group.id, mirror.url)}
                     >
-                      {_v && t("mirrors.use")}
+                      {t("mirrors.use")}
                     </button>
                   {/if}
                 </div>
@@ -207,7 +204,7 @@
               onclick={() => testAllMirrors(group)}
               disabled={testingGroup !== null}
             >
-              {testingGroup === group.id ? "..." : _v && t("mirrors.test_all")}
+              {testingGroup === group.id ? "..." : t("mirrors.test_all")}
             </button>
           </div>
         </div>
