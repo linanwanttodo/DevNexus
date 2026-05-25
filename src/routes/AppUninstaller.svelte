@@ -1,19 +1,15 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
-  import { showToast } from "../lib/toast.js";
-  import { showConfirm } from "../lib/confirm.js";
-  import { getSearchQuery, onSearchChange, setSearchQuery } from "../lib/stores.js";
-  import { t, tFormat, getVersion, onLangChange } from "../lib/i18n.js";
-
-  let _v = $state(getVersion());
-  $effect(() => onLangChange(v => _v = v));
+  import { showToast } from "../lib/toast.svelte.js";
+  import { showConfirm } from "../lib/confirm.svelte.js";
+  import { getSearchQuery, setSearchQuery } from "../lib/stores.svelte.js";
+  import { t, tFormat } from "../lib/i18n.svelte.js";
 
   let apps = $state([]);
   let loading = $state(true);
   let error = $state(null);
-  let search = $state(getSearchQuery());
-  let uninstalling = $state(null); // name of app being uninstalled
+  let search = $derived(getSearchQuery());
 
   // Residue scan state
   let scanning = $state(null);       // app name being scanned
@@ -21,12 +17,6 @@
   let selectedResidues = $state({}); // { [appName]: { [path]: bool } }
   let cleaningResidues = $state(null); // app name being cleaned
   let scanErrors = $state({});       // { [appName]: string }
-
-  $effect(() => {
-    return onSearchChange((q) => {
-      search = q;
-    });
-  });
 
   async function loadApps() {
     try {
@@ -160,7 +150,7 @@
     const sel = selectedResidues[appName] || {};
     const paths = Object.keys(sel).filter(p => sel[p]);
     if (paths.length === 0) {
-      showToast(_v && t("uninstall_mgr.nothing_selected"));
+      showToast(t("uninstall_mgr.nothing_selected"));
       return;
     }
 
@@ -212,15 +202,15 @@
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between">
     <div>
-      <h1 class="text-xl font-semibold text-nx-text">{_v && t("uninstall_mgr.title")}</h1>
-      <p class="mt-1 text-xs text-nx-text-muted">{_v && t("uninstall_mgr.desc")}</p>
+      <h1 class="text-xl font-semibold text-nx-text">{t("uninstall_mgr.title")}</h1>
+      <p class="mt-1 text-xs text-nx-text-muted">{t("uninstall_mgr.desc")}</p>
     </div>
     <button
       class="flex items-center gap-2 border border-nx-border px-4 py-2 text-sm font-medium text-nx-text-secondary cursor-pointer"
       onclick={loadApps}
     >
       <span class="material-symbols-outlined text-lg">refresh</span>
-      {_v && t("common.refresh")}
+      {t("common.refresh")}
     </button>
   </div>
 
@@ -230,7 +220,7 @@
       <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-nx-text-muted">search</span>
       <input
         type="text"
-        placeholder={_v ? t("uninstall_mgr.search") : "Search apps..."}
+        placeholder={t("uninstall_mgr.search")}
         value={search}
         oninput={(e) => { search = e.target.value; setSearchQuery(e.target.value); }}
         class="w-full border border-nx-border bg-nx-surface px-10 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-accent"
@@ -249,7 +239,7 @@
       value={sourceFilter}
       onchange={(e) => sourceFilter = e.target.value}
     >
-      <option value="all">{_v && t("uninstall_mgr.all_sources")}</option>
+      <option value="all">{t("uninstall_mgr.all_sources")}</option>
       {#each sources as src}
         <option value={src}>{src}</option>
       {/each}
@@ -266,20 +256,20 @@
       <div class="p-8 text-center">
         <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
         <div class="mt-2 text-sm text-nx-danger">{error}</div>
-        <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white cursor-pointer" onclick={loadApps}>{_v && t("common.retry")}</button>
+        <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white cursor-pointer" onclick={loadApps}>{t("common.retry")}</button>
       </div>
     {:else if apps.length === 0}
       <div class="p-12 text-center">
         <span class="material-symbols-outlined text-nx-text-muted text-4xl">delete</span>
-        <div class="mt-4 text-sm text-nx-text-muted">{_v && t("uninstall_mgr.no_apps")}</div>
+        <div class="mt-4 text-sm text-nx-text-muted">{t("uninstall_mgr.no_apps")}</div>
       </div>
     {:else}
       <!-- Column headers -->
       <div class="hidden md:flex items-center border-b border-nx-border px-4 py-2 text-xs text-nx-text-muted font-medium">
-        <div class="flex-1 min-w-0">{_v && t("uninstall_mgr.app_name")}</div>
-        <div class="w-36 text-right">{_v && t("uninstall_mgr.version")}</div>
-        <div class="w-28 text-right">{_v && t("uninstall_mgr.source")}</div>
-        <div class="w-28 text-right">{_v && t("common.actions")}</div>
+        <div class="flex-1 min-w-0">{t("uninstall_mgr.app_name")}</div>
+        <div class="w-36 text-right">{t("uninstall_mgr.version")}</div>
+        <div class="w-28 text-right">{t("uninstall_mgr.source")}</div>
+        <div class="w-28 text-right">{t("common.actions")}</div>
       </div>
 
       {#each filtered as app (app.name + app.source)}
@@ -292,7 +282,7 @@
                 <span class="text-sm font-medium text-nx-text">{app.name}</span>
                 {#if residueScans[app.name]}
                   <span class="ml-2 inline-block rounded bg-nx-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-nx-warning">
-                    {_v && tFormat("uninstall_mgr.residues_found", { count: residueScans[app.name].total_items })}
+                    {tFormat("uninstall_mgr.residues_found", { count: residueScans[app.name].total_items })}
                   </span>
                 {/if}
               </div>
@@ -318,7 +308,7 @@
                     <span class="material-symbols-outlined text-xs inline animate-spin">progress_activity</span>
                   {:else}
                     <span class="material-symbols-outlined text-xs inline">search</span>
-                  {residueScans[app.name] ? (_v && t("uninstall_mgr.close_scan")) : (_v && t("uninstall_mgr.residue_scan"))}
+                  {residueScans[app.name] ? t("uninstall_mgr.close_scan") : t("uninstall_mgr.residue_scan")}
                   {/if}
                 </button>
                 <button
@@ -329,7 +319,7 @@
                   {#if uninstalling === app.name}
                     <span class="material-symbols-outlined text-xs inline animate-spin">progress_activity</span>
                   {:else}
-                    {_v && t("uninstall_mgr.uninstall")}
+                    {t("uninstall_mgr.uninstall")}
                   {/if}
                 </button>
               </div>
@@ -346,7 +336,7 @@
                   <div class="mb-3 flex items-center justify-between">
                     <div class="flex items-center gap-3 text-xs text-nx-text-muted">
                       <span>
-                    <span class="font-medium text-nx-text">{scan.total_items}</span> {_v && t("uninstall_mgr.residues_found", { count: scan.total_items }).replace(/\d+/, "")}
+                    <span class="font-medium text-nx-text">{scan.total_items}</span> {t("uninstall_mgr.residues_found", { count: scan.total_items }).replace(/\d+/, "")}
                       </span>
                       <span>
                         共 <span class="font-medium text-nx-text">{formatSize(scan.total_size)}</span>
@@ -363,7 +353,7 @@
                         {:else}
                           <span class="material-symbols-outlined text-xs">cleaning_services</span>
                         {/if}
-                        {_v && t("uninstall_mgr.clean_selected")}
+                        {t("uninstall_mgr.clean_selected")}
                       </button>
                       <button
                         class="flex items-center gap-1 rounded border border-nx-danger/30 bg-nx-danger/5 px-2.5 py-1 text-xs font-medium text-nx-danger cursor-pointer hover:bg-nx-danger/10 disabled:opacity-30"
@@ -371,7 +361,7 @@
                         disabled={uninstalling !== null || cleaningResidues !== null}
                       >
                         <span class="material-symbols-outlined text-xs">delete_forever</span>
-                        {_v && t("uninstall_mgr.force_uninstall")}
+                        {t("uninstall_mgr.force_uninstall")}
                       </button>
                     </div>
                   </div>
@@ -380,7 +370,7 @@
                   {#if getAllItems(scan).length === 0}
                     <div class="py-4 text-center text-sm text-nx-text-muted">
                       <span class="material-symbols-outlined text-lg inline">check_circle</span>
-                      {_v && t("uninstall_mgr.no_residues")}
+                      {t("uninstall_mgr.no_residues")}
                     </div>
                   {:else}
                     {#each [["directories", "📁 目录"], ["files", "📄 文件"], ["shortcuts", "🔗 快捷方式"], ["services", "⚙️ 服务"], ...(scan.registry_keys ? [["registry_keys", "🗄️ 注册表"]] : [])] as [key, label]}
@@ -432,7 +422,7 @@
                                   {item.size > 0 ? formatSize(item.size) : ""}
                                 </span>
                                   {#if !item.is_safe_to_delete}
-                                  <span class="shrink-0 rounded bg-nx-warning/10 px-1 py-0.5 text-[10px] text-nx-warning">{_v && t("uninstall_mgr.caution")}</span>
+                                  <span class="shrink-0 rounded bg-nx-warning/10 px-1 py-0.5 text-[10px] text-nx-warning">{t("uninstall_mgr.caution")}</span>
                                 {/if}
                               </div>
                             {/each}
@@ -451,7 +441,7 @@
       <!-- Footer count -->
       <div class="flex items-center justify-between border-t border-nx-border px-4 py-2">
         <span class="text-xs text-nx-text-muted">
-          {filtered.length} / {apps.length} {_v && t("uninstall_mgr.apps_count")}
+          {filtered.length} / {apps.length} {t("uninstall_mgr.apps_count")}
         </span>
       </div>
     {/if}
