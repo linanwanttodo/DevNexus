@@ -1,7 +1,13 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::Instant;
 use std::fs;
 use std::path::PathBuf;
+
+/// 镜像测速缓存：URL -> (延迟ms, 缓存时间)，TTL 60 秒
+static LATENCY_CACHE: std::sync::LazyLock<Mutex<HashMap<String, (i64, Instant)>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[cfg(test)]
 mod tests {
@@ -286,8 +292,17 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
 
 #[tauri::command]
 pub async fn test_mirror_latency(url: String) -> i64 {
+    {
+        if let Ok(cache) = LATENCY_CACHE.lock() {
+            if let Some(&(latency, cached_at)) = cache.get(&url) {
+                if cached_at.elapsed().as_secs() < 60 {
+                    return latency;
+                }
+            }
+        }
+    }
+
     let start = Instant::now();
-    // 必须构建带超时的 Client，不用 unwrap_or_default 否则无超时
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .user_agent("DevNexus/2.0")
@@ -297,16 +312,20 @@ pub async fn test_mirror_latency(url: String) -> i64 {
         Err(_) => return 0,
     };
 
-    // 很多镜像站不支持 HEAD（返回 403/405），改用 GET
-    // 只请求首字节即断开，避免下载整个页面
     let status_ok = |s: u16| matches!(s, 200..=299 | 401 | 403 | 405);
-    match client.get(&url).send().await {
+    let latency = match client.get(&url).send().await {
         Ok(resp) if status_ok(resp.status().as_u16()) => {
             let ms = start.elapsed().as_millis() as i64;
             if ms <= 0 { 1 } else { ms }
         }
         _ => 0,
+    };
+
+    if let Ok(mut cache) = LATENCY_CACHE.lock() {
+        cache.insert(url, (latency, Instant::now()));
     }
+
+    latency
 }
 
 #[tauri::command]
