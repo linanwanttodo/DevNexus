@@ -27,7 +27,7 @@
 
   let currentRoute = $state(getRoute());
 
-  $effect(() => {
+    $effect(() => {
     return onRouteChange((r) => {
       currentRoute = r;
     });
@@ -38,13 +38,15 @@
   }
 </script>
 
-<aside class="flex h-full w-64 flex-shrink-0 flex-col border-r border-nx-border bg-nx-bg">
+<aside class="flex h-full w-64 flex-shrink-0 flex-col border-r border-nx-border bg-nx-bg" aria-label="Main navigation">
   <nav class="flex-1 overflow-y-auto px-3 py-4">
     <ul class="space-y-px">
       {#each navItems as item}
         <li>
           <button
             type="button"
+            role="tab"
+            aria-current={currentRoute === item.route ? "page" : undefined}
             class="flex w-full items-center gap-3 px-3 py-2 text-sm cursor-pointer {currentRoute === item.route
               ? 'bg-nx-accent/15 text-nx-accent font-medium'
               : 'text-nx-text-secondary'}"
