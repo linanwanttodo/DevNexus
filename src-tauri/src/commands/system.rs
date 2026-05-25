@@ -1,5 +1,15 @@
 use serde::Serialize;
+use std::sync::OnceLock;
 use sysinfo::System;
+
+/// 缓存磁盘总量（GB），避免每次 get_resource_usage 都枚举磁盘
+fn cached_disk_total_gb() -> f64 {
+    static DISK_TOTAL: OnceLock<f64> = OnceLock::new();
+    *DISK_TOTAL.get_or_init(|| {
+        let disks = sysinfo::Disks::new_with_refreshed_list();
+        disks.iter().map(|d| d.total_space() as f64).sum::<f64>() / 1073741824.0
+    })
+}
 
 #[cfg(test)]
 mod tests {
@@ -119,7 +129,6 @@ pub fn get_system_info() -> SystemInfo {
 #[tauri::command]
 pub fn get_resource_usage() -> ResourceUsage {
     let mut sys = System::new_all();
-    // 仅刷新 CPU 和内存数据，避免 refresh_all() 刷新磁盘/网络等不必要信息
     sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::everything());
     sys.refresh_memory();
 
@@ -133,9 +142,12 @@ pub fn get_resource_usage() -> ResourceUsage {
 
     let cpu_usage = sys.global_cpu_usage();
 
+    // 磁盘总量缓存（首次调用时枚举，后续复用），避免每 5 秒枚举磁盘 I/O
+    let disk_total_gb = cached_disk_total_gb();
+    // 从缓存的总量反算使用量：disk_total - 所有磁盘剩余空间之和
     let disks = sysinfo::Disks::new_with_refreshed_list();
-    let disk_total_gb = disks.iter().map(|d| d.total_space() as f64).sum::<f64>() / 1073741824.0;
-    let disk_used_gb = disks.iter().map(|d| (d.total_space() - d.available_space()) as f64).sum::<f64>() / 1073741824.0;
+    let disk_used_gb = disk_total_gb
+        - disks.iter().map(|d| d.available_space() as f64).sum::<f64>() / 1073741824.0;
     let disk_percent = if disk_total_gb > 0.0 {
         (disk_used_gb / disk_total_gb * 100.0) as f32
     } else {
