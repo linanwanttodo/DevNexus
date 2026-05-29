@@ -94,11 +94,7 @@ pub fn scan_registry(app_name: &str) -> Vec<ResidueItem> {
                     if let Ok(display_name) = app_key.get_value::<String, _>("DisplayName") {
                         let dn_lower = display_name.to_lowercase();
                         if dn_lower.contains(&name_lower) {
-                            let full_path = format!(
-                                "HKLM\\{}\\{}",
-                                unsub.replace("SOFTWARE\\", "SOFTWARE\\"),
-                                subk
-                            );
+                            let full_path = format!("HKLM\\{unsub}\\{subk}");
                             results.push(ResidueItem {
                                 path: full_path,
                                 size: 0,

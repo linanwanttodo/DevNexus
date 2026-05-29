@@ -199,6 +199,7 @@ fn list_ports_impl() -> Result<Vec<PortEntry>, String> {
     Ok(entries)
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn extract_ss_process_name(info: &str) -> Option<String> {
     info.find("(\"").and_then(|start| {
         info[start + 2..]
@@ -207,6 +208,7 @@ fn extract_ss_process_name(info: &str) -> Option<String> {
     })
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn extract_ss_pid(info: &str) -> Option<u32> {
     info.find("pid=").and_then(|start| {
         let rest = &info[start + 4..];
