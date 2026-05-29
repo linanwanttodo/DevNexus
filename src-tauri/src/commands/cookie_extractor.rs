@@ -1,5 +1,3 @@
-#[cfg(target_os = "windows")]
-use base64::{engine::general_purpose, Engine as _};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
