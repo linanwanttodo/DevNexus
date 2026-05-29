@@ -11,6 +11,9 @@
   let error = $state(null);
   let search = $derived(getSearchQuery());
 
+  // Uninstall state
+  let uninstalling = $state(null);  // app name being uninstalled
+
   // Residue scan state
   let scanning = $state(null);       // app name being scanned
   let residueScans = $state({});     // { [appName]: ResidueScan }
@@ -119,14 +122,14 @@
 
   function getCategoryLabel(cat) {
     switch (cat) {
-      case "config": return "配置";
-      case "cache": return "缓存";
-      case "log": return "日志";
-      case "temp": return "临时文件";
-      case "data": return "数据";
-      case "shortcut": return "快捷方式";
-      case "service": return "系统服务";
-      case "registry": return "注册表";
+      case "config": return t("residue.type_config");
+      case "cache": return t("residue.type_cache");
+      case "log": return t("residue.type_log");
+      case "temp": return t("residue.type_temp");
+      case "data": return t("residue.type_data");
+      case "shortcut": return t("residue.type_shortcut");
+      case "service": return t("residue.type_service");
+      case "registry": return t("residue.type_registry");
       default: return cat;
     }
   }
@@ -222,7 +225,7 @@
         type="text"
         placeholder={t("uninstall_mgr.search")}
         value={search}
-        oninput={(e) => { search = e.target.value; setSearchQuery(e.target.value); }}
+        oninput={(e) => { search = e.currentTarget.value; setSearchQuery(e.currentTarget.value); }}
         class="w-full border border-nx-border bg-nx-surface px-10 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-accent"
       />
       {#if search}
@@ -237,7 +240,7 @@
     <select
       class="border border-nx-border bg-nx-surface px-3 py-2 text-sm text-nx-text outline-none focus:border-nx-accent"
       value={sourceFilter}
-      onchange={(e) => sourceFilter = e.target.value}
+      onchange={(e) => sourceFilter = e.currentTarget.value}
     >
       <option value="all">{t("uninstall_mgr.all_sources")}</option>
       {#each sources as src}
@@ -336,7 +339,7 @@
                   <div class="mb-3 flex items-center justify-between">
                     <div class="flex items-center gap-3 text-xs text-nx-text-muted">
                       <span>
-                    <span class="font-medium text-nx-text">{scan.total_items}</span> {t("uninstall_mgr.residues_found", { count: scan.total_items }).replace(/\d+/, "")}
+                    <span class="font-medium text-nx-text">{scan.total_items}</span> {t("uninstall_mgr.residues_found").replace(/\d+/, "")}
                       </span>
                       <span>
                         共 <span class="font-medium text-nx-text">{formatSize(scan.total_size)}</span>
@@ -373,7 +376,7 @@
                       {t("uninstall_mgr.no_residues")}
                     </div>
                   {:else}
-                    {#each [["directories", "📁 目录"], ["files", "📄 文件"], ["shortcuts", "🔗 快捷方式"], ["services", "⚙️ 服务"], ...(scan.registry_keys ? [["registry_keys", "🗄️ 注册表"]] : [])] as [key, label]}
+                    {#each ["directories", "files", "shortcuts", "services", ...(scan.registry_keys ? ["registry_keys"] : [])] as key}
                       {#if scan[key] && scan[key].length > 0}
                         <div class="mb-2">
                           <div class="mb-1 flex items-center gap-2">
@@ -390,7 +393,10 @@
                                 selectedResidues[app.name] = sel;
                               }}
                             >
-                              {label}
+                              <span class="material-symbols-outlined text-sm">
+                                {key === "directories" ? "folder" : key === "files" ? "description" : key === "shortcuts" ? "shortcut" : key === "services" ? "precision_manufacturing" : "database"}
+                              </span>
+                              {t("residue.category_" + (key === "registry_keys" ? "registry" : key))}
                               <span class="text-nx-text-muted">({scan[key].length})</span>
                             </button>
                           </div>
@@ -403,7 +409,7 @@
                                   disabled={!item.is_safe_to_delete}
                                   onchange={(e) => {
                                     const sel = { ...(selectedResidues[app.name] || {}) };
-                                    if (e.target.checked) {
+                                    if (e.currentTarget.checked) {
                                       sel[item.path] = true;
                                     } else {
                                       delete sel[item.path];

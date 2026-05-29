@@ -34,17 +34,27 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
 
+      - name: Code quality checks
+        run: |
+          cargo fmt --check
+          cargo clippy -- -D warnings
+
       - name: Setup pnpm
         run: npm install -g pnpm@9
 
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
+
+      - name: Type-check frontend
+        run: pnpm check
 
       - name: Build Tauri
         run: pnpm tauri build --bundles deb,appimage
@@ -83,14 +93,23 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+          components: rustfmt, clippy
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
 
+      - name: Code quality checks
+        run: |
+          cargo fmt --check --manifest-path src-tauri/Cargo.toml
+          cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
+
+      - name: Type-check frontend
+        run: pnpm check
 
       - name: Build Tauri
         run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg
@@ -118,14 +137,24 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
 
+      - name: Code quality checks
+        run: |
+          cargo fmt --check --manifest-path src-tauri/Cargo.toml
+          cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+
       - name: Install frontend deps
         run: npm install -g pnpm@9 && pnpm install --frozen-lockfile
+
+      - name: Type-check frontend
+        run: pnpm check
 
       - name: Build Tauri
         run: pnpm tauri build --bundles msi --bundles nsis

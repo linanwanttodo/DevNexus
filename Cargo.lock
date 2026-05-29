@@ -749,7 +749,7 @@ dependencies = [
 
 [[package]]
 name = "devnexus"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -762,9 +762,9 @@ dependencies = [
  "libc",
  "pbkdf2 0.12.2",
  "rand",
- "regex",
  "reqwest 0.12.28",
  "rusqlite",
+ "semver",
  "serde",
  "serde_json",
  "sha1",

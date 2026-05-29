@@ -200,34 +200,12 @@ impl TaskScheduler {
         s
     }
 
-    // ============ 持久化路径 ============
-
-    fn data_dir() -> std::path::PathBuf {
-        if cfg!(target_os = "macos") {
-            std::env::var("HOME")
-                .map(|h| std::path::PathBuf::from(h).join("Library/Application Support/devnexus"))
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        } else if cfg!(target_os = "windows") {
-            std::env::var("APPDATA")
-                .map(|h| std::path::PathBuf::from(h).join("devnexus"))
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        } else {
-            std::env::var("XDG_DATA_HOME")
-                .map(|h| std::path::PathBuf::from(h).join("devnexus"))
-                .or_else(|_| {
-                    std::env::var("HOME")
-                        .map(|h| std::path::PathBuf::from(h).join(".local/share/devnexus"))
-                })
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        }
-    }
-
     fn tasks_path() -> std::path::PathBuf {
-        Self::data_dir().join("tasks.json")
+        crate::utils::data_dir().join("tasks.json")
     }
 
     fn logs_dir() -> std::path::PathBuf {
-        Self::data_dir().join("task_logs")
+        crate::utils::data_dir().join("task_logs")
     }
 
     fn log_path(task_id: u32) -> std::path::PathBuf {
@@ -327,7 +305,7 @@ impl TaskScheduler {
                 for task in &due {
                     // 创建日志条目
                     let log_id = {
-                        let mut nid = next_log_id.lock().unwrap();
+                        let Ok(mut nid) = next_log_id.lock() else { continue };
                         let id = *nid;
                         *nid += 1;
                         id
@@ -346,7 +324,10 @@ impl TaskScheduler {
                         stderr: String::new(),
                         duration_ms: None,
                     };
-                    logs_arc.lock().unwrap().push(log);
+                    {
+                        let Ok(mut guard) = logs_arc.lock() else { continue };
+                        guard.push(log);
+                    }
 
                     // 执行任务
                     let timeout = task.timeout_secs;
@@ -373,7 +354,7 @@ impl TaskScheduler {
 
                     // 更新日志
                     {
-                        let mut all_logs = logs_arc.lock().unwrap();
+                        let Ok(mut all_logs) = logs_arc.lock() else { continue };
                         if let Some(existing) = all_logs.iter_mut().find(|l| l.id == log_id) {
                             let now = Local::now().naive_local();
                             let duration = (now - start_time).num_milliseconds().max(0) as u64;

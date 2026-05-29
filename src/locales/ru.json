@@ -325,6 +325,28 @@
     "app_name": "Имя приложения",
     "app_version": "Версия",
     "app_publisher": "Издатель",
-    "actions": "Действия"
+    "actions": "Действия",
+    "residues_found": "{count} остатков",
+    "no_residues": "Остаточные файлы не найдены",
+    "clean_selected": "Очистить выбранное",
+    "nothing_selected": "Ничего не выбрано",
+    "confirm_clean": "Очистить {count} выбранных элементов?",
+    "caution": "Осторожно",
+    "total_size": "Всего"
+  },
+  "residue": {
+    "category_directories": "Папки",
+    "category_files": "Файлы",
+    "category_shortcuts": "Ярлыки",
+    "category_services": "Службы",
+    "category_registry": "Реестр",
+    "type_config": "Конфигурация",
+    "type_cache": "Кэш",
+    "type_log": "Логи",
+    "type_temp": "Временные файлы",
+    "type_data": "Данные",
+    "type_shortcut": "Ярлык",
+    "type_service": "Служба",
+    "type_registry": "Реестр"
   }
 }

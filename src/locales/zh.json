@@ -354,6 +354,21 @@
     "confirm_clean": "确定要清理 {count} 个选中的残留项目吗？",
     "caution": "谨慎"
   },
+  "residue": {
+    "category_directories": "目录",
+    "category_files": "文件",
+    "category_shortcuts": "快捷方式",
+    "category_services": "服务",
+    "category_registry": "注册表",
+    "type_config": "配置",
+    "type_cache": "缓存",
+    "type_log": "日志",
+    "type_temp": "临时文件",
+    "type_data": "数据",
+    "type_shortcut": "快捷方式",
+    "type_service": "系统服务",
+    "type_registry": "注册表"
+  },
   "common": {
     "loading": "加载中...",
     "error": "错误",

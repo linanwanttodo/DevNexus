@@ -54,7 +54,10 @@ pub async fn check_for_updates_github() -> Result<UpdateInfo, String> {
     let latest_version = release.tag_name.trim_start_matches('v').to_string();
     let current = current_version.trim_start_matches('v').to_string();
 
-    let has_update = compare_versions(&latest_version, &current) > 0;
+    let has_update = match (semver::Version::parse(&latest_version), semver::Version::parse(&current)) {
+        (Ok(latest), Ok(current)) => latest > current,
+        _ => false,
+    };
 
     Ok(UpdateInfo {
         has_update,
@@ -66,72 +69,36 @@ pub async fn check_for_updates_github() -> Result<UpdateInfo, String> {
     })
 }
 
-/// Compare two semver strings. Returns >0 if a > b, <0 if a < b, 0 if equal.
-fn compare_versions(a: &str, b: &str) -> i32 {
-    let a_parts: Vec<&str> = a.split('.').collect();
-    let b_parts: Vec<&str> = b.split('.').collect();
 
-    let max_len = a_parts.len().max(b_parts.len());
-    for i in 0..max_len {
-        let a_num = a_parts.get(i).and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
-        let b_num = b_parts.get(i).and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
-        if a_num != b_num {
-            return a_num - b_num;
-        }
-    }
-    0
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_compare_versions_equal() {
-        assert_eq!(compare_versions("1.0.0", "1.0.0"), 0);
-        assert_eq!(compare_versions("2.5.10", "2.5.10"), 0);
-        assert_eq!(compare_versions("0.0.0", "0.0.0"), 0);
+    fn test_semver_comparison_newer() {
+        assert!(semver::Version::parse("1.0.1").unwrap() > semver::Version::parse("1.0.0").unwrap());
+        assert!(semver::Version::parse("2.0.0").unwrap() > semver::Version::parse("1.9.9").unwrap());
+        assert!(semver::Version::parse("1.1.0").unwrap() > semver::Version::parse("1.0.9").unwrap());
     }
 
     #[test]
-    fn test_compare_versions_newer() {
-        // a > b => positive
-        assert!(compare_versions("1.0.1", "1.0.0") > 0);
-        assert!(compare_versions("1.1.0", "1.0.9") > 0);
-        assert!(compare_versions("2.0.0", "1.9.9") > 0);
-        assert!(compare_versions("1.0.0", "0.9.9") > 0);
+    fn test_semver_comparison_older() {
+        assert!(semver::Version::parse("1.0.0").unwrap() < semver::Version::parse("1.0.1").unwrap());
+        assert!(semver::Version::parse("0.9.9").unwrap() < semver::Version::parse("1.0.0").unwrap());
     }
 
     #[test]
-    fn test_compare_versions_older() {
-        // a < b => negative
-        assert!(compare_versions("1.0.0", "1.0.1") < 0);
-        assert!(compare_versions("0.9.9", "1.0.0") < 0);
-        assert!(compare_versions("1.0.9", "1.1.0") < 0);
+    fn test_semver_comparison_equal() {
+        assert_eq!(semver::Version::parse("1.0.0").unwrap(), semver::Version::parse("1.0.0").unwrap());
+        assert_eq!(semver::Version::parse("2.5.10").unwrap(), semver::Version::parse("2.5.10").unwrap());
     }
 
     #[test]
-    fn test_compare_versions_different_length() {
-        assert_eq!(compare_versions("1.0", "1.0.0"), 0);
-        assert!(compare_versions("1.0.1", "1.0") > 0);
-        assert!(compare_versions("1.0", "1.0.1") < 0);
-    }
-
-    #[test]
-    fn test_compare_versions_with_v_prefix() {
-        // The function itself doesn't strip 'v', but it handles non-numeric parts as 0
-        assert!(compare_versions("1.0.0", "v1.0.0") > 0); // 'v' parses as 0
-        assert!(compare_versions("v1.0.0", "1.0.0") < 0);
-    }
-
-    #[test]
-    fn test_compare_versions_major_minor_patch() {
-        assert!(compare_versions("2.0.0", "1.0.0") > 0);
-        assert!(compare_versions("1.1.0", "1.0.0") > 0);
-        assert!(compare_versions("1.0.1", "1.0.0") > 0);
-        assert!(compare_versions("1.0.0", "2.0.0") < 0);
-        assert!(compare_versions("1.0.0", "1.1.0") < 0);
-        assert!(compare_versions("1.0.0", "1.0.1") < 0);
+    fn test_semver_strip_v_prefix() {
+        // semver itself rejects 'v' prefix, which is why check_for_updates_github strips it
+        assert!(semver::Version::parse("1.0.0").unwrap() == semver::Version::parse("1.0.0").unwrap());
+        assert!("v1.0.0".trim_start_matches('v') == "1.0.0");
     }
 
     #[test]

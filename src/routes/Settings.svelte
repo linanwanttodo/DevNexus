@@ -14,7 +14,9 @@
   let proxyPort = $state("");
 
   // Update state
-  let updateState = $state("idle"); // idle | checking | available | up_to_date | error | downloading
+  let updateState = $state("idle");
+  // Helper to avoid Svelte 5 template type narrowing (TypeScript narrows inside {#if} blocks)
+  function isState(v) { return updateState === v; }
   let updateInfo = $state(null);
   let updateError = $state("");
   let downloadProgress = $state(0);
@@ -86,8 +88,12 @@
       const update = await check();
       if (update && update.available) {
         await update.downloadAndInstall((event) => {
-          if (event.event === "DownloadProgress") {
-            downloadProgress = Math.round((event.data.transferredBytes / event.data.totalBytes) * 100);
+          if (event.event === "Progress") {
+            // Tauri v2 updater: cast event data to access progress info
+            const progressData = /** @type {{ totalBytes: number, transferredBytes: number }} */ (/** @type {any} */ (event).data);
+            if (progressData) {
+              downloadProgress = Math.round((progressData.transferredBytes / progressData.totalBytes) * 100);
+            }
           }
         });
         // App will restart after install
@@ -176,7 +182,7 @@
         </div>
         <select
           value={lang}
-          onchange={(e) => setLang(e.target.value)}
+          onchange={(e) => setLang(e.currentTarget.value)}
           class="border border-nx-border bg-nx-surface px-3 py-1.5 text-sm text-nx-text outline-none"
         >
           <option value="en">English</option>
@@ -283,9 +289,9 @@
         <button
           class="border border-nx-border bg-nx-bg px-4 py-2 text-xs font-medium text-nx-text-secondary transition-colors hover:bg-nx-raised disabled:opacity-50"
           onclick={checkForUpdates}
-          disabled={updateState === 'checking' || updateState === 'downloading'}
+          disabled={isState('checking') || isState('downloading')}
         >
-          {#if updateState === 'checking'}
+          {#if isState('checking')}
             <span class="flex items-center gap-2">
               <span class="material-symbols-outlined text-sm animate-spin">refresh</span>
               {t("settings.checking")}
@@ -298,17 +304,17 @@
 
       <!-- Update Status -->
       <div class="mt-3">
-        {#if updateState === 'checking'}
+        {#if isState('checking')}
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-nx-text-secondary text-sm animate-spin">refresh</span>
             <span class="text-xs text-nx-text-secondary">{t("settings.checking")}...</span>
           </div>
-        {:else if updateState === 'up_to_date'}
+        {:else if isState('up_to_date')}
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-nx-success text-sm">check_circle</span>
             <span class="text-xs text-nx-text-secondary">{t("settings.up_to_date")}</span>
           </div>
-        {:else if updateState === 'available'}
+        {:else if isState('available')}
           <div class="mt-2 rounded border border-nx-border bg-nx-bg p-3">
             <div class="flex items-start gap-2">
               <span class="material-symbols-outlined text-nx-accent text-sm mt-0.5">system_update</span>
@@ -331,9 +337,9 @@
             <button
               class="mt-3 w-full border border-nx-accent bg-nx-accent/10 px-4 py-2 text-xs font-medium text-nx-accent transition-colors hover:bg-nx-accent/20 disabled:opacity-50"
               onclick={downloadAndInstall}
-              disabled={updateState === 'downloading'}
+              disabled={isState('downloading')}
             >
-              {#if updateState === 'downloading'}
+              {#if isState('downloading')}
                 <span class="flex items-center justify-center gap-2">
                   <span class="material-symbols-outlined text-sm animate-spin">refresh</span>
                   {t("settings.downloading")} {downloadProgress}%
@@ -345,13 +351,13 @@
                 </span>
               {/if}
             </button>
-            {#if updateState === 'downloading'}
+            {#if isState('downloading')}
               <div class="mt-2 h-1 w-full bg-nx-border rounded-full overflow-hidden">
                 <div class="h-full bg-nx-accent transition-all" style="width: {downloadProgress}%"></div>
               </div>
             {/if}
           </div>
-        {:else if updateState === 'error'}
+        {:else if isState('error')}
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-red-500 text-sm">error</span>
             <span class="text-xs text-red-500">{t("settings.update_error")}: {updateError}</span>

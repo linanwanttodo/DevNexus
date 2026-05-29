@@ -1,3 +1,23 @@
+pub fn data_dir() -> std::path::PathBuf {
+    if cfg!(target_os = "macos") {
+        std::env::var("HOME")
+            .map(|h| std::path::PathBuf::from(h).join("Library/Application Support/devnexus"))
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+    } else if cfg!(target_os = "windows") {
+        std::env::var("APPDATA")
+            .map(|h| std::path::PathBuf::from(h).join("devnexus"))
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+    } else {
+        std::env::var("XDG_DATA_HOME")
+            .map(|h| std::path::PathBuf::from(h).join("devnexus"))
+            .or_else(|_| {
+                std::env::var("HOME")
+                    .map(|h| std::path::PathBuf::from(h).join(".local/share/devnexus"))
+            })
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+    }
+}
+
 pub fn user_home() -> String {
     if cfg!(target_os = "windows") {
         std::env::var("USERPROFILE").unwrap_or_default()
