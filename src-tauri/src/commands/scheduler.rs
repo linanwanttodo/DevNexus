@@ -508,7 +508,7 @@ async fn execute_shutdown() -> Result<(i32, String, String), String> {
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             let code = output.status.code().unwrap_or(-1);
-            return Ok((code, stdout, stderr));
+            Ok((code, stdout, stderr))
         }
 
         #[cfg(target_os = "linux")]
@@ -534,7 +534,7 @@ async fn execute_shutdown() -> Result<(i32, String, String), String> {
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             let code = output.status.code().unwrap_or(-1);
-            return Ok((code, stdout, stderr));
+            Ok((code, stdout, stderr))
         }
     })
     .await
