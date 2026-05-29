@@ -21,9 +21,24 @@ mod tests {
     #[test]
     fn test_port_entry_sort_key() {
         let entries = vec![
-            PortEntry { port: 443, protocol: "TCP".to_string(), process_name: "a".to_string(), pid: 1 },
-            PortEntry { port: 80, protocol: "TCP".to_string(), process_name: "b".to_string(), pid: 2 },
-            PortEntry { port: 8080, protocol: "TCP".to_string(), process_name: "c".to_string(), pid: 3 },
+            PortEntry {
+                port: 443,
+                protocol: "TCP".to_string(),
+                process_name: "a".to_string(),
+                pid: 1,
+            },
+            PortEntry {
+                port: 80,
+                protocol: "TCP".to_string(),
+                process_name: "b".to_string(),
+                pid: 2,
+            },
+            PortEntry {
+                port: 8080,
+                protocol: "TCP".to_string(),
+                process_name: "c".to_string(),
+                pid: 3,
+            },
         ];
         let mut sorted = entries.clone();
         sorted.sort_by_key(|e| e.port);
@@ -108,7 +123,11 @@ fn list_ports_impl() -> Result<Vec<PortEntry>, String> {
     let mut entries = Vec::new();
 
     // 判断是 lsof 还是 ss 输出
-    let is_ss = stdout.lines().next().map(|l| l.contains("State") || l.contains("Recv-Q")).unwrap_or(false);
+    let is_ss = stdout
+        .lines()
+        .next()
+        .map(|l| l.contains("State") || l.contains("Recv-Q"))
+        .unwrap_or(false);
 
     if is_ss {
         for line in stdout.lines().skip(1) {
@@ -118,17 +137,24 @@ fn list_ports_impl() -> Result<Vec<PortEntry>, String> {
             }
 
             let local_addr = parts[3];
-            let port = local_addr.rsplit(':').next().and_then(|p| p.parse::<u16>().ok());
+            let port = local_addr
+                .rsplit(':')
+                .next()
+                .and_then(|p| p.parse::<u16>().ok());
             let Some(port) = port else { continue };
 
             let process_info = parts[5..].join(" ");
-            let process_name = extract_ss_process_name(&process_info).unwrap_or_else(|| "unknown".to_string());
+            let process_name =
+                extract_ss_process_name(&process_info).unwrap_or_else(|| "unknown".to_string());
             let pid = extract_ss_pid(&process_info).unwrap_or(0);
             if pid == 0 {
                 continue;
             }
 
-            if !entries.iter().any(|e: &PortEntry| e.port == port && e.pid == pid) {
+            if !entries
+                .iter()
+                .any(|e: &PortEntry| e.port == port && e.pid == pid)
+            {
                 entries.push(PortEntry {
                     port,
                     protocol: "TCP".to_string(),
@@ -153,7 +179,10 @@ fn list_ports_impl() -> Result<Vec<PortEntry>, String> {
             let addr = parts[8];
             if let Some(port_str) = addr.split(':').next_back() {
                 if let Ok(port) = port_str.parse::<u16>() {
-                    if !entries.iter().any(|e: &PortEntry| e.port == port && e.pid == pid) {
+                    if !entries
+                        .iter()
+                        .any(|e: &PortEntry| e.port == port && e.pid == pid)
+                    {
                         entries.push(PortEntry {
                             port,
                             protocol: "TCP".to_string(),
@@ -172,14 +201,18 @@ fn list_ports_impl() -> Result<Vec<PortEntry>, String> {
 
 fn extract_ss_process_name(info: &str) -> Option<String> {
     info.find("(\"").and_then(|start| {
-        info[start + 2..].find('"').map(|end| info[start + 2..start + 2 + end].to_string())
+        info[start + 2..]
+            .find('"')
+            .map(|end| info[start + 2..start + 2 + end].to_string())
     })
 }
 
 fn extract_ss_pid(info: &str) -> Option<u32> {
     info.find("pid=").and_then(|start| {
         let rest = &info[start + 4..];
-        rest.find(',').or_else(|| rest.find(')')).and_then(|end| rest[..end].parse::<u32>().ok())
+        rest.find(',')
+            .or_else(|| rest.find(')'))
+            .and_then(|end| rest[..end].parse::<u32>().ok())
     })
 }
 
@@ -217,7 +250,10 @@ fn list_ports_impl() -> Result<Vec<PortEntry>, String> {
 
         if let Some(port_str) = local_addr.rsplit(':').next() {
             if let Ok(port) = port_str.parse::<u16>() {
-                if !entries.iter().any(|e: &PortEntry| e.port == port && e.pid == pid) {
+                if !entries
+                    .iter()
+                    .any(|e: &PortEntry| e.port == port && e.pid == pid)
+                {
                     entries.push(PortEntry {
                         port,
                         protocol: "TCP".to_string(),

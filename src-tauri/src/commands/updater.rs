@@ -54,7 +54,10 @@ pub async fn check_for_updates_github() -> Result<UpdateInfo, String> {
     let latest_version = release.tag_name.trim_start_matches('v').to_string();
     let current = current_version.trim_start_matches('v').to_string();
 
-    let has_update = match (semver::Version::parse(&latest_version), semver::Version::parse(&current)) {
+    let has_update = match (
+        semver::Version::parse(&latest_version),
+        semver::Version::parse(&current),
+    ) {
         (Ok(latest), Ok(current)) => latest > current,
         _ => false,
     };
@@ -69,35 +72,51 @@ pub async fn check_for_updates_github() -> Result<UpdateInfo, String> {
     })
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_semver_comparison_newer() {
-        assert!(semver::Version::parse("1.0.1").unwrap() > semver::Version::parse("1.0.0").unwrap());
-        assert!(semver::Version::parse("2.0.0").unwrap() > semver::Version::parse("1.9.9").unwrap());
-        assert!(semver::Version::parse("1.1.0").unwrap() > semver::Version::parse("1.0.9").unwrap());
+        assert!(
+            semver::Version::parse("1.0.1").unwrap() > semver::Version::parse("1.0.0").unwrap()
+        );
+        assert!(
+            semver::Version::parse("2.0.0").unwrap() > semver::Version::parse("1.9.9").unwrap()
+        );
+        assert!(
+            semver::Version::parse("1.1.0").unwrap() > semver::Version::parse("1.0.9").unwrap()
+        );
     }
 
     #[test]
     fn test_semver_comparison_older() {
-        assert!(semver::Version::parse("1.0.0").unwrap() < semver::Version::parse("1.0.1").unwrap());
-        assert!(semver::Version::parse("0.9.9").unwrap() < semver::Version::parse("1.0.0").unwrap());
+        assert!(
+            semver::Version::parse("1.0.0").unwrap() < semver::Version::parse("1.0.1").unwrap()
+        );
+        assert!(
+            semver::Version::parse("0.9.9").unwrap() < semver::Version::parse("1.0.0").unwrap()
+        );
     }
 
     #[test]
     fn test_semver_comparison_equal() {
-        assert_eq!(semver::Version::parse("1.0.0").unwrap(), semver::Version::parse("1.0.0").unwrap());
-        assert_eq!(semver::Version::parse("2.5.10").unwrap(), semver::Version::parse("2.5.10").unwrap());
+        assert_eq!(
+            semver::Version::parse("1.0.0").unwrap(),
+            semver::Version::parse("1.0.0").unwrap()
+        );
+        assert_eq!(
+            semver::Version::parse("2.5.10").unwrap(),
+            semver::Version::parse("2.5.10").unwrap()
+        );
     }
 
     #[test]
     fn test_semver_strip_v_prefix() {
         // semver itself rejects 'v' prefix, which is why check_for_updates_github strips it
-        assert!(semver::Version::parse("1.0.0").unwrap() == semver::Version::parse("1.0.0").unwrap());
+        assert!(
+            semver::Version::parse("1.0.0").unwrap() == semver::Version::parse("1.0.0").unwrap()
+        );
         assert!("v1.0.0".trim_start_matches('v') == "1.0.0");
     }
 
@@ -122,7 +141,10 @@ mod tests {
         let deserialized: UpdateInfo = serde_json::from_str(&json).unwrap();
         assert!(deserialized.has_update);
         assert_eq!(deserialized.latest_version, "v2.0.0");
-        assert_eq!(deserialized.release_notes.unwrap(), "Bug fixes and improvements");
+        assert_eq!(
+            deserialized.release_notes.unwrap(),
+            "Bug fixes and improvements"
+        );
     }
 
     #[test]

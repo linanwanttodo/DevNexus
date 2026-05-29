@@ -138,20 +138,16 @@ pub fn scan_for_residues(app_name: &str, package_name: &str) -> ResidueScan {
     #[cfg(target_os = "windows")]
     let total_size = total_size + registry_keys.iter().map(|r| r.size).sum::<u64>();
 
-    let total_items = directories.len()
-        + files.len()
-        + services.len()
-        + shortcuts.len()
-        + {
-            #[cfg(target_os = "windows")]
-            {
-                registry_keys.len()
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                0
-            }
-        };
+    let total_items = directories.len() + files.len() + services.len() + shortcuts.len() + {
+        #[cfg(target_os = "windows")]
+        {
+            registry_keys.len()
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            0
+        }
+    };
 
     ResidueScan {
         app_name: app_name.to_string(),
@@ -193,14 +189,23 @@ mod tests {
 
     #[test]
     fn test_category_for_path_cache() {
-        assert_eq!(category_for_path(Path::new("/home/user/.cache/app")), "cache");
+        assert_eq!(
+            category_for_path(Path::new("/home/user/.cache/app")),
+            "cache"
+        );
         assert_eq!(category_for_path(Path::new("/tmp/cache/xxx")), "cache");
     }
 
     #[test]
     fn test_category_for_path_config() {
-        assert_eq!(category_for_path(Path::new("/home/user/.config/app")), "config");
-        assert_eq!(category_for_path(Path::new("/home/user/.configstore/app")), "config");
+        assert_eq!(
+            category_for_path(Path::new("/home/user/.config/app")),
+            "config"
+        );
+        assert_eq!(
+            category_for_path(Path::new("/home/user/.configstore/app")),
+            "config"
+        );
     }
 
     #[test]
@@ -217,7 +222,10 @@ mod tests {
 
     #[test]
     fn test_category_for_path_default() {
-        assert_eq!(category_for_path(Path::new("/home/user/.local/share/app")), "data");
+        assert_eq!(
+            category_for_path(Path::new("/home/user/.local/share/app")),
+            "data"
+        );
     }
 
     #[test]

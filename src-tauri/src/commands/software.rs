@@ -19,7 +19,10 @@ pub struct Software {
 #[derive(Clone)]
 #[allow(dead_code)]
 enum VersionSource {
-    GitHubReleases { owner: &'static str, repo: &'static str },
+    GitHubReleases {
+        owner: &'static str,
+        repo: &'static str,
+    },
     NodeDist,
     GoDev,
 }
@@ -28,13 +31,28 @@ enum VersionSource {
 #[allow(dead_code)]
 fn get_version_source(name: &str) -> Option<VersionSource> {
     match name {
-        "Visual Studio Code" => Some(VersionSource::GitHubReleases { owner: "microsoft", repo: "vscode" }),
-        "Neovim" => Some(VersionSource::GitHubReleases { owner: "neovim", repo: "neovim" }),
+        "Visual Studio Code" => Some(VersionSource::GitHubReleases {
+            owner: "microsoft",
+            repo: "vscode",
+        }),
+        "Neovim" => Some(VersionSource::GitHubReleases {
+            owner: "neovim",
+            repo: "neovim",
+        }),
         "Node.js" => Some(VersionSource::NodeDist),
         "Go" => Some(VersionSource::GoDev),
-        "Python 3" => Some(VersionSource::GitHubReleases { owner: "python", repo: "cpython" }),
-        "Git" => Some(VersionSource::GitHubReleases { owner: "git", repo: "git" }),
-        "Rust" => Some(VersionSource::GitHubReleases { owner: "rust-lang", repo: "rust" }),
+        "Python 3" => Some(VersionSource::GitHubReleases {
+            owner: "python",
+            repo: "cpython",
+        }),
+        "Git" => Some(VersionSource::GitHubReleases {
+            owner: "git",
+            repo: "git",
+        }),
+        "Rust" => Some(VersionSource::GitHubReleases {
+            owner: "rust-lang",
+            repo: "rust",
+        }),
         _ => None,
     }
 }
@@ -44,38 +62,94 @@ fn get_download_url(name: &str, version: &str) -> Option<String> {
     match name {
         "Visual Studio Code" => Some(format!(
             "https://code.visualstudio.com/sha/download?build=stable&os={}",
-            if cfg!(target_os = "linux") { "linux-x64" }
-            else if cfg!(target_os = "macos") { if cfg!(target_arch = "aarch64") { "darwin-arm64" } else { "darwin-x64" } }
-            else { "win32-x64" }
+            if cfg!(target_os = "linux") {
+                "linux-x64"
+            } else if cfg!(target_os = "macos") {
+                if cfg!(target_arch = "aarch64") {
+                    "darwin-arm64"
+                } else {
+                    "darwin-x64"
+                }
+            } else {
+                "win32-x64"
+            }
         )),
         "Node.js" => {
-            let os = if cfg!(target_os = "linux") { "linux" } else if cfg!(target_os = "macos") { "darwin" } else { "win" };
-            let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
-            let ext = if cfg!(target_os = "windows") { "zip" } else if cfg!(target_os = "macos") { "tar.gz" } else { "tar.xz" };
-            Some(format!("https://nodejs.org/dist/v{version}/node-v{version}-{os}-{arch}.{ext}"))
+            let os = if cfg!(target_os = "linux") {
+                "linux"
+            } else if cfg!(target_os = "macos") {
+                "darwin"
+            } else {
+                "win"
+            };
+            let arch = if cfg!(target_arch = "aarch64") {
+                "arm64"
+            } else {
+                "x64"
+            };
+            let ext = if cfg!(target_os = "windows") {
+                "zip"
+            } else if cfg!(target_os = "macos") {
+                "tar.gz"
+            } else {
+                "tar.xz"
+            };
+            Some(format!(
+                "https://nodejs.org/dist/v{version}/node-v{version}-{os}-{arch}.{ext}"
+            ))
         }
         "Go" => {
-            let os = if cfg!(target_os = "linux") { "linux" } else if cfg!(target_os = "macos") { "darwin" } else { "windows" };
-            let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "amd64" };
-            let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
+            let os = if cfg!(target_os = "linux") {
+                "linux"
+            } else if cfg!(target_os = "macos") {
+                "darwin"
+            } else {
+                "windows"
+            };
+            let arch = if cfg!(target_arch = "aarch64") {
+                "arm64"
+            } else {
+                "amd64"
+            };
+            let ext = if cfg!(target_os = "windows") {
+                "zip"
+            } else {
+                "tar.gz"
+            };
             Some(format!("https://go.dev/dl/go{version}.{os}-{arch}.{ext}"))
         }
         "Neovim" => {
             let os = if cfg!(target_os = "linux") {
-                if cfg!(target_arch = "aarch64") { "linux-arm64" } else { "linux64" }
+                if cfg!(target_arch = "aarch64") {
+                    "linux-arm64"
+                } else {
+                    "linux64"
+                }
             } else if cfg!(target_os = "macos") {
-                if cfg!(target_arch = "aarch64") { "macos-arm64" } else { "macos-x86_64" }
+                if cfg!(target_arch = "aarch64") {
+                    "macos-arm64"
+                } else {
+                    "macos-x86_64"
+                }
             } else {
                 "win64"
             };
-            let ext = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
-            Some(format!("https://github.com/neovim/neovim/releases/download/stable/nvim-{os}.{ext}"))
+            let ext = if cfg!(target_os = "windows") {
+                "zip"
+            } else {
+                "tar.gz"
+            };
+            Some(format!(
+                "https://github.com/neovim/neovim/releases/download/stable/nvim-{os}.{ext}"
+            ))
         }
         "Git" => {
             if cfg!(target_os = "windows") {
                 Some(format!("https://github.com/git-for-windows/git/releases/download/v{version}.windows.1/Git-{version}-64-bit.exe"))
             } else {
-                Some(format!("https://github.com/git/git/archive/refs/tags/v{version}.tar.gz"))
+                Some(format!(
+                    "https://github.com/git/git/archive/refs/tags/v{version}.tar.gz"
+                ))
             }
         }
         _ => None,
@@ -85,7 +159,11 @@ fn get_download_url(name: &str, version: &str) -> Option<String> {
 /// GUI 应用名单：这些程序不支持 --version，执行会直接启动 GUI，跳过版本检测
 /// 注意: code --version 和 docker --version 可正常返回版本信息，不在此列
 const GUI_APPS: &[&str] = &[
-    "postman", "dbeaver", "dbeaver-ce", "mysql-workbench", "gparted",
+    "postman",
+    "dbeaver",
+    "dbeaver-ce",
+    "mysql-workbench",
+    "gparted",
 ];
 
 /// 安全获取软件版本：对 GUI 应用跳过，避免启动它们
@@ -118,10 +196,6 @@ async fn safe_get_version(cmd: &str) -> String {
         _ => "timeout".to_string(),
     }
 }
-
-
-
-
 
 struct SoftwareDef {
     name: &'static str,
@@ -176,61 +250,236 @@ fn build_software_defs() -> Vec<SoftwareDef> {
     let mut defs = Vec::with_capacity(24);
 
     // ============ IDEs & Editors ============
-    defs.push(SoftwareDef { name: "Visual Studio Code", cmd: "code", category: "ide", package_name: "code" });
-    defs.push(SoftwareDef { name: "Neovim", cmd: "nvim", category: "ide", package_name: "neovim" });
-    defs.push(SoftwareDef { name: "Vim", cmd: "vim", category: "ide", package_name: "vim" });
-    defs.push(SoftwareDef { name: "Sublime Text", cmd: "subl", category: "ide", package_name: "sublime-text" });
-    defs.push(SoftwareDef { name: "Zed", cmd: "zed", category: "ide", package_name: "zed" });
+    defs.push(SoftwareDef {
+        name: "Visual Studio Code",
+        cmd: "code",
+        category: "ide",
+        package_name: "code",
+    });
+    defs.push(SoftwareDef {
+        name: "Neovim",
+        cmd: "nvim",
+        category: "ide",
+        package_name: "neovim",
+    });
+    defs.push(SoftwareDef {
+        name: "Vim",
+        cmd: "vim",
+        category: "ide",
+        package_name: "vim",
+    });
+    defs.push(SoftwareDef {
+        name: "Sublime Text",
+        cmd: "subl",
+        category: "ide",
+        package_name: "sublime-text",
+    });
+    defs.push(SoftwareDef {
+        name: "Zed",
+        cmd: "zed",
+        category: "ide",
+        package_name: "zed",
+    });
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
-        defs.push(SoftwareDef { name: "Postman", cmd: "postman", category: "ide", package_name: "postman" });
-        defs.push(SoftwareDef { name: "IntelliJ IDEA Community", cmd: "idea", category: "ide", package_name: "intellij-idea-community" });
+        defs.push(SoftwareDef {
+            name: "Postman",
+            cmd: "postman",
+            category: "ide",
+            package_name: "postman",
+        });
+        defs.push(SoftwareDef {
+            name: "IntelliJ IDEA Community",
+            cmd: "idea",
+            category: "ide",
+            package_name: "intellij-idea-community",
+        });
     }
 
     // ============ Databases ============
-    defs.push(SoftwareDef { name: "DBeaver Community", cmd: "dbeaver", category: "database", package_name: "dbeaver-ce" });
-    defs.push(SoftwareDef { name: "SQLite", cmd: "sqlite3", category: "database", package_name: "sqlite" });
-    defs.push(SoftwareDef { name: "PostgreSQL Client", cmd: "psql", category: "database", package_name: "postgresql-client" });
-    defs.push(SoftwareDef { name: "Redis", cmd: "redis-cli", category: "database", package_name: "redis" });
+    defs.push(SoftwareDef {
+        name: "DBeaver Community",
+        cmd: "dbeaver",
+        category: "database",
+        package_name: "dbeaver-ce",
+    });
+    defs.push(SoftwareDef {
+        name: "SQLite",
+        cmd: "sqlite3",
+        category: "database",
+        package_name: "sqlite",
+    });
+    defs.push(SoftwareDef {
+        name: "PostgreSQL Client",
+        cmd: "psql",
+        category: "database",
+        package_name: "postgresql-client",
+    });
+    defs.push(SoftwareDef {
+        name: "Redis",
+        cmd: "redis-cli",
+        category: "database",
+        package_name: "redis",
+    });
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
-        defs.push(SoftwareDef { name: "MySQL Workbench", cmd: "mysql-workbench", category: "database", package_name: "mysql-workbench" });
-        defs.push(SoftwareDef { name: "TablePlus", cmd: "tableplus", category: "database", package_name: "tableplus" });
+        defs.push(SoftwareDef {
+            name: "MySQL Workbench",
+            cmd: "mysql-workbench",
+            category: "database",
+            package_name: "mysql-workbench",
+        });
+        defs.push(SoftwareDef {
+            name: "TablePlus",
+            cmd: "tableplus",
+            category: "database",
+            package_name: "tableplus",
+        });
     }
 
     // ============ CLI Tools ============
-    defs.push(SoftwareDef { name: "Git", cmd: "git", category: "cli", package_name: "git" });
-    defs.push(SoftwareDef { name: "curl", cmd: "curl", category: "cli", package_name: "curl" });
-    defs.push(SoftwareDef { name: "wget", cmd: "wget", category: "cli", package_name: "wget" });
-    defs.push(SoftwareDef { name: "OpenSSH Client", cmd: "ssh", category: "cli", package_name: "openssh-client" });
-    defs.push(SoftwareDef { name: "GCC", cmd: "gcc", category: "cli", package_name: "gcc" });
-    defs.push(SoftwareDef { name: "Clang", cmd: "clang", category: "cli", package_name: "clang" });
-    defs.push(SoftwareDef { name: "CMake", cmd: "cmake", category: "cli", package_name: "cmake" });
-    defs.push(SoftwareDef { name: "htop", cmd: "htop", category: "cli", package_name: "htop" });
-    defs.push(SoftwareDef { name: "tmux", cmd: "tmux", category: "cli", package_name: "tmux" });
-    defs.push(SoftwareDef { name: "ripgrep", cmd: "rg", category: "cli", package_name: "ripgrep" });
-    defs.push(SoftwareDef { name: "fd", cmd: "fd", category: "cli", package_name: "fd-find" });
-    defs.push(SoftwareDef { name: "jq", cmd: "jq", category: "cli", package_name: "jq" });
-    defs.push(SoftwareDef { name: "fzf", cmd: "fzf", category: "cli", package_name: "fzf" });
+    defs.push(SoftwareDef {
+        name: "Git",
+        cmd: "git",
+        category: "cli",
+        package_name: "git",
+    });
+    defs.push(SoftwareDef {
+        name: "curl",
+        cmd: "curl",
+        category: "cli",
+        package_name: "curl",
+    });
+    defs.push(SoftwareDef {
+        name: "wget",
+        cmd: "wget",
+        category: "cli",
+        package_name: "wget",
+    });
+    defs.push(SoftwareDef {
+        name: "OpenSSH Client",
+        cmd: "ssh",
+        category: "cli",
+        package_name: "openssh-client",
+    });
+    defs.push(SoftwareDef {
+        name: "GCC",
+        cmd: "gcc",
+        category: "cli",
+        package_name: "gcc",
+    });
+    defs.push(SoftwareDef {
+        name: "Clang",
+        cmd: "clang",
+        category: "cli",
+        package_name: "clang",
+    });
+    defs.push(SoftwareDef {
+        name: "CMake",
+        cmd: "cmake",
+        category: "cli",
+        package_name: "cmake",
+    });
+    defs.push(SoftwareDef {
+        name: "htop",
+        cmd: "htop",
+        category: "cli",
+        package_name: "htop",
+    });
+    defs.push(SoftwareDef {
+        name: "tmux",
+        cmd: "tmux",
+        category: "cli",
+        package_name: "tmux",
+    });
+    defs.push(SoftwareDef {
+        name: "ripgrep",
+        cmd: "rg",
+        category: "cli",
+        package_name: "ripgrep",
+    });
+    defs.push(SoftwareDef {
+        name: "fd",
+        cmd: "fd",
+        category: "cli",
+        package_name: "fd-find",
+    });
+    defs.push(SoftwareDef {
+        name: "jq",
+        cmd: "jq",
+        category: "cli",
+        package_name: "jq",
+    });
+    defs.push(SoftwareDef {
+        name: "fzf",
+        cmd: "fzf",
+        category: "cli",
+        package_name: "fzf",
+    });
     #[cfg(target_os = "linux")]
     {
-        defs.push(SoftwareDef { name: "GParted", cmd: "gparted", category: "cli", package_name: "gparted" });
+        defs.push(SoftwareDef {
+            name: "GParted",
+            cmd: "gparted",
+            category: "cli",
+            package_name: "gparted",
+        });
     }
 
     // ============ Runtimes & Package Managers ============
-    defs.push(SoftwareDef { name: "Node.js", cmd: "node", category: "runtime", package_name: "nodejs" });
-    defs.push(SoftwareDef { name: "Python 3", cmd: "python3", category: "runtime", package_name: "python3" });
-    defs.push(SoftwareDef { name: "Go", cmd: "go", category: "runtime", package_name: "golang" });
-    defs.push(SoftwareDef { name: "Rust", cmd: "rustc", category: "runtime", package_name: "rust" });
-    defs.push(SoftwareDef { name: "Ruby", cmd: "ruby", category: "runtime", package_name: "ruby" });
-    defs.push(SoftwareDef { name: "Java (JDK)", cmd: "java", category: "runtime", package_name: "openjdk-17-jdk" });
+    defs.push(SoftwareDef {
+        name: "Node.js",
+        cmd: "node",
+        category: "runtime",
+        package_name: "nodejs",
+    });
+    defs.push(SoftwareDef {
+        name: "Python 3",
+        cmd: "python3",
+        category: "runtime",
+        package_name: "python3",
+    });
+    defs.push(SoftwareDef {
+        name: "Go",
+        cmd: "go",
+        category: "runtime",
+        package_name: "golang",
+    });
+    defs.push(SoftwareDef {
+        name: "Rust",
+        cmd: "rustc",
+        category: "runtime",
+        package_name: "rust",
+    });
+    defs.push(SoftwareDef {
+        name: "Ruby",
+        cmd: "ruby",
+        category: "runtime",
+        package_name: "ruby",
+    });
+    defs.push(SoftwareDef {
+        name: "Java (JDK)",
+        cmd: "java",
+        category: "runtime",
+        package_name: "openjdk-17-jdk",
+    });
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
-        defs.push(SoftwareDef { name: "Docker Desktop", cmd: "docker", category: "runtime", package_name: "docker-desktop" });
+        defs.push(SoftwareDef {
+            name: "Docker Desktop",
+            cmd: "docker",
+            category: "runtime",
+            package_name: "docker-desktop",
+        });
     }
     #[cfg(target_os = "linux")]
     {
-        defs.push(SoftwareDef { name: "Docker Engine", cmd: "docker", category: "runtime", package_name: "docker-ce" });
+        defs.push(SoftwareDef {
+            name: "Docker Engine",
+            cmd: "docker",
+            category: "runtime",
+            package_name: "docker-ce",
+        });
     }
 
     defs
@@ -243,7 +492,7 @@ struct PackageManager {
     name: &'static str,
     binary: &'static str,
     needs_sudo: bool,
-    install_args: &'static [&'static str],  // 不含包名
+    install_args: &'static [&'static str],   // 不含包名
     uninstall_args: &'static [&'static str], // 不含包名
 }
 
@@ -258,11 +507,14 @@ pub struct PackageManagerInfo {
 #[tauri::command]
 pub fn list_package_managers() -> Vec<PackageManagerInfo> {
     let managers = detect_package_managers();
-    managers.into_iter().map(|pm| PackageManagerInfo {
-        name: pm.name.to_string(),
-        binary: pm.binary.to_string(),
-        needs_sudo: pm.needs_sudo,
-    }).collect()
+    managers
+        .into_iter()
+        .map(|pm| PackageManagerInfo {
+            name: pm.name.to_string(),
+            binary: pm.binary.to_string(),
+            needs_sudo: pm.needs_sudo,
+        })
+        .collect()
 }
 
 /// 检测系统可用的包管理器（按优先级排列）
@@ -603,13 +855,16 @@ pub async fn install_software(package_name: String) -> Result<String, String> {
         return Err("No supported package manager found on this system.\n\nTo use the Software Center, please install a package manager:\n- macOS: Install Homebrew -> https://brew.sh/\n- Linux: Your distro likely has apt/dnf/pacman/zypper/apk pre-installed\n- Windows: winget comes built-in with Win 11 / Win 10 1809+. Chocolatey: https://chocolatey.org/install".to_string());
     }
 
-    let managers_clone: Vec<_> = managers.iter().map(|pm| PackageManager {
-        name: pm.name,
-        binary: pm.binary,
-        needs_sudo: pm.needs_sudo,
-        install_args: pm.install_args,
-        uninstall_args: pm.uninstall_args,
-    }).collect();
+    let managers_clone: Vec<_> = managers
+        .iter()
+        .map(|pm| PackageManager {
+            name: pm.name,
+            binary: pm.binary,
+            needs_sudo: pm.needs_sudo,
+            install_args: pm.install_args,
+            uninstall_args: pm.uninstall_args,
+        })
+        .collect();
     let pkg_name = package_name.clone();
 
     tokio::task::spawn_blocking(move || {
@@ -652,269 +907,279 @@ pub async fn install_software(package_name: String) -> Result<String, String> {
 ///
 /// 对已知的开发者工具返回精确的路径，否则基于通用模式生成候选路径。
 fn get_cleanup_paths(app_name: &str, package_name: &str) -> Vec<PathBuf> {
-let home = std::env::var("HOME").unwrap_or_default();
-let mut paths: Vec<PathBuf> = Vec::new();
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut paths: Vec<PathBuf> = Vec::new();
 
-// ——— 已知工具的精确路径映射（不区分大小写匹配） ———
-let app_name_lower = app_name.to_lowercase();
-let pkg_lower = package_name.to_lowercase();
+    // ——— 已知工具的精确路径映射（不区分大小写匹配） ———
+    let app_name_lower = app_name.to_lowercase();
+    let pkg_lower = package_name.to_lowercase();
 
-match app_name_lower.as_str() {
-    // Node.js
-    "node.js" | "nodejs" => {
-        paths.push(PathBuf::from(&home).join(".npm"));
-        paths.push(PathBuf::from(&home).join(".node-gyp"));
-        #[cfg(unix)]
-        {
-            paths.push(PathBuf::from(&home).join(".config/configstore"));
-            paths.push(PathBuf::from("/usr/local/lib/node_modules"));
-        }
-        #[cfg(target_os = "macos")]
-        {
-            paths.push(PathBuf::from(&home).join("Library/Preferences/node"));
-            paths.push(PathBuf::from(&home).join("Library/Caches/node"));
-        }
-        #[cfg(windows)]
-        {
-            if let Ok(appdata) = std::env::var("APPDATA") {
-                paths.push(PathBuf::from(appdata.clone()).join("npm"));
-                paths.push(PathBuf::from(appdata).join("npm-cache"));
+    match app_name_lower.as_str() {
+        // Node.js
+        "node.js" | "nodejs" => {
+            paths.push(PathBuf::from(&home).join(".npm"));
+            paths.push(PathBuf::from(&home).join(".node-gyp"));
+            #[cfg(unix)]
+            {
+                paths.push(PathBuf::from(&home).join(".config/configstore"));
+                paths.push(PathBuf::from("/usr/local/lib/node_modules"));
+            }
+            #[cfg(target_os = "macos")]
+            {
+                paths.push(PathBuf::from(&home).join("Library/Preferences/node"));
+                paths.push(PathBuf::from(&home).join("Library/Caches/node"));
+            }
+            #[cfg(windows)]
+            {
+                if let Ok(appdata) = std::env::var("APPDATA") {
+                    paths.push(PathBuf::from(appdata.clone()).join("npm"));
+                    paths.push(PathBuf::from(appdata).join("npm-cache"));
+                }
             }
         }
-    }
-    // Python
-    "python 3" | "python3" | "python" => {
-        #[cfg(unix)]
-        {
-            paths.push(PathBuf::from(&home).join(".cache/pip"));
-            paths.push(PathBuf::from(&home).join(".config/pip"));
-            paths.push(PathBuf::from(&home).join(".python_history"));
-        }
-        #[cfg(target_os = "macos")]
-        {
-            paths.push(PathBuf::from(&home).join("Library/Caches/pip"));
-            paths.push(PathBuf::from(&home).join("Library/Python"));
-        }
-        #[cfg(windows)]
-        {
-            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-                paths.push(PathBuf::from(localappdata.clone()).join("pip"));
-                paths.push(PathBuf::from(localappdata).join("Python"));
+        // Python
+        "python 3" | "python3" | "python" => {
+            #[cfg(unix)]
+            {
+                paths.push(PathBuf::from(&home).join(".cache/pip"));
+                paths.push(PathBuf::from(&home).join(".config/pip"));
+                paths.push(PathBuf::from(&home).join(".python_history"));
+            }
+            #[cfg(target_os = "macos")]
+            {
+                paths.push(PathBuf::from(&home).join("Library/Caches/pip"));
+                paths.push(PathBuf::from(&home).join("Library/Python"));
+            }
+            #[cfg(windows)]
+            {
+                if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                    paths.push(PathBuf::from(localappdata.clone()).join("pip"));
+                    paths.push(PathBuf::from(localappdata).join("Python"));
+                }
             }
         }
-    }
-    // Rust
-    "rust" | "rustc" => {
-        #[cfg(unix)]
-        {
-            paths.push(PathBuf::from(&home).join(".rustup"));
-            paths.push(PathBuf::from(&home).join(".cargo"));
-        }
-        #[cfg(windows)]
-        {
-            if let Ok(userprofile) = std::env::var("USERPROFILE") {
-                paths.push(PathBuf::from(userprofile.clone()).join(".rustup"));
-                paths.push(PathBuf::from(userprofile).join(".cargo"));
+        // Rust
+        "rust" | "rustc" => {
+            #[cfg(unix)]
+            {
+                paths.push(PathBuf::from(&home).join(".rustup"));
+                paths.push(PathBuf::from(&home).join(".cargo"));
+            }
+            #[cfg(windows)]
+            {
+                if let Ok(userprofile) = std::env::var("USERPROFILE") {
+                    paths.push(PathBuf::from(userprofile.clone()).join(".rustup"));
+                    paths.push(PathBuf::from(userprofile).join(".cargo"));
+                }
             }
         }
-    }
-    // Go
-    "go" | "golang" => {
-        #[cfg(unix)]
-        {
-            paths.push(PathBuf::from(&home).join("go"));
-            paths.push(PathBuf::from(&home).join(".cache/go"));
-        }
-        #[cfg(windows)]
-        {
-            if let Ok(userprofile) = std::env::var("USERPROFILE") {
-                paths.push(PathBuf::from(userprofile).join("go"));
+        // Go
+        "go" | "golang" => {
+            #[cfg(unix)]
+            {
+                paths.push(PathBuf::from(&home).join("go"));
+                paths.push(PathBuf::from(&home).join(".cache/go"));
+            }
+            #[cfg(windows)]
+            {
+                if let Ok(userprofile) = std::env::var("USERPROFILE") {
+                    paths.push(PathBuf::from(userprofile).join("go"));
+                }
             }
         }
-    }
-    // VS Code
-    "visual studio code" | "code" => {
-        #[cfg(target_os = "linux")]
-        {
-            paths.push(PathBuf::from(&home).join(".config/Code"));
-            paths.push(PathBuf::from(&home).join(".vscode"));
-        }
-        #[cfg(target_os = "macos")]
-        {
-            paths.push(PathBuf::from(&home).join("Library/Application Support/Code"));
-            paths.push(PathBuf::from(&home).join(".vscode"));
-        }
-        #[cfg(windows)]
-        {
-            if let Ok(appdata) = std::env::var("APPDATA") {
-                paths.push(PathBuf::from(appdata).join("Code"));
+        // VS Code
+        "visual studio code" | "code" => {
+            #[cfg(target_os = "linux")]
+            {
+                paths.push(PathBuf::from(&home).join(".config/Code"));
+                paths.push(PathBuf::from(&home).join(".vscode"));
             }
-            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-                paths.push(PathBuf::from(localappdata).join("Programs/Microsoft VS Code"));
+            #[cfg(target_os = "macos")]
+            {
+                paths.push(PathBuf::from(&home).join("Library/Application Support/Code"));
+                paths.push(PathBuf::from(&home).join(".vscode"));
             }
-        }
-    }
-    // Firefox
-    "firefox" => {
-        #[cfg(target_os = "linux")]
-        {
-            paths.push(PathBuf::from(&home).join(".mozilla/firefox"));
-        }
-        #[cfg(target_os = "macos")]
-        {
-            paths.push(PathBuf::from(&home).join("Library/Application Support/Firefox"));
-            paths.push(PathBuf::from(&home).join("Library/Caches/Firefox"));
-        }
-        #[cfg(windows)]
-        {
-            if let Ok(appdata) = std::env::var("APPDATA") {
-                paths.push(PathBuf::from(appdata).join("Mozilla/Firefox"));
-            }
-            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-                paths.push(PathBuf::from(localappdata).join("Mozilla/Firefox"));
+            #[cfg(windows)]
+            {
+                if let Ok(appdata) = std::env::var("APPDATA") {
+                    paths.push(PathBuf::from(appdata).join("Code"));
+                }
+                if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                    paths.push(PathBuf::from(localappdata).join("Programs/Microsoft VS Code"));
+                }
             }
         }
-    }
-    // Chrome / Chromium
-    "chrome" | "google chrome" | "chromium" | "chromium-browser" => {
-        #[cfg(target_os = "linux")]
-        {
-            paths.push(PathBuf::from(&home).join(".config/google-chrome"));
-            paths.push(PathBuf::from(&home).join(".cache/google-chrome"));
-            paths.push(PathBuf::from(&home).join(".config/chromium"));
-            paths.push(PathBuf::from(&home).join(".cache/chromium"));
-        }
-        #[cfg(target_os = "macos")]
-        {
-            paths.push(PathBuf::from(&home).join("Library/Application Support/Google/Chrome"));
-            paths.push(PathBuf::from(&home).join("Library/Caches/Google/Chrome"));
-        }
-        #[cfg(windows)]
-        {
-            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-                paths.push(PathBuf::from(localappdata.clone()).join("Google/Chrome"));
-                paths.push(PathBuf::from(localappdata).join("Google/Chrome/User Data"));
+        // Firefox
+        "firefox" => {
+            #[cfg(target_os = "linux")]
+            {
+                paths.push(PathBuf::from(&home).join(".mozilla/firefox"));
+            }
+            #[cfg(target_os = "macos")]
+            {
+                paths.push(PathBuf::from(&home).join("Library/Application Support/Firefox"));
+                paths.push(PathBuf::from(&home).join("Library/Caches/Firefox"));
+            }
+            #[cfg(windows)]
+            {
+                if let Ok(appdata) = std::env::var("APPDATA") {
+                    paths.push(PathBuf::from(appdata).join("Mozilla/Firefox"));
+                }
+                if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                    paths.push(PathBuf::from(localappdata).join("Mozilla/Firefox"));
+                }
             }
         }
-    }
-    // Docker
-    "docker" | "docker desktop" | "docker engine" => {
-        #[cfg(target_os = "linux")]
-        {
-            paths.push(PathBuf::from(&home).join(".docker"));
-            paths.push(PathBuf::from("/var/lib/docker"));
-        }
-        #[cfg(target_os = "macos")]
-        {
-            paths.push(PathBuf::from(&home).join("Library/Containers/com.docker.docker"));
-            paths.push(PathBuf::from(&home).join("Library/Application Support/Docker"));
-            paths.push(PathBuf::from(&home).join(".docker"));
-        }
-        #[cfg(windows)]
-        {
-            if let Ok(appdata) = std::env::var("APPDATA") {
-                paths.push(PathBuf::from(appdata).join("Docker"));
+        // Chrome / Chromium
+        "chrome" | "google chrome" | "chromium" | "chromium-browser" => {
+            #[cfg(target_os = "linux")]
+            {
+                paths.push(PathBuf::from(&home).join(".config/google-chrome"));
+                paths.push(PathBuf::from(&home).join(".cache/google-chrome"));
+                paths.push(PathBuf::from(&home).join(".config/chromium"));
+                paths.push(PathBuf::from(&home).join(".cache/chromium"));
             }
-            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-                paths.push(PathBuf::from(localappdata).join("Docker"));
+            #[cfg(target_os = "macos")]
+            {
+                paths.push(PathBuf::from(&home).join("Library/Application Support/Google/Chrome"));
+                paths.push(PathBuf::from(&home).join("Library/Caches/Google/Chrome"));
+            }
+            #[cfg(windows)]
+            {
+                if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                    paths.push(PathBuf::from(localappdata.clone()).join("Google/Chrome"));
+                    paths.push(PathBuf::from(localappdata).join("Google/Chrome/User Data"));
+                }
             }
         }
-    }
-    // ——— 未识别的软件：用通用模式 ———
-    _ => {
-        let name_slug = app_name_lower.replace([' ', '_'], "-");
+        // Docker
+        "docker" | "docker desktop" | "docker engine" => {
+            #[cfg(target_os = "linux")]
+            {
+                paths.push(PathBuf::from(&home).join(".docker"));
+                paths.push(PathBuf::from("/var/lib/docker"));
+            }
+            #[cfg(target_os = "macos")]
+            {
+                paths.push(PathBuf::from(&home).join("Library/Containers/com.docker.docker"));
+                paths.push(PathBuf::from(&home).join("Library/Application Support/Docker"));
+                paths.push(PathBuf::from(&home).join(".docker"));
+            }
+            #[cfg(windows)]
+            {
+                if let Ok(appdata) = std::env::var("APPDATA") {
+                    paths.push(PathBuf::from(appdata).join("Docker"));
+                }
+                if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                    paths.push(PathBuf::from(localappdata).join("Docker"));
+                }
+            }
+        }
+        // ——— 未识别的软件：用通用模式 ———
+        _ => {
+            let name_slug = app_name_lower.replace([' ', '_'], "-");
 
-        #[cfg(unix)]
-        {
-            // ~/.config/<name>
-            paths.push(PathBuf::from(&home).join(format!(".config/{}", name_slug)));
-            paths.push(PathBuf::from(&home).join(format!(".config/{}", pkg_lower)));
-            // ~/.cache/<name>
-            paths.push(PathBuf::from(&home).join(format!(".cache/{}", name_slug)));
-            paths.push(PathBuf::from(&home).join(format!(".cache/{}", pkg_lower)));
-            // ~/.local/share/<name>
-            paths.push(PathBuf::from(&home).join(format!(".local/share/{}", name_slug)));
-            paths.push(PathBuf::from(&home).join(format!(".local/share/{}", pkg_lower)));
-            // ~/.<name>
-            paths.push(PathBuf::from(&home).join(format!(".{}", name_slug)));
-            paths.push(PathBuf::from(&home).join(format!(".{}", pkg_lower)));
-        }
-
-        #[cfg(target_os = "macos")]
-        {
-            // ~/Library/Application Support/<name>
-            paths.push(PathBuf::from(&home).join(format!("Library/Application Support/{}", name_slug)));
-            paths.push(PathBuf::from(&home).join(format!("Library/Application Support/{}", pkg_lower)));
-            // ~/Library/Caches/<name>
-            paths.push(PathBuf::from(&home).join(format!("Library/Caches/{}", name_slug)));
-            paths.push(PathBuf::from(&home).join(format!("Library/Caches/{}", pkg_lower)));
-            // ~/Library/Preferences/<name>
-            paths.push(PathBuf::from(&home).join(format!("Library/Preferences/{}", name_slug)));
-            paths.push(PathBuf::from(&home).join(format!("Library/Preferences/{}", pkg_lower)));
-        }
-
-        #[cfg(windows)]
-        {
-            if let Ok(appdata) = std::env::var("APPDATA") {
-                paths.push(PathBuf::from(appdata.clone()).join(&name_slug));
-                paths.push(PathBuf::from(appdata).join(&pkg_lower));
+            #[cfg(unix)]
+            {
+                // ~/.config/<name>
+                paths.push(PathBuf::from(&home).join(format!(".config/{}", name_slug)));
+                paths.push(PathBuf::from(&home).join(format!(".config/{}", pkg_lower)));
+                // ~/.cache/<name>
+                paths.push(PathBuf::from(&home).join(format!(".cache/{}", name_slug)));
+                paths.push(PathBuf::from(&home).join(format!(".cache/{}", pkg_lower)));
+                // ~/.local/share/<name>
+                paths.push(PathBuf::from(&home).join(format!(".local/share/{}", name_slug)));
+                paths.push(PathBuf::from(&home).join(format!(".local/share/{}", pkg_lower)));
+                // ~/.<name>
+                paths.push(PathBuf::from(&home).join(format!(".{}", name_slug)));
+                paths.push(PathBuf::from(&home).join(format!(".{}", pkg_lower)));
             }
-            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-                paths.push(PathBuf::from(localappdata.clone()).join(&name_slug));
-                paths.push(PathBuf::from(localappdata).join(&pkg_lower));
+
+            #[cfg(target_os = "macos")]
+            {
+                // ~/Library/Application Support/<name>
+                paths.push(
+                    PathBuf::from(&home).join(format!("Library/Application Support/{}", name_slug)),
+                );
+                paths.push(
+                    PathBuf::from(&home).join(format!("Library/Application Support/{}", pkg_lower)),
+                );
+                // ~/Library/Caches/<name>
+                paths.push(PathBuf::from(&home).join(format!("Library/Caches/{}", name_slug)));
+                paths.push(PathBuf::from(&home).join(format!("Library/Caches/{}", pkg_lower)));
+                // ~/Library/Preferences/<name>
+                paths.push(PathBuf::from(&home).join(format!("Library/Preferences/{}", name_slug)));
+                paths.push(PathBuf::from(&home).join(format!("Library/Preferences/{}", pkg_lower)));
+            }
+
+            #[cfg(windows)]
+            {
+                if let Ok(appdata) = std::env::var("APPDATA") {
+                    paths.push(PathBuf::from(appdata.clone()).join(&name_slug));
+                    paths.push(PathBuf::from(appdata).join(&pkg_lower));
+                }
+                if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                    paths.push(PathBuf::from(localappdata.clone()).join(&name_slug));
+                    paths.push(PathBuf::from(localappdata).join(&pkg_lower));
+                }
             }
         }
     }
-}
 
-// 去重保留顺序
-let mut seen = std::collections::HashSet::new();
-paths.into_iter().filter(|p| seen.insert(p.clone())).collect()
+    // 去重保留顺序
+    let mut seen = std::collections::HashSet::new();
+    paths
+        .into_iter()
+        .filter(|p| seen.insert(p.clone()))
+        .collect()
 }
 
 /// 深度卸载：先执行标准卸载，再清理残留的配置文件、缓存和数据目录
 #[tauri::command]
-pub async fn uninstall_software_deep(package_name: String, app_name: String) -> Result<String, String> {
-// (a) 先执行标准卸载
-let result = uninstall_software(package_name.clone()).await?;
+pub async fn uninstall_software_deep(
+    package_name: String,
+    app_name: String,
+) -> Result<String, String> {
+    // (a) 先执行标准卸载
+    let result = uninstall_software(package_name.clone()).await?;
 
-// (b) 获取所有可能的清理路径
-let cleanup_paths = get_cleanup_paths(&app_name, &package_name);
+    // (b) 获取所有可能的清理路径
+    let cleanup_paths = get_cleanup_paths(&app_name, &package_name);
 
-// (c) 遍历删除所有存在的目录
-let mut cleaned_dirs: Vec<String> = Vec::new();
-let mut error_dirs: Vec<String> = Vec::new();
+    // (c) 遍历删除所有存在的目录
+    let mut cleaned_dirs: Vec<String> = Vec::new();
+    let mut error_dirs: Vec<String> = Vec::new();
 
-for path in &cleanup_paths {
-    if path.exists() {
-        match std::fs::remove_dir_all(path) {
-            Ok(()) => {
-                cleaned_dirs.push(path.display().to_string());
-            }
-            Err(e) => {
-                error_dirs.push(format!("{} ({})", path.display(), e));
+    for path in &cleanup_paths {
+        if path.exists() {
+            match std::fs::remove_dir_all(path) {
+                Ok(()) => {
+                    cleaned_dirs.push(path.display().to_string());
+                }
+                Err(e) => {
+                    error_dirs.push(format!("{} ({})", path.display(), e));
+                }
             }
         }
     }
-}
 
-// (d) 构造结果消息
-let mut message = result;
-if !cleaned_dirs.is_empty() || !error_dirs.is_empty() {
-    message.push_str("\n\n");
-}
-if !cleaned_dirs.is_empty() {
-    message.push_str(&format!("已清理目录:\n{}", cleaned_dirs.join("\n")));
-}
-if !error_dirs.is_empty() {
-    if !cleaned_dirs.is_empty() {
-        message.push('\n');
+    // (d) 构造结果消息
+    let mut message = result;
+    if !cleaned_dirs.is_empty() || !error_dirs.is_empty() {
+        message.push_str("\n\n");
     }
-    message.push_str(&format!("清理失败:\n{}", error_dirs.join("\n")));
-}
+    if !cleaned_dirs.is_empty() {
+        message.push_str(&format!("已清理目录:\n{}", cleaned_dirs.join("\n")));
+    }
+    if !error_dirs.is_empty() {
+        if !cleaned_dirs.is_empty() {
+            message.push('\n');
+        }
+        message.push_str(&format!("清理失败:\n{}", error_dirs.join("\n")));
+    }
 
-// 至少清理了一些内容才算成功，但即使全部失败也返回 Ok（让上层决定）
-Ok(message)
+    // 至少清理了一些内容才算成功，但即使全部失败也返回 Ok（让上层决定）
+    Ok(message)
 }
 
 /// 卸载软件（跨平台，多包管理器支持）
@@ -926,13 +1191,16 @@ pub async fn uninstall_software(package_name: String) -> Result<String, String> 
         return Err("No supported package manager found on this system.\n\nTo use the Software Center, please install a package manager:\n- macOS: Install Homebrew -> https://brew.sh/\n- Linux: Your distro likely has apt/dnf/pacman/zypper/apk pre-installed\n- Windows: winget comes built-in with Win 11 / Win 10 1809+. Chocolatey: https://chocolatey.org/install".to_string());
     }
 
-    let managers_clone: Vec<_> = managers.iter().map(|pm| PackageManager {
-        name: pm.name,
-        binary: pm.binary,
-        needs_sudo: pm.needs_sudo,
-        install_args: pm.install_args,
-        uninstall_args: pm.uninstall_args,
-    }).collect();
+    let managers_clone: Vec<_> = managers
+        .iter()
+        .map(|pm| PackageManager {
+            name: pm.name,
+            binary: pm.binary,
+            needs_sudo: pm.needs_sudo,
+            install_args: pm.install_args,
+            uninstall_args: pm.uninstall_args,
+        })
+        .collect();
     let pkg_name = package_name.clone();
 
     tokio::task::spawn_blocking(move || {
@@ -992,7 +1260,11 @@ fn get_pm_list_args(pm_name: &str) -> Option<&'static [&'static str]> {
         "winget" => Some(&["list", "--accept-source-agreements"]),
         "chocolatey" => Some(&["list", "--local-only"]),
         "snap" => Some(&["list"]),
-        "flatpak" => Some(&["list", "--app", "--columns=application,version,branch,origin"]),
+        "flatpak" => Some(&[
+            "list",
+            "--app",
+            "--columns=application,version,branch,origin",
+        ]),
         _ => None,
     }
 }
@@ -1036,7 +1308,10 @@ fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
                 if parts.len() >= 2 && !parts[0].starts_with("local/") {
                     apps.push((parts[0].to_string(), parts[1].to_string()));
                 } else if parts.len() == 2 {
-                    apps.push((parts[0].trim_start_matches("local/").to_string(), parts[1].to_string()));
+                    apps.push((
+                        parts[0].trim_start_matches("local/").to_string(),
+                        parts[1].to_string(),
+                    ));
                 }
             }
         }
@@ -1083,7 +1358,10 @@ fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
                 }
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 2 && parts[0].contains('.') {
-                    let pkg = parts[0].rsplit_once('.').map(|(n, _)| n).unwrap_or(parts[0]);
+                    let pkg = parts[0]
+                        .rsplit_once('.')
+                        .map(|(n, _)| n)
+                        .unwrap_or(parts[0]);
                     apps.push((pkg.to_string(), parts[1].to_string()));
                 }
             }
@@ -1121,12 +1399,17 @@ fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
             // port installed: "  pkg @version"
             for line in stdout.lines() {
                 let line = line.trim();
-                if line.is_empty() || line.starts_with("The following ports are currently installed") {
+                if line.is_empty()
+                    || line.starts_with("The following ports are currently installed")
+                {
                     continue;
                 }
                 if let Some(at_pos) = line.find(" @") {
                     let pkg = line[..at_pos].trim();
-                    let ver = line[at_pos + 2..].split_whitespace().next().unwrap_or("unknown");
+                    let ver = line[at_pos + 2..]
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or("unknown");
                     if !pkg.is_empty() {
                         apps.push((pkg.to_string(), ver.to_string()));
                     }
@@ -1161,7 +1444,10 @@ fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
             // choco list --local-only: "pkg VERSION"
             for line in stdout.lines() {
                 let line = line.trim();
-                if line.is_empty() || line.starts_with("Chocolatey") || line.contains("packages installed") {
+                if line.is_empty()
+                    || line.starts_with("Chocolatey")
+                    || line.contains("packages installed")
+                {
                     continue;
                 }
                 let parts: Vec<&str> = line.split_whitespace().collect();
@@ -1174,9 +1460,13 @@ fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
             // snap list: "Name  Version  Rev  Tracking  Publisher  Notes"
             // Skip header line
             for (i, line) in stdout.lines().enumerate() {
-                if i == 0 { continue; } // skip header
+                if i == 0 {
+                    continue;
+                } // skip header
                 let line = line.trim();
-                if line.is_empty() { continue; }
+                if line.is_empty() {
+                    continue;
+                }
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 2 {
                     apps.push((parts[0].to_string(), parts[1].to_string()));
@@ -1188,9 +1478,13 @@ fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
             // "ApplicationID  Version  Branch  Origin"
             // Skip header line
             for (i, line) in stdout.lines().enumerate() {
-                if i == 0 { continue; } // skip header
+                if i == 0 {
+                    continue;
+                } // skip header
                 let line = line.trim();
-                if line.is_empty() { continue; }
+                if line.is_empty() {
+                    continue;
+                }
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 2 {
                     apps.push((parts[0].to_string(), parts[1].to_string()));
@@ -1218,7 +1512,9 @@ pub async fn list_installed_apps() -> Result<Vec<InstalledApp>, String> {
 
     for pm in &managers {
         let list_args = get_pm_list_args(pm.name);
-        if list_args.is_none() { continue; }
+        if list_args.is_none() {
+            continue;
+        }
         let args = list_args.unwrap();
 
         let output = Command::new(pm.binary)
@@ -1255,7 +1551,10 @@ pub async fn list_installed_apps() -> Result<Vec<InstalledApp>, String> {
 
 /// 从 GitHub Releases API 获取版本列表
 async fn fetch_github_versions(owner: &str, repo: &str) -> Result<Vec<String>, String> {
-    let url = format!("https://api.github.com/repos/{}/{}/releases?per_page=30", owner, repo);
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/releases?per_page=30",
+        owner, repo
+    );
     let client = reqwest::Client::new();
     let resp = client
         .get(&url)
@@ -1274,7 +1573,12 @@ async fn fetch_github_versions(owner: &str, repo: &str) -> Result<Vec<String>, S
     let versions: Vec<String> = releases
         .iter()
         .filter_map(|r| r.get("tag_name").and_then(|v| v.as_str()))
-        .filter(|v| !v.contains("rc") && !v.contains("beta") && !v.contains("alpha") && !v.contains("nightly"))
+        .filter(|v| {
+            !v.contains("rc")
+                && !v.contains("beta")
+                && !v.contains("alpha")
+                && !v.contains("nightly")
+        })
         .map(|v| v.trim_start_matches('v').to_string())
         .collect();
     if versions.is_empty() {
@@ -1411,7 +1715,10 @@ fn find_binary_in_dir(dir: &std::path::Path, name: &str) -> Option<PathBuf> {
 
 /// 从官方源下载并安装指定版本的软件
 #[tauri::command]
-pub async fn install_software_from_url(package_name: String, version: String) -> Result<String, String> {
+pub async fn install_software_from_url(
+    package_name: String,
+    version: String,
+) -> Result<String, String> {
     let defs = build_software_defs();
     let def = defs
         .iter()
@@ -1423,12 +1730,16 @@ pub async fn install_software_from_url(package_name: String, version: String) ->
 
     let install_dir = get_install_base_dir().join(&package_name).join(&version);
     if install_dir.exists() {
-        return Err(format!("Version {} of {} is already installed at {}", version, def.name, install_dir.display()));
+        return Err(format!(
+            "Version {} of {} is already installed at {}",
+            version,
+            def.name,
+            install_dir.display()
+        ));
     }
 
     let temp_dir = std::env::temp_dir().join("devnexus-install");
-    std::fs::create_dir_all(&temp_dir)
-        .map_err(|e| format!("Failed to create temp dir: {}", e))?;
+    std::fs::create_dir_all(&temp_dir).map_err(|e| format!("Failed to create temp dir: {}", e))?;
 
     // 下载
     let filename = url.rsplit('/').next().unwrap_or("download");
@@ -1442,8 +1753,7 @@ pub async fn install_software_from_url(package_name: String, version: String) ->
         .await
         .map_err(|e| format!("Failed to read response: {}", e))?;
 
-    std::fs::write(&filepath, &bytes)
-        .map_err(|e| format!("Failed to save file: {}", e))?;
+    std::fs::write(&filepath, &bytes).map_err(|e| format!("Failed to save file: {}", e))?;
 
     // 创建安装目录
     std::fs::create_dir_all(&install_dir)
@@ -1453,33 +1763,55 @@ pub async fn install_software_from_url(package_name: String, version: String) ->
     let filename_lower = filename.to_lowercase();
     if filename_lower.ends_with(".tar.gz") || filename_lower.ends_with(".tgz") {
         let output = Command::new("tar")
-            .args(["-xzf", &filepath.to_string_lossy(), "-C", &install_dir.to_string_lossy()])
+            .args([
+                "-xzf",
+                &filepath.to_string_lossy(),
+                "-C",
+                &install_dir.to_string_lossy(),
+            ])
             .output()
             .map_err(|e| format!("Failed to run tar: {}", e))?;
         if !output.status.success() {
-            return Err(format!("Extraction failed: {}", String::from_utf8_lossy(&output.stderr)));
+            return Err(format!(
+                "Extraction failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
         }
     } else if filename_lower.ends_with(".tar.xz") {
         let output = Command::new("tar")
-            .args(["-xJf", &filepath.to_string_lossy(), "-C", &install_dir.to_string_lossy()])
+            .args([
+                "-xJf",
+                &filepath.to_string_lossy(),
+                "-C",
+                &install_dir.to_string_lossy(),
+            ])
             .output()
             .map_err(|e| format!("Failed to run tar: {}", e))?;
         if !output.status.success() {
-            return Err(format!("Extraction failed: {}", String::from_utf8_lossy(&output.stderr)));
+            return Err(format!(
+                "Extraction failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
         }
     } else if filename_lower.ends_with(".zip") {
         let output = Command::new("unzip")
-            .args(["-o", &filepath.to_string_lossy(), "-d", &install_dir.to_string_lossy()])
+            .args([
+                "-o",
+                &filepath.to_string_lossy(),
+                "-d",
+                &install_dir.to_string_lossy(),
+            ])
             .output()
             .map_err(|e| format!("Failed to run unzip: {}", e))?;
         if !output.status.success() {
             // fallback: 用 Rust zip 库解压
-            let file = std::fs::File::open(&filepath)
-                .map_err(|e| format!("Failed to open zip: {}", e))?;
-            let mut archive = zip::ZipArchive::new(file)
-                .map_err(|e| format!("Failed to read zip: {}", e))?;
+            let file =
+                std::fs::File::open(&filepath).map_err(|e| format!("Failed to open zip: {}", e))?;
+            let mut archive =
+                zip::ZipArchive::new(file).map_err(|e| format!("Failed to read zip: {}", e))?;
             for i in 0..archive.len() {
-                let mut entry = archive.by_index(i)
+                let mut entry = archive
+                    .by_index(i)
                     .map_err(|e| format!("Failed to read zip entry: {}", e))?;
                 let outpath = install_dir.join(entry.name());
                 if entry.is_dir() {
@@ -1503,7 +1835,11 @@ pub async fn install_software_from_url(package_name: String, version: String) ->
                 .args(["attach", &filepath.to_string_lossy()])
                 .output();
             let _ = Command::new("cp")
-                .args(["-R", &format!("{}/{}", mount_point, def.name), &install_dir.to_string_lossy()])
+                .args([
+                    "-R",
+                    &format!("{}/{}", mount_point, def.name),
+                    &install_dir.to_string_lossy(),
+                ])
                 .output();
             let _ = Command::new("hdiutil")
                 .args(["detach", &mount_point])
@@ -1524,8 +1860,7 @@ pub async fn install_software_from_url(package_name: String, version: String) ->
 
     // 创建符号链接到 bin 目录
     let bin_dir = get_install_base_dir().parent().unwrap().join("bin");
-    std::fs::create_dir_all(&bin_dir)
-        .map_err(|e| format!("Failed to create bin dir: {}", e))?;
+    std::fs::create_dir_all(&bin_dir).map_err(|e| format!("Failed to create bin dir: {}", e))?;
 
     let binary_name = match def.name {
         "Visual Studio Code" => "code",
@@ -1553,22 +1888,25 @@ pub async fn install_software_from_url(package_name: String, version: String) ->
         }
     }
 
-    Ok(format!(
-        "Successfully installed {} v{}",
-        def.name, version
-    ))
+    Ok(format!("Successfully installed {} v{}", def.name, version))
 }
 
 /// 扫描应用残留（预览模式，不执行任何删除）
 #[tauri::command]
-pub fn scan_app_residues(app_name: String, package_name: String) -> Result<crate::residue_scanner::ResidueScan, String> {
+pub fn scan_app_residues(
+    app_name: String,
+    package_name: String,
+) -> Result<crate::residue_scanner::ResidueScan, String> {
     let scan = crate::residue_scanner::scan_for_residues(&app_name, &package_name);
     Ok(scan)
 }
 
 /// 强制卸载：杀死进程 → 包管理器强制卸载 → 深度清理残留
 #[tauri::command]
-pub async fn force_uninstall_software(package_name: String, app_name: String) -> Result<String, String> {
+pub async fn force_uninstall_software(
+    package_name: String,
+    app_name: String,
+) -> Result<String, String> {
     use crate::residue_scanner::snapshot;
     use std::time::Duration;
 
@@ -1603,11 +1941,7 @@ pub async fn force_uninstall_software(package_name: String, app_name: String) ->
 
     // 5) 记录注册表+服务路径 (Windows)
     #[cfg(target_os = "windows")]
-    let _registry_paths: Vec<String> = scan
-        .registry_keys
-        .iter()
-        .map(|r| r.path.clone())
-        .collect();
+    let _registry_paths: Vec<String> = scan.registry_keys.iter().map(|r| r.path.clone()).collect();
 
     // 6) 先删文件，再删目录（递归）
     let mut cleaned = Vec::new();
@@ -1716,9 +2050,9 @@ pub fn clean_specific_residues(items: Vec<String>) -> Result<String, String> {
 
 /// 按名称关键词杀死匹配的进程（跨平台）
 fn kill_processes_by_name(name_lower: &str) -> usize {
-    use sysinfo::System;
     #[cfg(unix)]
     use sysinfo::Signal;
+    use sysinfo::System;
     let mut system = System::new();
     system.refresh_all();
 
@@ -1743,7 +2077,9 @@ fn kill_processes_by_name(name_lower: &str) -> usize {
             .to_lowercase();
 
         // 关键词匹配：进程名包含至少一个关键词
-        let matches = keywords.iter().any(|kw| pname.contains(kw) || exe.contains(kw));
+        let matches = keywords
+            .iter()
+            .any(|kw| pname.contains(kw) || exe.contains(kw));
         if !matches {
             continue;
         }
@@ -1759,7 +2095,9 @@ fn kill_processes_by_name(name_lower: &str) -> usize {
 
         #[cfg(unix)]
         {
-            if process.kill_with(Signal::Term).is_some() || process.kill_with(Signal::Kill).is_some() {
+            if process.kill_with(Signal::Term).is_some()
+                || process.kill_with(Signal::Kill).is_some()
+            {
                 killed += 1;
             }
         }
@@ -1840,7 +2178,10 @@ mod tests {
         let output = "ApplicationID Version Branch Origin\norg.mozilla.firefox 123.0 stable flathub\norg.gimp.GIMP 3.0 stable flathub\n";
         let apps = parse_pm_list_output("flatpak", output);
         assert_eq!(apps.len(), 2);
-        assert_eq!(apps[0], ("org.mozilla.firefox".to_string(), "123.0".to_string()));
+        assert_eq!(
+            apps[0],
+            ("org.mozilla.firefox".to_string(), "123.0".to_string())
+        );
         assert_eq!(apps[1], ("org.gimp.GIMP".to_string(), "3.0".to_string()));
     }
 
@@ -1875,7 +2216,10 @@ mod tests {
 
     #[test]
     fn test_map_vscode() {
-        assert_eq!(map_package_name("code", "winget"), "Microsoft.VisualStudioCode");
+        assert_eq!(
+            map_package_name("code", "winget"),
+            "Microsoft.VisualStudioCode"
+        );
         assert_eq!(map_package_name("code", "apt"), "code");
         assert_eq!(map_package_name("code", "brew"), "visual-studio-code");
     }
@@ -1918,14 +2262,36 @@ mod tests {
 
     #[test]
     fn test_get_pm_list_args_all() {
-        assert_eq!(get_pm_list_args("apt"), Some(&["list", "--installed"] as &[&str]));
+        assert_eq!(
+            get_pm_list_args("apt"),
+            Some(&["list", "--installed"] as &[&str])
+        );
         assert_eq!(get_pm_list_args("pacman"), Some(&["-Q"] as &[&str]));
-        assert_eq!(get_pm_list_args("dnf"), Some(&["list", "installed"] as &[&str]));
-        assert_eq!(get_pm_list_args("Homebrew"), Some(&["list", "--formula", "--versions"] as &[&str]));
-        assert_eq!(get_pm_list_args("winget"), Some(&["list", "--accept-source-agreements"] as &[&str]));
+        assert_eq!(
+            get_pm_list_args("dnf"),
+            Some(&["list", "installed"] as &[&str])
+        );
+        assert_eq!(
+            get_pm_list_args("Homebrew"),
+            Some(&["list", "--formula", "--versions"] as &[&str])
+        );
+        assert_eq!(
+            get_pm_list_args("winget"),
+            Some(&["list", "--accept-source-agreements"] as &[&str])
+        );
         assert_eq!(get_pm_list_args("snap"), Some(&["list"] as &[&str]));
-        assert_eq!(get_pm_list_args("flatpak"), Some(&["list", "--app", "--columns=application,version,branch,origin"] as &[&str]));
-        assert_eq!(get_pm_list_args("chocolatey"), Some(&["list", "--local-only"] as &[&str]));
+        assert_eq!(
+            get_pm_list_args("flatpak"),
+            Some(&[
+                "list",
+                "--app",
+                "--columns=application,version,branch,origin"
+            ] as &[&str])
+        );
+        assert_eq!(
+            get_pm_list_args("chocolatey"),
+            Some(&["list", "--local-only"] as &[&str])
+        );
         assert_eq!(get_pm_list_args("unknown"), None);
     }
 

@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
-use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
-use base64::{Engine as _, engine::general_purpose};
+use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
+use base64::{engine::general_purpose, Engine as _};
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::sync::{Arc, Mutex};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PasswordEntry {
@@ -46,7 +46,8 @@ impl PasswordManager {
         let _ = pm.load_verifier();
         // 如果没有设置主密码，则保持解锁状态用于首次设置
         // 使用 into_inner() 安全恢复被毒化的 Mutex（不 panic）
-        let has_verifier = pm.password_verifier
+        let has_verifier = pm
+            .password_verifier
             .lock()
             .map(|v| v.is_some())
             .unwrap_or_else(|e| e.into_inner().is_some());
@@ -94,7 +95,8 @@ impl PasswordManager {
             return Ok(()); // 首次运行，无文件
         }
 
-        let encrypted = fs::read_to_string(&path).map_err(|e| format!("Failed to read entries: {}", e))?;
+        let encrypted =
+            fs::read_to_string(&path).map_err(|e| format!("Failed to read entries: {}", e))?;
         let json = self.decrypt(&encrypted)?;
         let loaded_entries: Vec<PasswordEntry> =
             serde_json::from_str(&json).map_err(|e| format!("Failed to parse entries: {}", e))?;
@@ -195,13 +197,19 @@ impl PasswordManager {
 
     fn try_remove_old_keyfile() {
         let base = if cfg!(target_os = "macos") {
-            let Ok(home) = std::env::var("HOME") else { return };
+            let Ok(home) = std::env::var("HOME") else {
+                return;
+            };
             std::path::PathBuf::from(home).join("Library/Application Support")
         } else if cfg!(target_os = "windows") {
-            let Ok(appdata) = std::env::var("APPDATA") else { return };
+            let Ok(appdata) = std::env::var("APPDATA") else {
+                return;
+            };
             std::path::PathBuf::from(appdata)
         } else {
-            let Ok(home) = std::env::var("HOME") else { return };
+            let Ok(home) = std::env::var("HOME") else {
+                return;
+            };
             std::path::PathBuf::from(home).join(".config")
         };
         let key_path = base.join("devnexus").join("key.bin");
@@ -212,40 +220,42 @@ impl PasswordManager {
     fn encrypt(&self, data: &str) -> Result<String, String> {
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
             .map_err(|e| format!("Encryption error: {}", e))?;
-        
+
         let nonce_bytes: [u8; 12] = rand::random();
         let nonce = Nonce::from_slice(&nonce_bytes);
-        
-        let ciphertext = cipher.encrypt(nonce, data.as_bytes())
+
+        let ciphertext = cipher
+            .encrypt(nonce, data.as_bytes())
             .map_err(|e| format!("Encryption error: {}", e))?;
-        
+
         // 将 nonce 和 ciphertext 组合并 base64 编码
         let mut combined = nonce_bytes.to_vec();
         combined.extend_from_slice(&ciphertext);
-        
+
         Ok(general_purpose::STANDARD.encode(&combined))
     }
 
     /// 解密数据
     fn decrypt(&self, encrypted_data: &str) -> Result<String, String> {
-        let combined = general_purpose::STANDARD.decode(encrypted_data)
+        let combined = general_purpose::STANDARD
+            .decode(encrypted_data)
             .map_err(|e| format!("Decoding error: {}", e))?;
-        
+
         if combined.len() < 12 {
             return Err("Invalid encrypted data".to_string());
         }
-        
+
         let (nonce_bytes, ciphertext) = combined.split_at(12);
         let nonce = Nonce::from_slice(nonce_bytes);
-        
+
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
             .map_err(|e| format!("Decryption error: {}", e))?;
-        
-        let plaintext = cipher.decrypt(nonce, ciphertext)
+
+        let plaintext = cipher
+            .decrypt(nonce, ciphertext)
             .map_err(|e| format!("Decryption error: {}", e))?;
-        
-        String::from_utf8(plaintext)
-            .map_err(|e| format!("UTF-8 error: {}", e))
+
+        String::from_utf8(plaintext).map_err(|e| format!("UTF-8 error: {}", e))
     }
 
     /// 主密码验证器文件路径
@@ -321,7 +331,12 @@ pub fn set_master_password(
     use pbkdf2::pbkdf2_hmac;
     use sha2::Sha256;
     let mut hash = [0u8; 32];
-    pbkdf2_hmac::<Sha256>(master_password.as_bytes(), &salt, PBKDF2_ITERATIONS, &mut hash);
+    pbkdf2_hmac::<Sha256>(
+        master_password.as_bytes(),
+        &salt,
+        PBKDF2_ITERATIONS,
+        &mut hash,
+    );
 
     state.save_verifier(salt.to_vec(), hash.to_vec())?;
 
@@ -340,7 +355,8 @@ pub fn unlock(
     state: tauri::State<'_, PasswordManager>,
 ) -> Result<bool, String> {
     let verifier = state.password_verifier.lock().map_err(|e| e.to_string())?;
-    let (salt, stored_hash) = verifier.as_ref()
+    let (salt, stored_hash) = verifier
+        .as_ref()
         .ok_or_else(|| "No master password set. Please set one first.".to_string())?;
     let salt = salt.clone();
     let stored_hash = stored_hash.clone();
@@ -350,7 +366,12 @@ pub fn unlock(
     use pbkdf2::pbkdf2_hmac;
     use sha2::Sha256;
     let mut hash = [0u8; 32];
-    pbkdf2_hmac::<Sha256>(master_password.as_bytes(), &salt, PBKDF2_ITERATIONS, &mut hash);
+    pbkdf2_hmac::<Sha256>(
+        master_password.as_bytes(),
+        &salt,
+        PBKDF2_ITERATIONS,
+        &mut hash,
+    );
 
     if hash.as_slice() != stored_hash.as_slice() {
         return Ok(false);
@@ -375,7 +396,11 @@ pub fn lock(state: tauri::State<'_, PasswordManager>) -> Result<(), String> {
 /// 是否已设置主密码
 #[tauri::command]
 pub fn has_master_password(state: tauri::State<'_, PasswordManager>) -> bool {
-    state.password_verifier.lock().map(|v| v.is_some()).unwrap_or(false)
+    state
+        .password_verifier
+        .lock()
+        .map(|v| v.is_some())
+        .unwrap_or(false)
 }
 
 /// 添加密码条目
@@ -390,7 +415,7 @@ pub fn add_password(
 ) -> Result<u32, String> {
     state.check_locked()?;
     let encrypted = state.encrypt(&password)?;
-    
+
     let mut next_id = state.next_id.lock().map_err(|e| e.to_string())?;
     let id = *next_id;
     *next_id += 1;
@@ -406,9 +431,7 @@ pub fn add_password(
         created_at: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
     };
 
-    state.entries.lock()
-        .map_err(|e| e.to_string())?
-        .push(entry);
+    state.entries.lock().map_err(|e| e.to_string())?.push(entry);
 
     // 自动持久化
     state.save_entries()?;
@@ -422,7 +445,9 @@ pub fn list_passwords(state: tauri::State<'_, PasswordManager>) -> Vec<PasswordE
     if state.check_locked().is_err() {
         return Vec::new();
     }
-    state.entries.lock()
+    state
+        .entries
+        .lock()
         .map(|entries| entries.clone())
         .unwrap_or_else(|_| Vec::new())
 }
@@ -432,9 +457,11 @@ pub fn list_passwords(state: tauri::State<'_, PasswordManager>) -> Vec<PasswordE
 pub fn get_password(id: u32, state: tauri::State<'_, PasswordManager>) -> Result<String, String> {
     state.check_locked()?;
     let entries = state.entries.lock().map_err(|e| e.to_string())?;
-    let entry = entries.iter().find(|e| e.id == id)
+    let entry = entries
+        .iter()
+        .find(|e| e.id == id)
         .ok_or_else(|| "Password entry not found".to_string())?;
-    
+
     state.decrypt(&entry.password_encrypted)
 }
 
@@ -462,18 +489,18 @@ pub fn update_password(
 ) -> Result<(), String> {
     state.check_locked()?;
     let mut entries = state.entries.lock().map_err(|e| e.to_string())?;
-    
+
     if let Some(entry) = entries.iter_mut().find(|e| e.id == id) {
         entry.name = name;
         entry.username = username;
-        
+
         if let Some(new_password) = password {
             entry.password_encrypted = state.encrypt(&new_password)?;
         }
-        
+
         entry.url = url;
         entry.notes = notes;
-        
+
         drop(entries);
         state.save_entries()?;
         Ok(())
@@ -487,13 +514,13 @@ pub fn update_password(
 pub fn export_chrome_csv(state: tauri::State<'_, PasswordManager>) -> Result<String, String> {
     state.check_locked()?;
     let entries = state.entries.lock().map_err(|e| e.to_string())?;
-    
+
     let mut csv_content = String::from("name,url,username,password\n");
-    
+
     for entry in entries.iter() {
         let password = state.decrypt(&entry.password_encrypted)?;
         let url = entry.url.as_deref().unwrap_or("");
-        
+
         // CSV 转义
         csv_content.push_str(&format!(
             "\"{}\",\"{}\",\"{}\",\"{}\"\n",
@@ -503,7 +530,7 @@ pub fn export_chrome_csv(state: tauri::State<'_, PasswordManager>) -> Result<Str
             escape_csv(&password)
         ));
     }
-    
+
     Ok(csv_content)
 }
 
@@ -519,7 +546,7 @@ pub fn import_chrome_csv(
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .from_reader(csv_content.as_bytes());
-    
+
     for result in reader.records() {
         let record = match result {
             Ok(r) => r,
@@ -528,13 +555,13 @@ pub fn import_chrome_csv(
                 continue;
             }
         };
-        
+
         if record.len() >= 4 {
             let name = record[0].to_string();
             let url = record[1].to_string();
             let username = record[2].to_string();
             let password = record[3].to_string();
-            
+
             match add_password(
                 name,
                 username,
@@ -548,9 +575,12 @@ pub fn import_chrome_csv(
             }
         }
     }
-    
+
     if errors > 0 {
-        Ok(format!("Imported {} entries ({} skipped due to errors)", count, errors))
+        Ok(format!(
+            "Imported {} entries ({} skipped due to errors)",
+            count, errors
+        ))
     } else {
         Ok(format!("Successfully imported {} entries", count))
     }
@@ -598,8 +628,7 @@ pub fn load_from_file(
     master_password: String,
     state: tauri::State<'_, PasswordManager>,
 ) -> Result<u32, String> {
-    let encoded =
-        fs::read_to_string(&file_path).map_err(|e| format!("File read error: {}", e))?;
+    let encoded = fs::read_to_string(&file_path).map_err(|e| format!("File read error: {}", e))?;
 
     let combined = general_purpose::STANDARD
         .decode(&encoded)
@@ -629,12 +658,7 @@ pub fn load_from_file(
 
     // 使用存储的迭代次数派生密钥（兼容未来迭代次数变更）
     let mut key = [0u8; 32];
-    pbkdf2::pbkdf2_hmac::<sha2::Sha256>(
-        master_password.as_bytes(),
-        &salt,
-        iterations,
-        &mut key,
-    );
+    pbkdf2::pbkdf2_hmac::<sha2::Sha256>(master_password.as_bytes(), &salt, iterations, &mut key);
 
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| e.to_string())?;
 
@@ -657,7 +681,11 @@ pub fn load_from_file(
 /// CSV 转义辅助函数
 fn escape_csv(field: &str) -> String {
     let escaped = field.replace('"', "\"\"");
-    if escaped.contains(',') || escaped.contains('"') || escaped.contains('\n') || escaped.contains('\r') {
+    if escaped.contains(',')
+        || escaped.contains('"')
+        || escaped.contains('\n')
+        || escaped.contains('\r')
+    {
         format!("\"{}\"", escaped)
     } else {
         escaped
