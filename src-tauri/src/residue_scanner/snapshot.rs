@@ -30,14 +30,9 @@ pub fn take_snapshot(paths: &[PathBuf]) -> Vec<SnapshotEntry> {
     for path in paths {
         if path.exists() {
             let meta = path.metadata();
-            let size = meta.map(|m| {
-                if m.is_dir() {
-                    dir_size(path)
-                } else {
-                    m.len()
-                }
-            })
-            .unwrap_or(0);
+            let size = meta
+                .map(|m| if m.is_dir() { dir_size(path) } else { m.len() })
+                .unwrap_or(0);
             entries.push(SnapshotEntry {
                 path: path.display().to_string(),
                 size,
@@ -151,7 +146,10 @@ mod tests {
         assert_eq!(entries.len(), 2);
 
         // File entry
-        let file_entry = entries.iter().find(|e| e.path == file_path.display().to_string()).unwrap();
+        let file_entry = entries
+            .iter()
+            .find(|e| e.path == file_path.display().to_string())
+            .unwrap();
         assert_eq!(file_entry.size, 5);
         assert!(!file_entry.is_dir);
 
@@ -161,8 +159,16 @@ mod tests {
     #[test]
     fn test_diff_snapshot_all_gone() {
         let before = vec![
-            SnapshotEntry { path: "/tmp/ghost_a".into(), size: 100, is_dir: false },
-            SnapshotEntry { path: "/tmp/ghost_b".into(), size: 200, is_dir: false },
+            SnapshotEntry {
+                path: "/tmp/ghost_a".into(),
+                size: 100,
+                is_dir: false,
+            },
+            SnapshotEntry {
+                path: "/tmp/ghost_b".into(),
+                size: 200,
+                is_dir: false,
+            },
         ];
         let cleaned = diff_snapshot(&before);
         // Neither exists, both should be "cleaned"
@@ -172,8 +178,16 @@ mod tests {
     #[test]
     fn test_surviving_size_nonexistent() {
         let entries = vec![
-            SnapshotEntry { path: "/tmp/ghost_a".into(), size: 100, is_dir: false },
-            SnapshotEntry { path: "/tmp/ghost_b".into(), size: 200, is_dir: false },
+            SnapshotEntry {
+                path: "/tmp/ghost_a".into(),
+                size: 100,
+                is_dir: false,
+            },
+            SnapshotEntry {
+                path: "/tmp/ghost_b".into(),
+                size: 200,
+                is_dir: false,
+            },
         ];
         // Neither exists, surviving size should be 0
         assert_eq!(surviving_size(&entries), 0);

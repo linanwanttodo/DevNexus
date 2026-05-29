@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
 use chrono::Local;
+use serde::{Deserialize, Serialize};
 use std::process::Command;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 #[cfg(test)]
@@ -156,7 +156,7 @@ pub struct TaskLog {
     pub task_id: u32,
     pub started_at: String,
     pub finished_at: Option<String>,
-    pub status: String,       // "success", "failed", "timeout"
+    pub status: String, // "success", "failed", "timeout"
     pub exit_code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
@@ -169,10 +169,10 @@ pub struct ScheduledTask {
     pub id: u32,
     pub name: String,
     pub cron_expression: String,
-    pub task_type: TaskType,    // "shell" | "python" | "shutdown"
+    pub task_type: TaskType,     // "shell" | "python" | "shutdown"
     pub content: Option<String>, // shell/python 的脚本内容，shutdown 为 None
     pub status: TaskStatus,
-    pub timeout_secs: u64,      // 沙箱超时时间（秒）
+    pub timeout_secs: u64, // 沙箱超时时间（秒）
     pub last_run: Option<String>,
     pub last_status: Option<String>, // "success" | "failed" | "timeout"
     pub next_run: Option<String>,
@@ -289,9 +289,13 @@ impl TaskScheduler {
 
                 // 收集到期任务
                 {
-                    let Ok(tasks) = tasks_arc.lock() else { continue };
+                    let Ok(tasks) = tasks_arc.lock() else {
+                        continue;
+                    };
                     for t in tasks.iter() {
-                        if !matches!(t.status, TaskStatus::Idle) { continue; }
+                        if !matches!(t.status, TaskStatus::Idle) {
+                            continue;
+                        }
                         let should_run = match &t.next_run {
                             Some(nr) => nr.as_str() <= now_str.as_str(),
                             None => true,
@@ -305,7 +309,9 @@ impl TaskScheduler {
                 for task in &due {
                     // 创建日志条目
                     let log_id = {
-                        let Ok(mut nid) = next_log_id.lock() else { continue };
+                        let Ok(mut nid) = next_log_id.lock() else {
+                            continue;
+                        };
                         let id = *nid;
                         *nid += 1;
                         id
@@ -325,7 +331,9 @@ impl TaskScheduler {
                         duration_ms: None,
                     };
                     {
-                        let Ok(mut guard) = logs_arc.lock() else { continue };
+                        let Ok(mut guard) = logs_arc.lock() else {
+                            continue;
+                        };
                         guard.push(log);
                     }
 
@@ -349,20 +357,25 @@ impl TaskScheduler {
                         TaskType::Shutdown => execute_shutdown().await,
                     };
 
-                    let start_time = chrono::NaiveDateTime::parse_from_str(&started_at, "%Y-%m-%d %H:%M:%S")
-                        .unwrap_or_else(|_| Local::now().naive_local());
+                    let start_time =
+                        chrono::NaiveDateTime::parse_from_str(&started_at, "%Y-%m-%d %H:%M:%S")
+                            .unwrap_or_else(|_| Local::now().naive_local());
 
                     // 更新日志
                     {
-                        let Ok(mut all_logs) = logs_arc.lock() else { continue };
+                        let Ok(mut all_logs) = logs_arc.lock() else {
+                            continue;
+                        };
                         if let Some(existing) = all_logs.iter_mut().find(|l| l.id == log_id) {
                             let now = Local::now().naive_local();
                             let duration = (now - start_time).num_milliseconds().max(0) as u64;
-                            existing.finished_at = Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                            existing.finished_at =
+                                Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
                             existing.duration_ms = Some(duration);
                             match &result {
                                 Ok((code, stdout, stderr)) => {
-                                    existing.status = if *code == 0 { "success" } else { "failed" }.to_string();
+                                    existing.status =
+                                        if *code == 0 { "success" } else { "failed" }.to_string();
                                     existing.exit_code = Some(*code);
                                     existing.stdout = stdout.clone();
                                     existing.stderr = stderr.clone();
@@ -377,12 +390,16 @@ impl TaskScheduler {
 
                     // 更新任务状态
                     {
-                        let Ok(mut tasks) = tasks_arc.lock() else { continue };
+                        let Ok(mut tasks) = tasks_arc.lock() else {
+                            continue;
+                        };
                         if let Some(t) = tasks.iter_mut().find(|t| t.id == task.id) {
                             t.last_run = Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
                             t.run_count += 1;
                             t.last_status = Some(match &result {
-                                Ok((code, _, _)) => if *code == 0 { "success" } else { "failed" }.to_string(),
+                                Ok((code, _, _)) => {
+                                    if *code == 0 { "success" } else { "failed" }.to_string()
+                                }
                                 Err(_) => "timeout".to_string(),
                             });
                             if result.is_ok() {
@@ -455,7 +472,9 @@ async fn execute_with_sandbox(
                 }
             }
 
-            let output = cmd.output().map_err(|e| format!("Failed to execute {}: {}", program, e))?;
+            let output = cmd
+                .output()
+                .map_err(|e| format!("Failed to execute {}: {}", program, e))?;
 
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -465,7 +484,12 @@ async fn execute_with_sandbox(
         }),
     )
     .await
-    .map_err(|_| format!("Execution timed out after {}s (sandbox limit)", timeout_secs))?
+    .map_err(|_| {
+        format!(
+            "Execution timed out after {}s (sandbox limit)",
+            timeout_secs
+        )
+    })?
     .map_err(|e| format!("Task spawn error: {}", e))?
 }
 
@@ -539,11 +563,21 @@ pub fn add_task(
         "shell" => TaskType::Shell,
         "python" => TaskType::Python,
         "shutdown" => TaskType::Shutdown,
-        _ => return Err(format!("Unknown task type: {}. Supported: shell, python, shutdown", task_type)),
+        _ => {
+            return Err(format!(
+                "Unknown task type: {}. Supported: shell, python, shutdown",
+                task_type
+            ))
+        }
     };
 
     // shell/python 必须有内容
-    if matches!(tt, TaskType::Shell | TaskType::Python) && content.as_ref().map(|c| c.trim().is_empty()).unwrap_or(true) {
+    if matches!(tt, TaskType::Shell | TaskType::Python)
+        && content
+            .as_ref()
+            .map(|c| c.trim().is_empty())
+            .unwrap_or(true)
+    {
         return Err("Script content cannot be empty".to_string());
     }
 
@@ -572,9 +606,7 @@ pub fn add_task(
         created_at: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
     };
 
-    state.tasks.lock()
-        .map_err(|e| e.to_string())?
-        .push(task);
+    state.tasks.lock().map_err(|e| e.to_string())?.push(task);
 
     state.save_tasks();
 
@@ -584,7 +616,9 @@ pub fn add_task(
 /// 获取所有任务
 #[tauri::command]
 pub fn list_tasks(state: tauri::State<'_, TaskScheduler>) -> Vec<ScheduledTask> {
-    state.tasks.lock()
+    state
+        .tasks
+        .lock()
         .map(|tasks| tasks.clone())
         .unwrap_or_else(|_| Vec::new())
 }
@@ -624,13 +658,21 @@ pub fn toggle_task(task_id: u32, state: tauri::State<'_, TaskScheduler>) -> Resu
 
 /// 手动执行任务
 #[tauri::command]
-pub async fn execute_task(task_id: u32, state: tauri::State<'_, TaskScheduler>) -> Result<String, String> {
+pub async fn execute_task(
+    task_id: u32,
+    state: tauri::State<'_, TaskScheduler>,
+) -> Result<String, String> {
     let (task_type, content, timeout) = {
         let tasks = state.tasks.lock().map_err(|e| e.to_string())?;
-        let task = tasks.iter()
+        let task = tasks
+            .iter()
             .find(|t| t.id == task_id)
             .ok_or_else(|| "Task not found".to_string())?;
-        (task.task_type.clone(), task.content.clone(), task.timeout_secs)
+        (
+            task.task_type.clone(),
+            task.content.clone(),
+            task.timeout_secs,
+        )
     };
 
     // 创建日志
@@ -678,8 +720,9 @@ pub async fn execute_task(task_id: u32, state: tauri::State<'_, TaskScheduler>) 
         let mut all_logs = state.logs.lock().map_err(|e| e.to_string())?;
         if let Some(existing) = all_logs.iter_mut().find(|l| l.id == log_id) {
             let started_at = existing.started_at.clone();
-            let start_time = chrono::NaiveDateTime::parse_from_str(&started_at, "%Y-%m-%d %H:%M:%S")
-                .unwrap_or_else(|_| Local::now().naive_local());
+            let start_time =
+                chrono::NaiveDateTime::parse_from_str(&started_at, "%Y-%m-%d %H:%M:%S")
+                    .unwrap_or_else(|_| Local::now().naive_local());
             let now = Local::now().naive_local();
             let duration = (now - start_time).num_milliseconds().max(0) as u64;
             existing.finished_at = Some(Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
@@ -728,12 +771,8 @@ pub async fn execute_task(task_id: u32, state: tauri::State<'_, TaskScheduler>) 
 /// 获取任务的执行日志
 #[tauri::command]
 pub fn get_task_logs(task_id: u32, state: tauri::State<'_, TaskScheduler>) -> Vec<TaskLog> {
-    let logs = state.logs.lock()
-        .map(|l| l.clone())
-        .unwrap_or_default();
-    let mut task_logs: Vec<TaskLog> = logs.into_iter()
-        .filter(|l| l.task_id == task_id)
-        .collect();
+    let logs = state.logs.lock().map(|l| l.clone()).unwrap_or_default();
+    let mut task_logs: Vec<TaskLog> = logs.into_iter().filter(|l| l.task_id == task_id).collect();
     task_logs.sort_by_key(|b| std::cmp::Reverse(b.id));
     task_logs.truncate(50);
     task_logs
@@ -764,7 +803,9 @@ pub fn update_task(
 ) -> Result<(), String> {
     let mut tasks = state.tasks.lock().map_err(|e| e.to_string())?;
     if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id) {
-        if let Some(n) = name { task.name = n; }
+        if let Some(n) = name {
+            task.name = n;
+        }
         if let Some(cron) = cron_expression {
             if let Err(e) = cron::Schedule::try_from(cron.as_str()) {
                 return Err(format!("Invalid cron expression: {}", e));
@@ -787,7 +828,9 @@ pub fn update_task(
             }
             task.content = Some(c);
         }
-        if let Some(t) = timeout_secs { task.timeout_secs = t; }
+        if let Some(t) = timeout_secs {
+            task.timeout_secs = t;
+        }
         state.save_tasks();
         Ok(())
     } else {
@@ -797,8 +840,8 @@ pub fn update_task(
 
 /// 计算下次运行时间
 fn calculate_next_run(cron_expression: &str) -> Result<Option<String>, String> {
-    let schedule = cron::Schedule::try_from(cron_expression)
-        .map_err(|e| format!("Invalid cron: {}", e))?;
+    let schedule =
+        cron::Schedule::try_from(cron_expression).map_err(|e| format!("Invalid cron: {}", e))?;
 
     if let Some(next) = schedule.upcoming(Local).next() {
         Ok(Some(next.format("%Y-%m-%d %H:%M:%S").to_string()))

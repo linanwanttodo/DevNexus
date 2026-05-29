@@ -4,8 +4,12 @@ use crate::residue_scanner::ResidueItem;
 pub fn scan_shortcuts(app_name: &str) -> Vec<ResidueItem> {
     let mut results = Vec::new();
     let name_lower = app_name.to_lowercase();
-    let keywords: Vec<&str> = name_lower.split(|c: char| c.is_whitespace() || c == '-' || c == '_').collect();
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).unwrap_or_default();
+    let keywords: Vec<&str> = name_lower
+        .split(|c: char| c.is_whitespace() || c == '-' || c == '_')
+        .collect();
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
     #[cfg(target_os = "windows")]
     let _ = &home;
 
@@ -18,7 +22,11 @@ pub fn scan_shortcuts(app_name: &str) -> Vec<ResidueItem> {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.extension().and_then(|e| e.to_str()) == Some("desktop") {
-                        let fname = path.file_stem().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                        let fname = path
+                            .file_stem()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("")
+                            .to_lowercase();
                         if matches_name(&fname, &keywords) {
                             let size = path.metadata().map(|m| m.len()).unwrap_or(0);
                             results.push(ResidueItem {
@@ -41,7 +49,11 @@ pub fn scan_shortcuts(app_name: &str) -> Vec<ResidueItem> {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.extension().and_then(|e| e.to_str()) == Some("desktop") {
-                        let fname = path.file_stem().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                        let fname = path
+                            .file_stem()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("")
+                            .to_lowercase();
                         if matches_name(&fname, &keywords) {
                             results.push(ResidueItem {
                                 path: path.display().to_string(),
@@ -61,13 +73,13 @@ pub fn scan_shortcuts(app_name: &str) -> Vec<ResidueItem> {
     #[cfg(target_os = "windows")]
     {
         if let Ok(appdata) = std::env::var("APPDATA") {
-            let start_menu = std::path::Path::new(&appdata)
-                .join("Microsoft/Windows/Start Menu/Programs");
+            let start_menu =
+                std::path::Path::new(&appdata).join("Microsoft/Windows/Start Menu/Programs");
             scan_lnk_recursive(&start_menu, &keywords, &mut results);
         }
         if let Ok(progdata) = std::env::var("PROGRAMDATA") {
-            let all_users = std::path::Path::new(&progdata)
-                .join("Microsoft/Windows/Start Menu/Programs");
+            let all_users =
+                std::path::Path::new(&progdata).join("Microsoft/Windows/Start Menu/Programs");
             scan_lnk_recursive(&all_users, &keywords, &mut results);
         }
         // Desktop
@@ -87,7 +99,11 @@ pub fn scan_shortcuts(app_name: &str) -> Vec<ResidueItem> {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.extension().and_then(|e| e.to_str()) == Some("app") {
-                        let fname = path.file_stem().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                        let fname = path
+                            .file_stem()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("")
+                            .to_lowercase();
                         if matches_name(&fname, &keywords) {
                             // macOS app 是目录包，计算大小但不标记为自动删除（用户可能想保留）
                             let size = crate::residue_scanner::dir_size(&path);
@@ -110,7 +126,11 @@ pub fn scan_shortcuts(app_name: &str) -> Vec<ResidueItem> {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.extension().and_then(|e| e.to_str()) == Some("app") {
-                        let fname = path.file_stem().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                        let fname = path
+                            .file_stem()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("")
+                            .to_lowercase();
                         if matches_name(&fname, &keywords) {
                             results.push(ResidueItem {
                                 path: path.display().to_string(),
@@ -140,7 +160,11 @@ fn scan_lnk_recursive(dir: &std::path::Path, keywords: &[&str], results: &mut Ve
             if path.is_dir() {
                 scan_lnk_recursive(&path, keywords, results);
             } else if path.extension().and_then(|e| e.to_str()) == Some("lnk") {
-                let fname = path.file_stem().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                let fname = path
+                    .file_stem()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
                 if matches_name(&fname, keywords) {
                     let size = path.metadata().map(|m| m.len()).unwrap_or(0);
                     results.push(ResidueItem {
@@ -165,6 +189,9 @@ fn matches_name(name: &str, keywords: &[&str]) -> bool {
         return true;
     }
     // 至少匹配 2 个非空关键词
-    let match_count = keywords.iter().filter(|kw| kw.len() >= 2 && name.contains(**kw)).count();
+    let match_count = keywords
+        .iter()
+        .filter(|kw| kw.len() >= 2 && name.contains(**kw))
+        .count();
     match_count >= 2
 }

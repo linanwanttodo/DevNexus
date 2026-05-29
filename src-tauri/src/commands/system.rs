@@ -119,7 +119,11 @@ pub fn get_system_info() -> SystemInfo {
         os_name: System::name().unwrap_or_default(),
         os_version: System::os_version().unwrap_or_default(),
         kernel_version: System::kernel_version().unwrap_or_default(),
-        cpu_model: sys.cpus().first().map(|c| c.brand().to_string()).unwrap_or_default(),
+        cpu_model: sys
+            .cpus()
+            .first()
+            .map(|c| c.brand().to_string())
+            .unwrap_or_default(),
         cpu_cores: sys.cpus().len(),
         total_memory_gb: (total_memory_gb * 100.0).round() / 100.0,
         total_disk_gb: (total_disk_gb * 100.0).round() / 100.0,
@@ -147,7 +151,11 @@ pub fn get_resource_usage() -> ResourceUsage {
     // 从缓存的总量反算使用量：disk_total - 所有磁盘剩余空间之和
     let disks = sysinfo::Disks::new_with_refreshed_list();
     let disk_used_gb = disk_total_gb
-        - disks.iter().map(|d| d.available_space() as f64).sum::<f64>() / 1073741824.0;
+        - disks
+            .iter()
+            .map(|d| d.available_space() as f64)
+            .sum::<f64>()
+            / 1073741824.0;
     let disk_percent = if disk_total_gb > 0.0 {
         (disk_used_gb / disk_total_gb * 100.0) as f32
     } else {

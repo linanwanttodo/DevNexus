@@ -75,7 +75,11 @@ pub fn find_cmd_path(cmd: &str) -> Option<String> {
         if let Ok(programfiles) = std::env::var("ProgramFiles") {
             let common = [
                 format!("{}\\{}", programfiles, cmd),
-                format!("{} (x86)\\{}", std::env::var("ProgramFiles(x86)").unwrap_or_default(), cmd),
+                format!(
+                    "{} (x86)\\{}",
+                    std::env::var("ProgramFiles(x86)").unwrap_or_default(),
+                    cmd
+                ),
             ];
             for p in &common {
                 if std::path::Path::new(p).exists() {

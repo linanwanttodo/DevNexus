@@ -25,14 +25,22 @@ pub fn scan_services(app_name: &str) -> Vec<ResidueItem> {
                     let is_service = path.extension().and_then(|e| e.to_str()) == Some("service");
                     let is_timer = path.extension().and_then(|e| e.to_str()) == Some("timer");
                     if is_service || is_timer {
-                        let fname = path.file_stem().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                        let fname = path
+                            .file_stem()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("")
+                            .to_lowercase();
                         if fname.contains(&name_lower) || name_lower.contains(&fname) {
                             results.push(ResidueItem {
                                 path: path.display().to_string(),
                                 size: 0,
                                 category: "service".into(),
                                 is_safe_to_delete: !is_system,
-                                description: if is_service { "systemd service file".into() } else { "systemd timer file".into() },
+                                description: if is_service {
+                                    "systemd service file".into()
+                                } else {
+                                    "systemd timer file".into()
+                                },
                             });
                         }
                     }
@@ -63,7 +71,11 @@ pub fn scan_services(app_name: &str) -> Vec<ResidueItem> {
                     if ext != Some("plist") {
                         continue;
                     }
-                    let fname = path.file_stem().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+                    let fname = path
+                        .file_stem()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("")
+                        .to_lowercase();
                     if fname.contains(&name_lower) || name_lower.contains(&fname) {
                         let is_system = !is_user;
                         results.push(ResidueItem {
@@ -71,7 +83,11 @@ pub fn scan_services(app_name: &str) -> Vec<ResidueItem> {
                             size: 0,
                             category: "service".into(),
                             is_safe_to_delete: !is_system,
-                            description: if *is_user { "User launchd agent".into() } else { "System launchd daemon".into() },
+                            description: if *is_user {
+                                "User launchd agent".into()
+                            } else {
+                                "System launchd daemon".into()
+                            },
                         });
                     }
                 }

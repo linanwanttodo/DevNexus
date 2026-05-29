@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
-use std::time::Instant;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::Instant;
 
 /// 镜像测速缓存：URL -> (延迟ms, 缓存时间)，TTL 60 秒
 static LATENCY_CACHE: std::sync::LazyLock<Mutex<HashMap<String, (i64, Instant)>>> =
@@ -101,9 +101,7 @@ fn user_home() -> PathBuf {
             .map(PathBuf::from)
             .unwrap_or_default()
     } else {
-        std::env::var("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_default()
+        std::env::var("HOME").map(PathBuf::from).unwrap_or_default()
     }
 }
 
@@ -134,13 +132,55 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             icon: "npm".into(),
             current_url: get_npm_registry(),
             mirrors: vec![
-                MirrorSource { name: "npmmirror (China)".into(), url: "https://registry.npmmirror.com".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/npm/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Tencent (China)".into(), url: "https://mirrors.cloud.tencent.com/npm/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Huawei (China)".into(), url: "https://mirrors.huaweicloud.com/repository/npm/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Europe (Germany)".into(), url: "https://registry.npmjs.eu/".into(), country: "EU".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Australia".into(), url: "https://registry.npmjs.org.au/".into(), country: "AU".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official (US)".into(), url: "https://registry.npmjs.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource {
+                    name: "npmmirror (China)".into(),
+                    url: "https://registry.npmmirror.com".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Tsinghua (China)".into(),
+                    url: "https://mirrors.tuna.tsinghua.edu.cn/npm/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Tencent (China)".into(),
+                    url: "https://mirrors.cloud.tencent.com/npm/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Huawei (China)".into(),
+                    url: "https://mirrors.huaweicloud.com/repository/npm/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Europe (Germany)".into(),
+                    url: "https://registry.npmjs.eu/".into(),
+                    country: "EU".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Australia".into(),
+                    url: "https://registry.npmjs.org.au/".into(),
+                    country: "AU".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Official (US)".into(),
+                    url: "https://registry.npmjs.org".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
             ],
         },
         MirrorGroup {
@@ -149,12 +189,48 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             icon: "python".into(),
             current_url: get_pypi_index(),
             mirrors: vec![
-                MirrorSource { name: "Tsinghua (China)".into(), url: "https://pypi.tuna.tsinghua.edu.cn/simple".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/pypi/simple/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Tencent (China)".into(), url: "https://mirrors.cloud.tencent.com/pypi/simple/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Huawei (China)".into(), url: "https://mirrors.huaweicloud.com/repository/pypi/simple/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official (US)".into(), url: "https://pypi.org/simple/".into(), country: "US".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Google Cloud (Global)".into(), url: "https://pypi-google-cloud-mirror.example.com/simple".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource {
+                    name: "Tsinghua (China)".into(),
+                    url: "https://pypi.tuna.tsinghua.edu.cn/simple".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Aliyun (China)".into(),
+                    url: "https://mirrors.aliyun.com/pypi/simple/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Tencent (China)".into(),
+                    url: "https://mirrors.cloud.tencent.com/pypi/simple/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Huawei (China)".into(),
+                    url: "https://mirrors.huaweicloud.com/repository/pypi/simple/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Official (US)".into(),
+                    url: "https://pypi.org/simple/".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Google Cloud (Global)".into(),
+                    url: "https://pypi-google-cloud-mirror.example.com/simple".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
             ],
         },
         MirrorGroup {
@@ -163,16 +239,76 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             icon: "docker".into(),
             current_url: get_docker_mirror(),
             mirrors: vec![
-                MirrorSource { name: "Aliyun (China)".into(), url: "https://registry.cn-hangzhou.aliyuncs.com".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Tencent (China)".into(), url: "https://mirror.ccs.tencentyun.com".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Docker CN".into(), url: "https://registry.docker-cn.com".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "DaoCloud (China)".into(), url: "https://docker.m.daocloud.io".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Tsinghua (China)".into(), url: "https://docker.mirrors.tuna.tsinghua.edu.cn/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "USTC (China)".into(), url: "https://docker.mirrors.ustc.edu.cn/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "NJU (China)".into(), url: "https://docker.nju.edu.cn/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Google (Global)".into(), url: "https://mirror.gcr.io".into(), country: "US".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "AWS (Global)".into(), url: "https://public.ecr.aws".into(), country: "US".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official (US)".into(), url: "https://registry-1.docker.io".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource {
+                    name: "Aliyun (China)".into(),
+                    url: "https://registry.cn-hangzhou.aliyuncs.com".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Tencent (China)".into(),
+                    url: "https://mirror.ccs.tencentyun.com".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Docker CN".into(),
+                    url: "https://registry.docker-cn.com".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "DaoCloud (China)".into(),
+                    url: "https://docker.m.daocloud.io".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Tsinghua (China)".into(),
+                    url: "https://docker.mirrors.tuna.tsinghua.edu.cn/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "USTC (China)".into(),
+                    url: "https://docker.mirrors.ustc.edu.cn/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "NJU (China)".into(),
+                    url: "https://docker.nju.edu.cn/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Google (Global)".into(),
+                    url: "https://mirror.gcr.io".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "AWS (Global)".into(),
+                    url: "https://public.ecr.aws".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Official (US)".into(),
+                    url: "https://registry-1.docker.io".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
             ],
         },
         MirrorGroup {
@@ -181,13 +317,55 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             icon: "crate".into(),
             current_url: get_cargo_mirror(),
             mirrors: vec![
-                MirrorSource { name: "Tuna (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "USTC (China)".into(), url: "https://mirrors.ustc.edu.cn/crates.io-index/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "RsProxy (China)".into(), url: "https://rsproxy.cn".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "SJTU (China)".into(), url: "https://mirrors.sjtug.sjtu.edu.cn/git/crates.io-index".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/crates.io-index/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official (US)".into(), url: "https://static.rust-lang.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "GitHub (Global)".into(), url: "https://github.com/rust-lang/crates.io-index".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource {
+                    name: "Tuna (China)".into(),
+                    url: "https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "USTC (China)".into(),
+                    url: "https://mirrors.ustc.edu.cn/crates.io-index/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "RsProxy (China)".into(),
+                    url: "https://rsproxy.cn".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "SJTU (China)".into(),
+                    url: "https://mirrors.sjtug.sjtu.edu.cn/git/crates.io-index".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Aliyun (China)".into(),
+                    url: "https://mirrors.aliyun.com/crates.io-index/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Official (US)".into(),
+                    url: "https://static.rust-lang.org".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "GitHub (Global)".into(),
+                    url: "https://github.com/rust-lang/crates.io-index".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
             ],
         },
         #[cfg(target_os = "macos")]
@@ -197,9 +375,27 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             icon: "brew".into(),
             current_url: get_brew_mirror(),
             mirrors: vec![
-                MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/homebrew/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "USTC (China)".into(), url: "https://mirrors.ustc.edu.cn/homebrew/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official (US)".into(), url: "https://github.com/Homebrew/brew".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource {
+                    name: "Tsinghua (China)".into(),
+                    url: "https://mirrors.tuna.tsinghua.edu.cn/homebrew/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "USTC (China)".into(),
+                    url: "https://mirrors.ustc.edu.cn/homebrew/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Official (US)".into(),
+                    url: "https://github.com/Homebrew/brew".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
             ],
         },
         MirrorGroup {
@@ -208,9 +404,27 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             icon: "php".into(),
             current_url: get_composer_mirror(),
             mirrors: vec![
-                MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/composer/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Tencent (China)".into(), url: "https://mirrors.cloud.tencent.com/composer/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official (US)".into(), url: "https://repo.packagist.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource {
+                    name: "Aliyun (China)".into(),
+                    url: "https://mirrors.aliyun.com/composer/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Tencent (China)".into(),
+                    url: "https://mirrors.cloud.tencent.com/composer/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Official (US)".into(),
+                    url: "https://repo.packagist.org".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
             ],
         },
         MirrorGroup {
@@ -219,12 +433,48 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             icon: "go".into(),
             current_url: get_go_proxy(),
             mirrors: vec![
-                MirrorSource { name: "Qiniu (goproxy.cn)".into(), url: "https://goproxy.cn".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/goproxy/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/goproxy/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "USTC (China)".into(), url: "https://mirrors.ustc.edu.cn/goproxy/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official (US)".into(), url: "https://proxy.golang.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "goproxy.io (Global)".into(), url: "https://goproxy.io".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource {
+                    name: "Qiniu (goproxy.cn)".into(),
+                    url: "https://goproxy.cn".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Tsinghua (China)".into(),
+                    url: "https://mirrors.tuna.tsinghua.edu.cn/goproxy/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Aliyun (China)".into(),
+                    url: "https://mirrors.aliyun.com/goproxy/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "USTC (China)".into(),
+                    url: "https://mirrors.ustc.edu.cn/goproxy/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Official (US)".into(),
+                    url: "https://proxy.golang.org".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "goproxy.io (Global)".into(),
+                    url: "https://goproxy.io".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
             ],
         },
         MirrorGroup {
@@ -233,10 +483,34 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             icon: "ruby".into(),
             current_url: get_gems_mirror(),
             mirrors: vec![
-                MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/rubygems/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "USTC (China)".into(), url: "https://mirrors.ustc.edu.cn/rubygems/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/rubygems/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official (US)".into(), url: "https://rubygems.org".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource {
+                    name: "Tsinghua (China)".into(),
+                    url: "https://mirrors.tuna.tsinghua.edu.cn/rubygems/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "USTC (China)".into(),
+                    url: "https://mirrors.ustc.edu.cn/rubygems/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Aliyun (China)".into(),
+                    url: "https://mirrors.aliyun.com/rubygems/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Official (US)".into(),
+                    url: "https://rubygems.org".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
             ],
         },
         MirrorGroup {
@@ -245,12 +519,48 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             icon: "java".into(),
             current_url: get_maven_mirror(),
             mirrors: vec![
-                MirrorSource { name: "Aliyun (China)".into(), url: "https://maven.aliyun.com/repository/public/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Tencent (China)".into(), url: "https://mirrors.cloud.tencent.com/maven/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/maven/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Huawei (China)".into(), url: "https://mirrors.huaweicloud.com/repository/maven/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official (US)".into(), url: "https://repo.maven.apache.org/maven2".into(), country: "US".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Google Cloud (Global)".into(), url: "https://storage-download.googleapis.com/maven-central".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource {
+                    name: "Aliyun (China)".into(),
+                    url: "https://maven.aliyun.com/repository/public/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Tencent (China)".into(),
+                    url: "https://mirrors.cloud.tencent.com/maven/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Tsinghua (China)".into(),
+                    url: "https://mirrors.tuna.tsinghua.edu.cn/maven/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Huawei (China)".into(),
+                    url: "https://mirrors.huaweicloud.com/repository/maven/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Official (US)".into(),
+                    url: "https://repo.maven.apache.org/maven2".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Google Cloud (Global)".into(),
+                    url: "https://storage-download.googleapis.com/maven-central".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
             ],
         },
         MirrorGroup {
@@ -259,10 +569,34 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             icon: "python".into(),
             current_url: get_conda_mirror(),
             mirrors: vec![
-                MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/anaconda/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "USTC (China)".into(), url: "https://mirrors.ustc.edu.cn/anaconda/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/anaconda/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official (US)".into(), url: "https://repo.anaconda.com".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource {
+                    name: "Tsinghua (China)".into(),
+                    url: "https://mirrors.tuna.tsinghua.edu.cn/anaconda/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "USTC (China)".into(),
+                    url: "https://mirrors.ustc.edu.cn/anaconda/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Aliyun (China)".into(),
+                    url: "https://mirrors.aliyun.com/anaconda/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Official (US)".into(),
+                    url: "https://repo.anaconda.com".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
             ],
         },
         MirrorGroup {
@@ -271,9 +605,27 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             icon: "nuget".into(),
             current_url: get_nuget_mirror(),
             mirrors: vec![
-                MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/nuget/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Aliyun (China)".into(), url: "https://mirrors.aliyun.com/nuget/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official (US)".into(), url: "https://api.nuget.org/v3/index.json".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource {
+                    name: "Tsinghua (China)".into(),
+                    url: "https://mirrors.tuna.tsinghua.edu.cn/nuget/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Aliyun (China)".into(),
+                    url: "https://mirrors.aliyun.com/nuget/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Official (US)".into(),
+                    url: "https://api.nuget.org/v3/index.json".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
             ],
         },
         MirrorGroup {
@@ -282,9 +634,27 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
             icon: "flutter".into(),
             current_url: get_pub_mirror(),
             mirrors: vec![
-                MirrorSource { name: "Tsinghua (China)".into(), url: "https://mirrors.tuna.tsinghua.edu.cn/dart-pub/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "USTC (China)".into(), url: "https://mirrors.ustc.edu.cn/dart-pub/".into(), country: "CN".into(), latency_ms: -1, is_active: false },
-                MirrorSource { name: "Official (US)".into(), url: "https://pub.dev".into(), country: "US".into(), latency_ms: -1, is_active: false },
+                MirrorSource {
+                    name: "Tsinghua (China)".into(),
+                    url: "https://mirrors.tuna.tsinghua.edu.cn/dart-pub/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "USTC (China)".into(),
+                    url: "https://mirrors.ustc.edu.cn/dart-pub/".into(),
+                    country: "CN".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
+                MirrorSource {
+                    name: "Official (US)".into(),
+                    url: "https://pub.dev".into(),
+                    country: "US".into(),
+                    latency_ms: -1,
+                    is_active: false,
+                },
             ],
         },
     ]
@@ -316,7 +686,11 @@ pub async fn test_mirror_latency(url: String) -> i64 {
     let latency = match client.get(&url).send().await {
         Ok(resp) if status_ok(resp.status().as_u16()) => {
             let ms = start.elapsed().as_millis() as i64;
-            if ms <= 0 { 1 } else { ms }
+            if ms <= 0 {
+                1
+            } else {
+                ms
+            }
         }
         _ => 0,
     };
@@ -352,7 +726,9 @@ pub fn switch_mirror(mirror_id: String, url: String) -> Result<String, String> {
 
 fn get_npm_registry() -> Option<String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return None; }
+    if home.as_os_str().is_empty() {
+        return None;
+    }
     let npmrc = PathBuf::from(&home).join(".npmrc");
     if let Ok(content) = fs::read_to_string(&npmrc) {
         for line in content.lines() {
@@ -366,7 +742,9 @@ fn get_npm_registry() -> Option<String> {
 
 fn get_pypi_index() -> Option<String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return None; }
+    if home.as_os_str().is_empty() {
+        return None;
+    }
     for conf in &[".pip/pip.conf", ".config/pip/pip.conf"] {
         let path = PathBuf::from(&home).join(conf);
         if let Ok(content) = fs::read_to_string(&path) {
@@ -384,7 +762,9 @@ fn get_pypi_index() -> Option<String> {
 
 fn get_docker_mirror() -> Option<String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return None; }
+    if home.as_os_str().is_empty() {
+        return None;
+    }
     let daemon = PathBuf::from(&home).join(".docker/daemon.json");
     if let Ok(content) = fs::read_to_string(&daemon) {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -398,7 +778,9 @@ fn get_docker_mirror() -> Option<String> {
 
 fn get_cargo_mirror() -> Option<String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return None; }
+    if home.as_os_str().is_empty() {
+        return None;
+    }
     let config = PathBuf::from(&home).join(".cargo/config.toml");
     if let Ok(content) = fs::read_to_string(&config) {
         let mut found_replace = false;
@@ -433,7 +815,9 @@ fn get_brew_mirror() -> Option<String> {
 
 fn get_composer_mirror() -> Option<String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return None; }
+    if home.as_os_str().is_empty() {
+        return None;
+    }
     let config = PathBuf::from(&home).join(".composer/config.json");
     if let Ok(content) = fs::read_to_string(&config) {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -457,7 +841,9 @@ fn get_go_proxy() -> Option<String> {
 
 fn get_gems_mirror() -> Option<String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return None; }
+    if home.as_os_str().is_empty() {
+        return None;
+    }
     let gemrc = PathBuf::from(&home).join(".gemrc");
     if let Ok(content) = fs::read_to_string(&gemrc) {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -471,13 +857,15 @@ fn get_gems_mirror() -> Option<String> {
 
 fn get_maven_mirror() -> Option<String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return None; }
+    if home.as_os_str().is_empty() {
+        return None;
+    }
     let settings = PathBuf::from(&home).join(".m2/settings.xml");
     if let Ok(content) = fs::read_to_string(&settings) {
         // 简单解析 Maven settings.xml 中第一个 mirror 的 url
         if let Some(start) = content.find("<url>") {
-            if let Some(end) = content[start+5..].find("</url>") {
-                return Some(content[start+5..start+5+end].to_string());
+            if let Some(end) = content[start + 5..].find("</url>") {
+                return Some(content[start + 5..start + 5 + end].to_string());
             }
         }
     }
@@ -486,7 +874,9 @@ fn get_maven_mirror() -> Option<String> {
 
 fn get_conda_mirror() -> Option<String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return None; }
+    if home.as_os_str().is_empty() {
+        return None;
+    }
     let condarc = PathBuf::from(&home).join(".condarc");
     if let Ok(content) = fs::read_to_string(&condarc) {
         // 纯文本解析 ~/.condarc (YAML 格式)
@@ -527,12 +917,14 @@ fn get_conda_mirror() -> Option<String> {
 
 fn get_nuget_mirror() -> Option<String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return None; }
+    if home.as_os_str().is_empty() {
+        return None;
+    }
     let config = PathBuf::from(&home).join(".nuget/NuGet/NuGet.Config");
     if let Ok(content) = fs::read_to_string(&config) {
         // 简单的 XML 解析
         if let Some(start) = content.find("<add key=\"nuget.org\" value=\"") {
-            let after = &content[start+31..];
+            let after = &content[start + 31..];
             if let Some(end) = after.find('"') {
                 return Some(after[..end].to_string());
             }
@@ -554,7 +946,9 @@ fn get_pub_mirror() -> Option<String> {
 
 fn set_npm_registry(url: &str) -> Result<String, String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
+    if home.as_os_str().is_empty() {
+        return Err("Cannot determine user home directory".to_string());
+    }
     let npmrc = PathBuf::from(&home).join(".npmrc");
     fs::write(&npmrc, format!("registry={}\n", url))
         .map_err(|e| format!("Failed to write .npmrc: {}", e))?;
@@ -563,7 +957,9 @@ fn set_npm_registry(url: &str) -> Result<String, String> {
 
 fn set_pypi_index(url: &str) -> Result<String, String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
+    if home.as_os_str().is_empty() {
+        return Err("Cannot determine user home directory".to_string());
+    }
     let pip_dir = PathBuf::from(&home).join(".pip");
     fs::create_dir_all(&pip_dir).map_err(|e| e.to_string())?;
     let pip_conf = pip_dir.join("pip.conf");
@@ -575,13 +971,18 @@ fn set_pypi_index(url: &str) -> Result<String, String> {
 fn set_docker_mirror(url: &str) -> Result<String, String> {
     // 优先尝试用户级配置 (~/.docker/daemon.json)，回退到系统级
     let home = user_home();
-    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
+    if home.as_os_str().is_empty() {
+        return Err("Cannot determine user home directory".to_string());
+    }
     let docker_dir = PathBuf::from(&home).join(".docker");
     fs::create_dir_all(&docker_dir).map_err(|e| e.to_string())?;
     let daemon = docker_dir.join("daemon.json");
     let json = serde_json::json!({ "registry-mirrors": [url] });
-    fs::write(&daemon, serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?)
-        .map_err(|e| format!("Failed to write daemon.json: {}", e))?;
+    fs::write(
+        &daemon,
+        serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("Failed to write daemon.json: {}", e))?;
     Ok(format!(
         "Docker mirror set to {}\nNote: If Docker Daemon reads from /etc/docker/daemon.json, you may need to copy this config there with sudo.",
         url
@@ -590,7 +991,9 @@ fn set_docker_mirror(url: &str) -> Result<String, String> {
 
 fn set_cargo_mirror(url: &str) -> Result<String, String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
+    if home.as_os_str().is_empty() {
+        return Err("Cannot determine user home directory".to_string());
+    }
     let cargo_dir = PathBuf::from(&home).join(".cargo");
     fs::create_dir_all(&cargo_dir).map_err(|e| e.to_string())?;
     let config = cargo_dir.join("config.toml");
@@ -605,7 +1008,9 @@ fn set_cargo_mirror(url: &str) -> Result<String, String> {
 #[cfg(target_os = "macos")]
 fn set_brew_mirror(url: &str) -> Result<String, String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
+    if home.as_os_str().is_empty() {
+        return Err("Cannot determine user home directory".to_string());
+    }
 
     // 写入 shell profile 使生效（而不是仅当前进程）
     let shell_rc = if PathBuf::from(&home).join(".zshrc").exists() {
@@ -619,10 +1024,15 @@ fn set_brew_mirror(url: &str) -> Result<String, String> {
     if !existing.contains("HOMEBREW_BOTTLE_DOMAIN") {
         fs::write(&shell_rc, format!("{}{}", existing, export_line))
             .map_err(|e| format!("Failed to write {}: {}", shell_rc.display(), e))?;
-        Ok(format!("Homebrew mirror set to {}\n(added to {}, restart shell or source it)", url, shell_rc.file_name().unwrap_or_default().to_string_lossy()))
+        Ok(format!(
+            "Homebrew mirror set to {}\n(added to {}, restart shell or source it)",
+            url,
+            shell_rc.file_name().unwrap_or_default().to_string_lossy()
+        ))
     } else {
         // 替换已有行
-        let updated = existing.lines()
+        let updated = existing
+            .lines()
             .map(|line| {
                 if line.contains("HOMEBREW_BOTTLE_DOMAIN") {
                     export_line.trim().to_string()
@@ -634,13 +1044,19 @@ fn set_brew_mirror(url: &str) -> Result<String, String> {
             .join("\n");
         fs::write(&shell_rc, updated)
             .map_err(|e| format!("Failed to write {}: {}", shell_rc.display(), e))?;
-        Ok(format!("Homebrew mirror updated to {} in {}", url, shell_rc.file_name().unwrap_or_default().to_string_lossy()))
+        Ok(format!(
+            "Homebrew mirror updated to {} in {}",
+            url,
+            shell_rc.file_name().unwrap_or_default().to_string_lossy()
+        ))
     }
 }
 
 fn set_composer_mirror(url: &str) -> Result<String, String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
+    if home.as_os_str().is_empty() {
+        return Err("Cannot determine user home directory".to_string());
+    }
     let composer_dir = PathBuf::from(&home).join(".composer");
     fs::create_dir_all(&composer_dir).map_err(|e| e.to_string())?;
     let config = composer_dir.join("config.json");
@@ -654,14 +1070,19 @@ fn set_composer_mirror(url: &str) -> Result<String, String> {
             }
         }
     });
-    fs::write(&config, serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?)
-        .map_err(|e| format!("Failed to write composer config: {}", e))?;
+    fs::write(
+        &config,
+        serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("Failed to write composer config: {}", e))?;
     Ok(format!("Composer mirror set to {}", url))
 }
 
 fn set_go_proxy(url: &str) -> Result<String, String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
+    if home.as_os_str().is_empty() {
+        return Err("Cannot determine user home directory".to_string());
+    }
     let shell_rc = if PathBuf::from(&home).join(".zshrc").exists() {
         PathBuf::from(&home).join(".zshrc")
     } else {
@@ -672,9 +1093,14 @@ fn set_go_proxy(url: &str) -> Result<String, String> {
     if !existing.contains("GOPROXY") {
         fs::write(&shell_rc, format!("{}{}", existing, export_line))
             .map_err(|e| format!("Failed to write {}: {}", shell_rc.display(), e))?;
-        Ok(format!("Go proxy set to {}\n(added to {}, restart shell or source it)", url, shell_rc.file_name().unwrap_or_default().to_string_lossy()))
+        Ok(format!(
+            "Go proxy set to {}\n(added to {}, restart shell or source it)",
+            url,
+            shell_rc.file_name().unwrap_or_default().to_string_lossy()
+        ))
     } else {
-        let updated = existing.lines()
+        let updated = existing
+            .lines()
             .map(|line| {
                 if line.contains("GOPROXY") {
                     export_line.trim().to_string()
@@ -686,23 +1112,34 @@ fn set_go_proxy(url: &str) -> Result<String, String> {
             .join("\n");
         fs::write(&shell_rc, updated)
             .map_err(|e| format!("Failed to write {}: {}", shell_rc.display(), e))?;
-        Ok(format!("Go proxy updated to {} in {}", url, shell_rc.file_name().unwrap_or_default().to_string_lossy()))
+        Ok(format!(
+            "Go proxy updated to {} in {}",
+            url,
+            shell_rc.file_name().unwrap_or_default().to_string_lossy()
+        ))
     }
 }
 
 fn set_gems_mirror(url: &str) -> Result<String, String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
+    if home.as_os_str().is_empty() {
+        return Err("Cannot determine user home directory".to_string());
+    }
     let gemrc = PathBuf::from(&home).join(".gemrc");
     let json = serde_json::json!({ ":source": url });
-    fs::write(&gemrc, serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?)
-        .map_err(|e| format!("Failed to write .gemrc: {}", e))?;
+    fs::write(
+        &gemrc,
+        serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("Failed to write .gemrc: {}", e))?;
     Ok(format!("RubyGems mirror set to {}", url))
 }
 
 fn set_maven_mirror(url: &str) -> Result<String, String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
+    if home.as_os_str().is_empty() {
+        return Err("Cannot determine user home directory".to_string());
+    }
     let m2_dir = PathBuf::from(&home).join(".m2");
     fs::create_dir_all(&m2_dir).map_err(|e| e.to_string())?;
     let settings = m2_dir.join("settings.xml");
@@ -722,25 +1159,27 @@ fn set_maven_mirror(url: &str) -> Result<String, String> {
 "#,
         url
     );
-    fs::write(&settings, content).map_err(|e| format!("Failed to write Maven settings.xml: {}", e))?;
+    fs::write(&settings, content)
+        .map_err(|e| format!("Failed to write Maven settings.xml: {}", e))?;
     Ok(format!("Maven mirror set to {}", url))
 }
 
 fn set_conda_mirror(url: &str) -> Result<String, String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
+    if home.as_os_str().is_empty() {
+        return Err("Cannot determine user home directory".to_string());
+    }
     let condarc = PathBuf::from(&home).join(".condarc");
-    let content = format!(
-        "channel_alias: {}\nchannels:\n  - defaults\n",
-        url
-    );
+    let content = format!("channel_alias: {}\nchannels:\n  - defaults\n", url);
     fs::write(&condarc, content).map_err(|e| format!("Failed to write .condarc: {}", e))?;
     Ok(format!("Conda mirror set to {}", url))
 }
 
 fn set_nuget_mirror(url: &str) -> Result<String, String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
+    if home.as_os_str().is_empty() {
+        return Err("Cannot determine user home directory".to_string());
+    }
     let nuget_dir = PathBuf::from(&home).join(".nuget/NuGet");
     fs::create_dir_all(&nuget_dir).map_err(|e| e.to_string())?;
     let config = nuget_dir.join("NuGet.Config");
@@ -761,7 +1200,9 @@ fn set_nuget_mirror(url: &str) -> Result<String, String> {
 
 fn set_pub_mirror(url: &str) -> Result<String, String> {
     let home = user_home();
-    if home.as_os_str().is_empty() { return Err("Cannot determine user home directory".to_string()); }
+    if home.as_os_str().is_empty() {
+        return Err("Cannot determine user home directory".to_string());
+    }
     let shell_rc = if PathBuf::from(&home).join(".zshrc").exists() {
         PathBuf::from(&home).join(".zshrc")
     } else {
@@ -772,9 +1213,14 @@ fn set_pub_mirror(url: &str) -> Result<String, String> {
     if !existing.contains("PUB_HOSTED_URL") {
         fs::write(&shell_rc, format!("{}{}", existing, export_line))
             .map_err(|e| format!("Failed to write {}: {}", shell_rc.display(), e))?;
-        Ok(format!("Flutter Pub mirror set to {}\n(added to {}, restart shell or source it)", url, shell_rc.file_name().unwrap_or_default().to_string_lossy()))
+        Ok(format!(
+            "Flutter Pub mirror set to {}\n(added to {}, restart shell or source it)",
+            url,
+            shell_rc.file_name().unwrap_or_default().to_string_lossy()
+        ))
     } else {
-        let updated = existing.lines()
+        let updated = existing
+            .lines()
             .map(|line| {
                 if line.contains("PUB_HOSTED_URL") {
                     export_line.trim().to_string()
@@ -786,6 +1232,10 @@ fn set_pub_mirror(url: &str) -> Result<String, String> {
             .join("\n");
         fs::write(&shell_rc, updated)
             .map_err(|e| format!("Failed to write {}: {}", shell_rc.display(), e))?;
-        Ok(format!("Flutter Pub mirror updated to {} in {}", url, shell_rc.file_name().unwrap_or_default().to_string_lossy()))
+        Ok(format!(
+            "Flutter Pub mirror updated to {} in {}",
+            url,
+            shell_rc.file_name().unwrap_or_default().to_string_lossy()
+        ))
     }
 }

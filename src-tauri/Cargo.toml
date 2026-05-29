@@ -37,6 +37,7 @@ csv = "1.3"
 rusqlite = { version = "0.31", features = ["bundled"] }
 keyring = { version = "3.0", features = ["apple-native", "windows-native", "linux-native"] }
 walkdir = "2"
+regex = "1"
 semver = "1"
 
 [target.'cfg(target_os = "windows")'.dependencies]

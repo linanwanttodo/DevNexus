@@ -1,9 +1,9 @@
-pub mod system;
-pub mod environment;
-pub mod software;
-pub mod mirror;
-pub mod scheduler;
-pub mod password_manager;
 pub mod cookie_extractor;
+pub mod environment;
+pub mod mirror;
+pub mod password_manager;
 pub mod port_manager;
+pub mod scheduler;
+pub mod software;
+pub mod system;
 pub mod updater;

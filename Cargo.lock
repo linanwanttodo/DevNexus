@@ -762,6 +762,7 @@ dependencies = [
  "libc",
  "pbkdf2 0.12.2",
  "rand",
+ "regex",
  "reqwest 0.12.28",
  "rusqlite",
  "semver",

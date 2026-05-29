@@ -82,11 +82,17 @@ fn get_version(cmd: &str, args: &[&str]) -> String {
 }
 
 /// 检测单个环境
-fn detect_environment(name: &str, check_cmd: &str, version_args: &[&str], config_files: &[&str]) -> Option<Environment> {
+fn detect_environment(
+    name: &str,
+    check_cmd: &str,
+    version_args: &[&str],
+    config_files: &[&str],
+) -> Option<Environment> {
     if let Some(path) = utils::find_cmd_path(check_cmd) {
         let version = get_version(check_cmd, version_args);
         let home = utils::user_home();
-        let shell_config = config_files.iter()
+        let shell_config = config_files
+            .iter()
             .find(|&file| {
                 let resolved = if let Some(stripped) = file.strip_prefix("~/") {
                     format!("{}/{}", home, stripped)
@@ -96,7 +102,7 @@ fn detect_environment(name: &str, check_cmd: &str, version_args: &[&str], config
                 std::path::Path::new(&resolved).exists()
             })
             .map(|s| s.to_string());
-        
+
         Some(Environment {
             name: name.to_string(),
             version,
@@ -112,47 +118,77 @@ fn detect_environment(name: &str, check_cmd: &str, version_args: &[&str], config
 #[tauri::command]
 pub fn list_environments() -> Vec<Environment> {
     let mut envs = Vec::new();
-    
+
     // 检测 Python
-    if let Some(env) = detect_environment("Python", "python3", &["--version"], &["~/.bashrc", "~/.zshrc", "~/.profile"]) {
+    if let Some(env) = detect_environment(
+        "Python",
+        "python3",
+        &["--version"],
+        &["~/.bashrc", "~/.zshrc", "~/.profile"],
+    ) {
         envs.push(env);
     }
-    
+
     // 检测 Node.js
-    if let Some(env) = detect_environment("Node.js", "node", &["--version"], &["~/.bashrc", "~/.zshrc", "~/.profile"]) {
+    if let Some(env) = detect_environment(
+        "Node.js",
+        "node",
+        &["--version"],
+        &["~/.bashrc", "~/.zshrc", "~/.profile"],
+    ) {
         envs.push(env);
     }
-    
+
     // 检测 Go
-    if let Some(env) = detect_environment("Go", "go", &["version"], &["~/.bashrc", "~/.zshrc", "~/.profile"]) {
+    if let Some(env) = detect_environment(
+        "Go",
+        "go",
+        &["version"],
+        &["~/.bashrc", "~/.zshrc", "~/.profile"],
+    ) {
         envs.push(env);
     }
-    
+
     // 检测 Rust
-    if let Some(env) = detect_environment("Rust", "rustc", &["--version"], &["~/.bashrc", "~/.zshrc", "~/.cargo/env"]) {
+    if let Some(env) = detect_environment(
+        "Rust",
+        "rustc",
+        &["--version"],
+        &["~/.bashrc", "~/.zshrc", "~/.cargo/env"],
+    ) {
         envs.push(env);
     }
-    
+
     // 检测 Ruby
-    if let Some(env) = detect_environment("Ruby", "ruby", &["--version"], &["~/.bashrc", "~/.zshrc", "~/.profile"]) {
+    if let Some(env) = detect_environment(
+        "Ruby",
+        "ruby",
+        &["--version"],
+        &["~/.bashrc", "~/.zshrc", "~/.profile"],
+    ) {
         envs.push(env);
     }
-    
+
     // 检测 Java
-    if let Some(env) = detect_environment("Java", "java", &["-version"], &["~/.bashrc", "~/.zshrc", "~/.profile"]) {
+    if let Some(env) = detect_environment(
+        "Java",
+        "java",
+        &["-version"],
+        &["~/.bashrc", "~/.zshrc", "~/.profile"],
+    ) {
         envs.push(env);
     }
-    
+
     // 检测 Docker
     if let Some(env) = detect_environment("Docker", "docker", &["--version"], &[]) {
         envs.push(env);
     }
-    
+
     // 检测 Git
     if let Some(env) = detect_environment("Git", "git", &["--version"], &[]) {
         envs.push(env);
     }
-    
+
     envs
 }
 
@@ -173,7 +209,10 @@ pub fn remove_from_path(env_name: String, path: String) -> Result<String, String
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn add_to_path_impl(env_name: &str, path: &str) -> Result<String, String> {
     let home = std::env::var("HOME").map_err(|e| e.to_string())?;
-    let export_line = format!("\n# DevNexus: {}\nexport PATH=\"{}:$PATH\"\n", env_name, path);
+    let export_line = format!(
+        "\n# DevNexus: {}\nexport PATH=\"{}:$PATH\"\n",
+        env_name, path
+    );
 
     let rc_files: &[&str] = if cfg!(target_os = "macos") {
         &[".zshrc", ".bash_profile", ".bashrc", ".profile"]
@@ -204,7 +243,11 @@ fn add_to_path_impl(env_name: &str, path: &str) -> Result<String, String> {
             .map_err(|e| e.to_string())?;
         Ok(format!("Added {} to PATH in {}", env_name, profile))
     } else {
-        Ok(format!("Added {} to PATH in {}", env_name, written_to.join(", ")))
+        Ok(format!(
+            "Added {} to PATH in {}",
+            env_name,
+            written_to.join(", ")
+        ))
     }
 }
 
@@ -241,9 +284,7 @@ fn add_to_path_impl(env_name: &str, path: &str) -> Result<String, String> {
         .args([
             "-NoProfile",
             "-Command",
-            &format!(
-                "[Environment]::GetEnvironmentVariable('PATH', 'User')"
-            ),
+            &format!("[Environment]::GetEnvironmentVariable('PATH', 'User')"),
         ])
         .output()
         .map_err(|e| format!("Failed to read PATH: {}", e))?;
@@ -252,7 +293,10 @@ fn add_to_path_impl(env_name: &str, path: &str) -> Result<String, String> {
 
     // 检查是否已存在
     let normalized_path = path.replace('/', "\\");
-    if current_path.to_lowercase().contains(&normalized_path.to_lowercase()) {
+    if current_path
+        .to_lowercase()
+        .contains(&normalized_path.to_lowercase())
+    {
         return Ok(format!("{} is already in PATH", env_name));
     }
 
@@ -294,9 +338,7 @@ fn remove_from_path_impl(env_name: &str, path: &str) -> Result<String, String> {
         .args([
             "-NoProfile",
             "-Command",
-            &format!(
-                "[Environment]::GetEnvironmentVariable('PATH', 'User')"
-            ),
+            &format!("[Environment]::GetEnvironmentVariable('PATH', 'User')"),
         ])
         .output()
         .map_err(|e| format!("Failed to read PATH: {}", e))?;
@@ -309,8 +351,7 @@ fn remove_from_path_impl(env_name: &str, path: &str) -> Result<String, String> {
         .split(';')
         .filter(|entry| {
             let trimmed = entry.trim();
-            !trimmed.is_empty()
-                && trimmed.to_lowercase() != normalized_path.to_lowercase()
+            !trimmed.is_empty() && trimmed.to_lowercase() != normalized_path.to_lowercase()
         })
         .collect();
 
