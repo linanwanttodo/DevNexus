@@ -601,6 +601,7 @@ fn decrypt_linux(encrypted_data: &[u8]) -> String {
 }
 
 // AES-128-CBC 解密（Chrome macOS/Linux 使用 PBKDF2-SHA1 + AES-128-CBC）
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn decrypt_chrome_aes_cbc(encrypted_data: &[u8], password: &str) -> String {
     use aes::cipher::BlockDecryptMut;
     use aes::Aes128;
@@ -621,6 +622,7 @@ fn decrypt_chrome_aes_cbc(encrypted_data: &[u8], password: &str) -> String {
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn get_chrome_safe_storage_password() -> Option<String> {
     #[cfg(target_os = "macos")]
     {

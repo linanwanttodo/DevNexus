@@ -284,7 +284,7 @@ fn add_to_path_impl(env_name: &str, path: &str) -> Result<String, String> {
         .args([
             "-NoProfile",
             "-Command",
-            &format!("[Environment]::GetEnvironmentVariable('PATH', 'User')"),
+            "[Environment]::GetEnvironmentVariable('PATH', 'User')",
         ])
         .output()
         .map_err(|e| format!("Failed to read PATH: {}", e))?;
@@ -338,7 +338,7 @@ fn remove_from_path_impl(env_name: &str, path: &str) -> Result<String, String> {
         .args([
             "-NoProfile",
             "-Command",
-            &format!("[Environment]::GetEnvironmentVariable('PATH', 'User')"),
+            "[Environment]::GetEnvironmentVariable('PATH', 'User')",
         ])
         .output()
         .map_err(|e| format!("Failed to read PATH: {}", e))?;
