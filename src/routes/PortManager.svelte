@@ -10,6 +10,7 @@
   let loading = $state(true);
   let error = $state(null);
   let search = $derived(getSearchQuery());
+  let killing = $state(null);
 
   async function loadPorts() {
     try {
@@ -75,7 +76,7 @@
         type="text"
         placeholder={t("port_manager.search_placeholder")}
         value={search}
-        oninput={(e) => { setSearchQuery(e.target.value); }}
+        oninput={(e) => { setSearchQuery(e.currentTarget.value); }}
         class="w-full border border-nx-border bg-nx-surface px-10 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-accent"
       />
       {#if search}

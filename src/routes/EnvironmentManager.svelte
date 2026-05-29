@@ -3,7 +3,7 @@
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
-  import { t } from "../lib/i18n.svelte.js";
+  import { t, tFormat } from "../lib/i18n.svelte.js";
 
   let environments = $state([]);
   let loading = $state(true);
@@ -180,7 +180,7 @@
 
     <!-- Footer -->
     <div class="flex items-center justify-between border-t border-nx-border px-4 py-3">
-      <span class="text-xs text-nx-text-muted">{t("environments.count", { count: environments.length })}</span>
+      <span class="text-xs text-nx-text-muted">{tFormat("environments.count", { count: environments.length })}</span>
       <div class="flex items-center gap-2 text-xs text-nx-text-muted">
         <span>1 of 1</span>
       </div>

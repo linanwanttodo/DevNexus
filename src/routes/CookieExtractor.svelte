@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
+  import BrandIcons from "../icons/BrandIcons.svelte";
   import { t } from "../lib/i18n.svelte.js";
 
   let browsers = $state([]);

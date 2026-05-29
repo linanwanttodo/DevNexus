@@ -45,13 +45,15 @@ impl PasswordManager {
         // 尝试加载已保存的密码验证器
         let _ = pm.load_verifier();
         // 如果没有设置主密码，则保持解锁状态用于首次设置
-        let verifier = pm.password_verifier.lock().unwrap();
-        let has_verifier = verifier.is_some();
-        drop(verifier);
+        // 使用 into_inner() 安全恢复被毒化的 Mutex（不 panic）
+        let has_verifier = pm.password_verifier
+            .lock()
+            .map(|v| v.is_some())
+            .unwrap_or_else(|e| e.into_inner().is_some());
 
         if !has_verifier {
             // 没有设置主密码时自动解锁（首次使用）
-            *pm.locked.lock().unwrap() = false;
+            *pm.locked.lock().unwrap_or_else(|e| e.into_inner()) = false;
             let _ = pm.load_entries();
         }
 
@@ -60,28 +62,7 @@ impl PasswordManager {
 
     /// 持久化数据文件路径
     fn entries_path() -> std::path::PathBuf {
-        let base = Self::data_dir();
-        base.join("entries.enc")
-    }
-
-    fn data_dir() -> std::path::PathBuf {
-        if cfg!(target_os = "macos") {
-            std::env::var("HOME")
-                .map(|h| std::path::PathBuf::from(h).join("Library/Application Support/devnexus"))
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        } else if cfg!(target_os = "windows") {
-            std::env::var("APPDATA")
-                .map(|h| std::path::PathBuf::from(h).join("devnexus"))
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        } else {
-            std::env::var("XDG_DATA_HOME")
-                .map(|h| std::path::PathBuf::from(h).join("devnexus"))
-                .or_else(|_| {
-                    std::env::var("HOME")
-                        .map(|h| std::path::PathBuf::from(h).join(".local/share/devnexus"))
-                })
-                .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        }
+        crate::utils::data_dir().join("entries.enc")
     }
 
     /// 保存所有条目到加密文件
@@ -269,8 +250,7 @@ impl PasswordManager {
 
     /// 主密码验证器文件路径
     fn verifier_path() -> std::path::PathBuf {
-        let base = Self::data_dir();
-        base.join("master.verifier")
+        crate::utils::data_dir().join("master.verifier")
     }
 
     /// 保存主密码验证器（salt + hash）

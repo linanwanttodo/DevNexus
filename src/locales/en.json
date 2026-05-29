@@ -352,6 +352,21 @@
     "confirm_clean": "Clean {count} selected residue item(s)?",
     "caution": "Caution"
   },
+  "residue": {
+    "category_directories": "Directories",
+    "category_files": "Files",
+    "category_shortcuts": "Shortcuts",
+    "category_services": "Services",
+    "category_registry": "Registry",
+    "type_config": "Configuration",
+    "type_cache": "Cache",
+    "type_log": "Log Files",
+    "type_temp": "Temporary Files",
+    "type_data": "Data",
+    "type_shortcut": "Shortcut",
+    "type_service": "Service",
+    "type_registry": "Registry"
+  },
   "common": {
     "loading": "Loading...",
     "error": "Error",
