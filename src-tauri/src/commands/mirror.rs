@@ -96,13 +96,7 @@ mod tests {
 }
 
 fn user_home() -> PathBuf {
-    if cfg!(target_os = "windows") {
-        std::env::var("USERPROFILE")
-            .map(PathBuf::from)
-            .unwrap_or_default()
-    } else {
-        std::env::var("HOME").map(PathBuf::from).unwrap_or_default()
-    }
+    PathBuf::from(crate::utils::user_home())
 }
 
 #[derive(Serialize, Deserialize, Clone)]
