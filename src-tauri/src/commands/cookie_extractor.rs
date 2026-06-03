@@ -446,22 +446,22 @@ fn read_cookies(path: &PathBuf, domain_filter: Option<String>) -> Result<Vec<Coo
     let table = infer_cookie_table(&conn)?;
 
     let (query, param) = if table == "moz_cookies" {
-        if let Some(ref domain) = domain_filter {
-            let pattern = format!("%{}%", domain);
-            ("SELECT name, value, host, path, expiry, isSecure, isHttpOnly FROM moz_cookies WHERE host LIKE ?1".to_string(), Some(pattern))
-        } else {
-            (
-                "SELECT name, value, host, path, expiry, isSecure, isHttpOnly FROM moz_cookies"
-                    .to_string(),
-                None,
-            )
+        let base = "SELECT name, value, host, path, expiry, isSecure, isHttpOnly FROM moz_cookies";
+        match domain_filter {
+            Some(ref domain) => (
+                format!("{} WHERE host LIKE ?1", base),
+                Some(format!("%{}%", domain)),
+            ),
+            None => (base.to_string(), None),
         }
     } else {
-        if let Some(ref domain) = domain_filter {
-            let pattern = format!("%{}%", domain);
-            ("SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies WHERE host_key LIKE ?1".to_string(), Some(pattern))
-        } else {
-            ("SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies".to_string(), None)
+        let base = "SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies";
+        match domain_filter {
+            Some(ref domain) => (
+                format!("{} WHERE host_key LIKE ?1", base),
+                Some(format!("%{}%", domain)),
+            ),
+            None => (base.to_string(), None),
         }
     };
 
@@ -472,34 +472,34 @@ fn read_cookies(path: &PathBuf, domain_filter: Option<String>) -> Result<Vec<Coo
     let mut cookies = Vec::new();
 
     if table == "moz_cookies" {
-        // Firefox: value 列是 TEXT
+        let map_fn = map_firefox_cookie_row;
         if let Some(ref p) = param {
             let mut rows = stmt
-                .query_map([p.as_str()], map_firefox_cookie_row)
+                .query_map([p.as_str()], map_fn)
                 .map_err(|e| format!("Query failed: {}", e))?;
             while let Some(Ok(c)) = rows.next() {
                 cookies.push(c);
             }
         } else {
             let mut rows = stmt
-                .query_map([], map_firefox_cookie_row)
+                .query_map([], map_fn)
                 .map_err(|e| format!("Query failed: {}", e))?;
             while let Some(Ok(c)) = rows.next() {
                 cookies.push(c);
             }
         }
     } else {
-        // Chrome/Edge: encrypted_value 列是 BLOB
+        let map_fn = map_chrome_cookie_row;
         if let Some(ref p) = param {
             let mut rows = stmt
-                .query_map([p.as_str()], map_chrome_cookie_row)
+                .query_map([p.as_str()], map_fn)
                 .map_err(|e| format!("Query failed: {}", e))?;
             while let Some(Ok(c)) = rows.next() {
                 cookies.push(c);
             }
         } else {
             let mut rows = stmt
-                .query_map([], map_chrome_cookie_row)
+                .query_map([], map_fn)
                 .map_err(|e| format!("Query failed: {}", e))?;
             while let Some(Ok(c)) = rows.next() {
                 cookies.push(c);

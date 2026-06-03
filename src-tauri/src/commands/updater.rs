@@ -24,7 +24,7 @@ pub async fn check_for_updates_github() -> Result<UpdateInfo, String> {
     let current_version = env!("CARGO_PKG_VERSION").to_string();
 
     let client = reqwest::Client::builder()
-        .user_agent("DevNexus-Updater/1.0")
+        .user_agent("DevNexus/2.0")
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 

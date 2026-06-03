@@ -400,7 +400,7 @@ pub fn has_master_password(state: tauri::State<'_, PasswordManager>) -> bool {
         .password_verifier
         .lock()
         .map(|v| v.is_some())
-        .unwrap_or(false)
+        .unwrap_or_else(|e| e.into_inner().is_some())
 }
 
 /// 添加密码条目

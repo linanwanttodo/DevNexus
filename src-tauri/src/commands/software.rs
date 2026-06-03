@@ -15,48 +15,6 @@ pub struct Software {
     pub download_supported: bool,
 }
 
-/// 版本来源：从哪里获取可用版本列表
-#[derive(Clone)]
-#[allow(dead_code)]
-enum VersionSource {
-    GitHubReleases {
-        owner: &'static str,
-        repo: &'static str,
-    },
-    NodeDist,
-    GoDev,
-}
-
-/// 获取软件版本来源
-#[allow(dead_code)]
-fn get_version_source(name: &str) -> Option<VersionSource> {
-    match name {
-        "Visual Studio Code" => Some(VersionSource::GitHubReleases {
-            owner: "microsoft",
-            repo: "vscode",
-        }),
-        "Neovim" => Some(VersionSource::GitHubReleases {
-            owner: "neovim",
-            repo: "neovim",
-        }),
-        "Node.js" => Some(VersionSource::NodeDist),
-        "Go" => Some(VersionSource::GoDev),
-        "Python 3" => Some(VersionSource::GitHubReleases {
-            owner: "python",
-            repo: "cpython",
-        }),
-        "Git" => Some(VersionSource::GitHubReleases {
-            owner: "git",
-            repo: "git",
-        }),
-        "Rust" => Some(VersionSource::GitHubReleases {
-            owner: "rust-lang",
-            repo: "rust",
-        }),
-        _ => None,
-    }
-}
-
 /// 生成当前平台的下载 URL
 fn get_download_url(name: &str, version: &str) -> Option<String> {
     match name {
@@ -2293,23 +2251,5 @@ mod tests {
             Some(&["list", "--local-only"] as &[&str])
         );
         assert_eq!(get_pm_list_args("unknown"), None);
-    }
-
-    // ============ get_version_source ============
-
-    #[test]
-    fn test_get_version_source_known() {
-        assert!(get_version_source("Node.js").is_some());
-        assert!(get_version_source("Go").is_some());
-        assert!(get_version_source("Visual Studio Code").is_some());
-        assert!(get_version_source("Neovim").is_some());
-        assert!(get_version_source("Python 3").is_some());
-        assert!(get_version_source("Git").is_some());
-        assert!(get_version_source("Rust").is_some());
-    }
-
-    #[test]
-    fn test_get_version_source_unknown() {
-        assert!(get_version_source("NonExistentApp").is_none());
     }
 }

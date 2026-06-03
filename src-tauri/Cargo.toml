@@ -1,6 +1,6 @@
 [package]
 name = "devnexus"
-version = "1.0.1"
+version = "1.0.2"
 description = "One-stop developer toolstack manager"
 authors = ["DevNexus"]
 edition = "2021"
