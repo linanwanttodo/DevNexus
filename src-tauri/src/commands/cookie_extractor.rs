@@ -1,8 +1,8 @@
+use base64::Engine as _;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use base64::Engine as _;
 use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
 
 /// 前端展示的最大 Cookie 条数
 const MAX_DISPLAY_COOKIES: usize = 500;
@@ -314,8 +314,8 @@ fn get_chrome_cookie_path() -> Option<PathBuf> {
             return Some(path);
         }
         // Snap 安装的 Chromium
-        let snap_path = PathBuf::from(home)
-            .join("snap/chromium/current/.config/chromium/Default/Cookies");
+        let snap_path =
+            PathBuf::from(home).join("snap/chromium/current/.config/chromium/Default/Cookies");
         if snap_path.exists() {
             return Some(snap_path);
         }
@@ -328,8 +328,8 @@ fn get_edge_cookie_path() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     {
         if let Ok(home) = std::env::var("HOME") {
-            let path =
-                PathBuf::from(home).join("Library/Application Support/Microsoft Edge/Default/Cookies");
+            let path = PathBuf::from(home)
+                .join("Library/Application Support/Microsoft Edge/Default/Cookies");
             if path.exists() {
                 return Some(path);
             }
@@ -339,8 +339,7 @@ fn get_edge_cookie_path() -> Option<PathBuf> {
     #[cfg(target_os = "linux")]
     {
         if let Ok(home) = std::env::var("HOME") {
-            let path =
-                PathBuf::from(home).join(".config/microsoft-edge/Default/Cookies");
+            let path = PathBuf::from(home).join(".config/microsoft-edge/Default/Cookies");
             if path.exists() {
                 return Some(path);
             }
@@ -350,8 +349,8 @@ fn get_edge_cookie_path() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-            let path = PathBuf::from(localappdata)
-                .join("Microsoft\\Edge\\User Data\\Default\\Cookies");
+            let path =
+                PathBuf::from(localappdata).join("Microsoft\\Edge\\User Data\\Default\\Cookies");
             if path.exists() {
                 return Some(path);
             }
@@ -382,9 +381,7 @@ fn get_firefox_cookie_path() -> Option<PathBuf> {
                     is_default = false;
                 } else if let Some(val) = line.strip_prefix("Path=") {
                     current_path = Some(val.to_string());
-                } else if line.to_lowercase() == "default=1" {
-                    is_default = true;
-                } else if line.starts_with("Default=") {
+                } else if line.to_lowercase() == "default=1" || line.starts_with("Default=") {
                     is_default = true;
                 }
                 // Section break — evaluate
@@ -447,11 +444,9 @@ fn count_cookies(path: &PathBuf) -> Result<usize, String> {
     let conn = Connection::open(path).map_err(|e| format!("Failed to open: {}", e))?;
     let table = infer_cookie_table(&conn)?;
     let count: usize = conn
-        .query_row(
-            &format!("SELECT COUNT(*) FROM {}", table),
-            [],
-            |row| row.get(0),
-        )
+        .query_row(&format!("SELECT COUNT(*) FROM {}", table), [], |row| {
+            row.get(0)
+        })
         .map_err(|e| format!("Count failed: {}", e))?;
     Ok(count)
 }
@@ -475,18 +470,21 @@ fn infer_cookie_table(conn: &Connection) -> Result<&'static str, String> {
 /// 获取 Cookie 数据库的版本号（用于判断是否包含完整性检查哈希）
 fn get_cookie_db_version(path: &Path) -> i32 {
     if let Ok(conn) = Connection::open(path) {
-        if let Ok(version) = conn.query_row(
-            "SELECT value FROM meta WHERE key='version'",
-            [],
-            |row| row.get::<_, i32>(0),
-        ) {
+        if let Ok(version) =
+            conn.query_row("SELECT value FROM meta WHERE key='version'", [], |row| {
+                row.get::<_, i32>(0)
+            })
+        {
             return version;
         }
     }
     0
 }
 
-fn map_chrome_cookie_row(row: &rusqlite::Row, has_integrity_check: bool) -> rusqlite::Result<CookieEntry> {
+fn map_chrome_cookie_row(
+    row: &rusqlite::Row,
+    has_integrity_check: bool,
+) -> rusqlite::Result<CookieEntry> {
     let encrypted_value: Vec<u8> = row.get(1)?;
     let host_key: String = row.get(2)?;
     let expires_utc: i64 = row.get(4)?;
@@ -498,7 +496,11 @@ fn map_chrome_cookie_row(row: &rusqlite::Row, has_integrity_check: bool) -> rusq
     } else {
         let unix_micros = expires_utc - 11_644_473_600_000_000i64;
         let unix_secs = unix_micros / 1_000_000;
-        if unix_secs > 0 { unix_secs } else { 0 }
+        if unix_secs > 0 {
+            unix_secs
+        } else {
+            0
+        }
     };
     Ok(CookieEntry {
         name: row.get(0)?,
@@ -524,7 +526,11 @@ fn map_firefox_cookie_row(row: &rusqlite::Row) -> rusqlite::Result<CookieEntry> 
     })
 }
 
-fn read_cookies(path: &PathBuf, domain_filter: Option<String>, max_results: Option<usize>) -> Result<Vec<CookieEntry>, String> {
+fn read_cookies(
+    path: &PathBuf,
+    domain_filter: Option<String>,
+    max_results: Option<usize>,
+) -> Result<Vec<CookieEntry>, String> {
     // 复制到临时文件再打开，避免浏览器锁定数据库导致 "database is locked"
     let tmp_dir = std::env::temp_dir().join("devnexus_cookies");
     let _ = std::fs::create_dir_all(&tmp_dir);
@@ -546,8 +552,8 @@ fn read_cookies(path: &PathBuf, domain_filter: Option<String>, max_results: Opti
     // 判断是否需要完整性检查（数据库版本 >= 24 表示有 v11 格式的完整性检查）
     let has_integrity_check = get_cookie_db_version(path) >= 24;
 
-    let conn = Connection::open(&tmp_path)
-        .map_err(|e| format!("Failed to open database: {}", e))?;
+    let conn =
+        Connection::open(&tmp_path).map_err(|e| format!("Failed to open database: {}", e))?;
     let table = infer_cookie_table(&conn)?;
 
     // 根据 max_results 生成 LIMIT 子句
@@ -603,7 +609,9 @@ fn read_cookies(path: &PathBuf, domain_filter: Option<String>, max_results: Opti
         // Chrome/Edge — 传递 has_integrity_check 到 map 闭包
         if let Some(ref p) = param {
             let mut rows = stmt
-                .query_map([p.as_str()], |row| map_chrome_cookie_row(row, has_integrity_check))
+                .query_map([p.as_str()], |row| {
+                    map_chrome_cookie_row(row, has_integrity_check)
+                })
                 .map_err(|e| format!("Query failed: {}", e))?;
             while let Some(Ok(c)) = rows.next() {
                 cookies.push(c);
@@ -701,14 +709,26 @@ fn decrypt_chrome_v10(encrypted_data: &[u8], host_key: &str, has_integrity_check
     }
 
     // 标准格式: auth_tag[16] + iv[16] + ciphertext
-    let result1 = try_aes_128_cbc(&v11_key, &encrypted_data[16..32], &encrypted_data[32..], host_key, has_integrity_check);
+    let result1 = try_aes_128_cbc(
+        &v11_key,
+        &encrypted_data[16..32],
+        &encrypted_data[32..],
+        host_key,
+        has_integrity_check,
+    );
     if !result1.starts_with('[') {
         return result1;
     }
 
     // 回退: 固定 IV (16个空格)，整个数据作为密文
     let fixed_iv = [0x20u8; 16];
-    let result2 = try_aes_128_cbc(&v11_key, &fixed_iv, encrypted_data, host_key, has_integrity_check);
+    let result2 = try_aes_128_cbc(
+        &v11_key,
+        &fixed_iv,
+        encrypted_data,
+        host_key,
+        has_integrity_check,
+    );
     if !result2.starts_with('[') {
         return result2;
     }
@@ -894,55 +914,86 @@ fn derive_v11_key_from_str(secret_str: &str) -> Option<[u8; 16]> {
 /// 使用 Rust dbus crate 直接访问 Secret Service
 #[cfg(target_os = "linux")]
 fn try_dbus_rust() -> Option<[u8; 16]> {
-    use dbus::{blocking::{Connection, BlockingSender}, Message};
+    use dbus::{
+        blocking::{BlockingSender, Connection},
+        Message,
+    };
     use std::collections::HashMap;
     use std::time::Duration;
 
     let conn = Connection::new_session().ok()?;
 
     let mut search_attrs = HashMap::new();
-    search_attrs.insert("xdg:schema".to_string(), "chrome_libsecret_os_crypt_password_v2".to_string());
+    search_attrs.insert(
+        "xdg:schema".to_string(),
+        "chrome_libsecret_os_crypt_password_v2".to_string(),
+    );
     search_attrs.insert("application".to_string(), "chrome".to_string());
 
-    let r = conn.send_with_reply_and_block(
-        Message::new_method_call(
-            "org.freedesktop.secrets", "/org/freedesktop/secrets",
-            "org.freedesktop.Secret.Service", "SearchItems",
-        ).ok()?.append1(search_attrs),
-        Duration::from_secs(5),
-    ).ok()?;
+    let r = conn
+        .send_with_reply_and_block(
+            Message::new_method_call(
+                "org.freedesktop.secrets",
+                "/org/freedesktop/secrets",
+                "org.freedesktop.Secret.Service",
+                "SearchItems",
+            )
+            .ok()?
+            .append1(search_attrs),
+            Duration::from_secs(5),
+        )
+        .ok()?;
     let (items, _prompt): (Vec<dbus::Path<'static>>, dbus::Path<'static>) = r.read2().ok()?;
     let item_path = items.first()?.clone();
 
     let _ = conn.send_with_reply_and_block(
         Message::new_method_call(
-            "org.freedesktop.secrets", "/org/freedesktop/secrets",
-            "org.freedesktop.Secret.Service", "Unlock",
-        ).ok()?.append1(vec![item_path.clone()]),
+            "org.freedesktop.secrets",
+            "/org/freedesktop/secrets",
+            "org.freedesktop.Secret.Service",
+            "Unlock",
+        )
+        .ok()?
+        .append1(vec![item_path.clone()]),
         Duration::from_secs(5),
     );
 
     let session_path = {
-        let r = conn.send_with_reply_and_block(
-            Message::new_method_call(
-                "org.freedesktop.secrets", "/org/freedesktop/secrets",
-                "org.freedesktop.Secret.Service", "OpenSession",
-            ).ok()?.append2("plain", dbus::arg::Variant(Box::new(String::new()))),
-            Duration::from_secs(5),
-        ).ok()?;
-        let (result, session): (dbus::arg::Variant<Box<dyn dbus::arg::RefArg>>, dbus::Path<'static>) = r.read2().ok()?;
+        let r = conn
+            .send_with_reply_and_block(
+                Message::new_method_call(
+                    "org.freedesktop.secrets",
+                    "/org/freedesktop/secrets",
+                    "org.freedesktop.Secret.Service",
+                    "OpenSession",
+                )
+                .ok()?
+                .append2("plain", dbus::arg::Variant(Box::new(String::new()))),
+                Duration::from_secs(5),
+            )
+            .ok()?;
+        let (result, session): (
+            dbus::arg::Variant<Box<dyn dbus::arg::RefArg>>,
+            dbus::Path<'static>,
+        ) = r.read2().ok()?;
         drop(result);
         session
     };
 
     let secret_value = {
-        let r = conn.send_with_reply_and_block(
-            Message::new_method_call(
-                "org.freedesktop.secrets", "/org/freedesktop/secrets",
-                "org.freedesktop.Secret.Service", "GetSecrets",
-            ).ok()?.append2(vec![item_path], session_path),
-            Duration::from_secs(5),
-        ).ok()?;
+        let r = conn
+            .send_with_reply_and_block(
+                Message::new_method_call(
+                    "org.freedesktop.secrets",
+                    "/org/freedesktop/secrets",
+                    "org.freedesktop.Secret.Service",
+                    "GetSecrets",
+                )
+                .ok()?
+                .append2(vec![item_path], session_path),
+                Duration::from_secs(5),
+            )
+            .ok()?;
 
         use dbus::arg::ArgType;
         let mut iter = r.iter_init();
@@ -1052,7 +1103,8 @@ fn get_chrome_encryption_key_v10_fallback() -> Option<[u8; 32]> {
         let stdout = String::from_utf8_lossy(&output.stdout);
         for line in stdout.lines() {
             if let Some(value) = line.strip_prefix("secret = ") {
-                if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(value.trim()) {
+                if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(value.trim())
+                {
                     if decoded.len() == 32 {
                         let mut key = [0u8; 32];
                         key.copy_from_slice(&decoded);
@@ -1076,7 +1128,9 @@ fn get_chrome_encryption_key_v10() -> Option<[u8; 32]> {
         if let Ok(content) = std::fs::read_to_string(&local_state_path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                 if let Some(encoded_key) = json["os_crypt"]["encrypted_key"].as_str() {
-                    if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(encoded_key) {
+                    if let Ok(decoded) =
+                        base64::engine::general_purpose::STANDARD.decode(encoded_key)
+                    {
                         if decoded.len() >= 5 && &decoded[0..5] == b"DPAPI" {
                             let raw_key = decrypt_windows_raw(&decoded[5..]);
                             if raw_key.len() >= 32 {
