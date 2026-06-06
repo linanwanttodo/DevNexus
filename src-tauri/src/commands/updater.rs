@@ -37,10 +37,7 @@ pub async fn check_for_updates_github() -> Result<UpdateInfo, String> {
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "GitHub API 请求失败 (HTTP {}): {}",
-            status, body
-        ));
+        return Err(format!("GitHub API 请求失败 (HTTP {}): {}", status, body));
     }
 
     let release: GithubRelease = response
