@@ -1,6 +1,7 @@
 use base64::Engine as _;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
@@ -653,7 +654,7 @@ fn decrypt_cookie_value(encrypted: &[u8], host_key: &str, has_integrity_check: b
 
 /// Chrome v10+ 解密（AES-256-GCM 或 AES-128-CBC，取决于平台）
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn decrypt_chrome_v10(encrypted_data: &[u8], host_key: &str, has_integrity_check: bool) -> String {
+fn decrypt_chrome_v10(encrypted_data: &[u8], _host_key: &str, has_integrity_check: bool) -> String {
     use aes_gcm::{
         aead::{Aead, KeyInit},
         Aes256Gcm, Nonce,
