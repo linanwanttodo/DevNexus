@@ -7,3 +7,4 @@ pub mod scheduler;
 pub mod software;
 pub mod system;
 pub mod updater;
+pub mod version_manager;

@@ -96,7 +96,14 @@
     "name": "Name",
     "path": "Path",
     "shell": "Shell",
-    "retry": "Retry"
+    "retry": "Retry",
+    "none": "No environments",
+    "none_hint": "Click the button above to add a new environment",
+    "active": "Active",
+    "switch": "Switch",
+    "no_versions": "No versions available",
+    "versions": "Versions",
+    "refresh": "Refresh"
   },
   "mirrors": {
     "title": "Package Mirrors",

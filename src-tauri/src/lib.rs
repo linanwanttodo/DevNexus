@@ -13,12 +13,14 @@ use tauri::{
 pub fn run() {
     let task_scheduler = commands::scheduler::TaskScheduler::new();
     let password_manager = commands::password_manager::PasswordManager::new();
+    let version_cache = commands::version_manager::VersionCache::new();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .manage(task_scheduler)
         .manage(password_manager)
+        .manage(version_cache)
         .setup(|app| {
             // 启动定时调度器后台循环
             let scheduler = app.state::<commands::scheduler::TaskScheduler>();
@@ -131,6 +133,8 @@ pub fn run() {
             commands::port_manager::list_ports,
             commands::port_manager::kill_port,
             commands::updater::check_for_updates_github,
+            commands::version_manager::list_versions,
+            commands::version_manager::switch_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevNexus");

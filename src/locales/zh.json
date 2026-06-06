@@ -120,7 +120,14 @@
     "name": "名称",
     "path": "路径",
     "shell": "Shell",
-    "retry": "重试"
+    "retry": "重试",
+    "none": "暂无环境",
+    "none_hint": "点击上方按钮添加新环境",
+    "active": "当前使用",
+    "switch": "切换",
+    "no_versions": "未找到可切换的版本",
+    "versions": "版本列表",
+    "refresh": "刷新"
   },
   "software": {
     "title": "软件中心",

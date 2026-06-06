@@ -13,6 +13,22 @@
   let newEnvPath = $state("");
   let creating = $state(false);
 
+  // 展开状态：key 为 env.name，value 为展开/折叠
+  let expanded = $state({});
+  // 每个环境的版本列表：key 为 env.name
+  let versionsMap = $state({});
+  // 正在加载版本
+  let loadingVersions = $state({});
+  // 正在切换版本
+  let switchingVersion = $state({});
+  // 正在强制刷新版本
+  let refreshing = $state({});
+  // 正在全局刷新
+  let refreshingAll = $state(false);
+
+  // 支持版本管理的语言类型
+  const versionManagedTypes = ["python", "node", "java", "go", "rust", "cpp"];
+
   // 加载环境列表
   async function loadEnvironments() {
     try {
@@ -24,6 +40,84 @@
       console.error("Error loading environments:", err);
     } finally {
       loading = false;
+    }
+  }
+
+  // 切换展开/折叠
+  async function toggleExpand(env) {
+    if (!expanded[env.name]) {
+      expanded[env.name] = true;
+      // 展开时加载版本列表（走缓存，不会卡顿）
+      await loadVersions(env);
+    } else {
+      expanded[env.name] = false;
+    }
+  }
+
+  // 加载指定环境的版本列表
+  async function loadVersions(env, forceRefresh = false) {
+    loadingVersions[env.name] = true;
+    try {
+      versionsMap[env.name] = await invoke("list_versions", {
+        langType: env.lang_type,
+        forceRefresh: forceRefresh || undefined,
+      });
+    } catch (err) {
+      console.error(`Error loading versions for ${env.name}:`, err);
+      showToast(`Error: ${err.message || err}`);
+      versionsMap[env.name] = [];
+    } finally {
+      loadingVersions[env.name] = false;
+    }
+  }
+
+  // 强制刷新版本列表（跳过缓存）
+  async function refreshVersions(env) {
+    refreshing[env.name] = true;
+    await loadVersions(env, true);
+    refreshing[env.name] = false;
+    showToast(`Versions refreshed for ${env.name}`);
+  }
+
+  // 全局刷新：重新加载环境列表 + 清除所有版本缓存，重新扫描
+  async function refreshAll() {
+    refreshingAll = true;
+    // 先强制刷新环境列表
+    await loadEnvironments();
+    // 对所有已展开的环境强制刷新版本缓存
+    const promises = environments
+      .filter(env => versionManagedTypes.includes(env.lang_type) && expanded[env.name])
+      .map(env => loadVersions(env, true));
+    await Promise.all(promises);
+    refreshingAll = false;
+    showToast("All environments refreshed");
+  }
+
+  // 切换版本
+  async function switchVersion(env, version) {
+    if (switchingVersion[env.name]) return;
+    switchingVersion[env.name] = true;
+    try {
+      const result = await invoke("switch_version", {
+        langType: env.lang_type,
+        version: version.version,
+      });
+      showToast(result);
+      // 重新扫描版本列表（失效缓存后回扫）
+      await loadVersions(env, true);
+      // 手动修正活跃标记：刚切换的版本就是活跃的
+      if (versionsMap[env.name]) {
+        versionsMap[env.name] = versionsMap[env.name].map(v => ({
+          ...v,
+          is_active: v.version === version.version,
+        }));
+      }
+      // 刷新环境列表（更新显示版本号）
+      await loadEnvironments();
+    } catch (err) {
+      showToast(`Error: ${err.message || err}`);
+    } finally {
+      switchingVersion[env.name] = false;
     }
   }
 
@@ -66,12 +160,11 @@
     }
   }
 
-  // 创建环境（将检测到的运行时注册为环境）
+  // 创建环境
   async function createEnvironment() {
     if (!newEnvName.trim() || !newEnvPath.trim()) return;
     creating = true;
     try {
-      // 尝试将其注册到 PATH
       const result = await invoke("add_to_path", { 
         envName: newEnvName.trim(), 
         path: newEnvPath.trim() 
@@ -97,10 +190,22 @@
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-semibold text-nx-text">{t("environments.title")}</h1>
-    <button class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={() => showCreateModal = true}>
-      <span class="material-symbols-outlined text-lg">add</span>
-      {t("environments.new")}
-    </button>
+    <div class="flex items-center gap-2">
+      <button
+        class="flex items-center gap-2 border border-nx-border px-4 py-2 text-sm font-medium text-nx-text-secondary hover:text-nx-text"
+        onclick={refreshAll}
+        disabled={refreshingAll}
+      >
+        <span class="material-symbols-outlined text-lg {refreshingAll ? 'animate-spin' : ''}">
+          {refreshingAll ? 'progress_activity' : 'refresh'}
+        </span>
+        {t("environments.refresh")}
+      </button>
+      <button class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={() => showCreateModal = true}>
+        <span class="material-symbols-outlined text-lg">add</span>
+        {t("environments.new")}
+      </button>
+    </div>
   </div>
 
   <!-- Environment Table -->
@@ -129,23 +234,36 @@
     <table class="w-full">
       <thead>
         <tr class="border-b border-nx-border text-xs text-nx-text-muted">
-          <th class="px-4 py-3 text-left font-medium">{t("environments.name")}</th>
-          <th class="px-4 py-3 text-left font-medium">{t("environments.path")}</th>
-          <th class="px-4 py-3 text-left font-medium">{t("software.status")}</th>
+          <th class="w-8 px-2 py-3"></th>
+          <th class="px-2 py-3 text-left font-medium">{t("environments.name")}</th>
+          <th class="px-2 py-3 text-left font-medium">{t("environments.path")}</th>
+          <th class="px-2 py-3 text-left font-medium">{t("software.status")}</th>
           <th class="px-4 py-3 text-right font-medium">{t("port_manager.actions")}</th>
         </tr>
       </thead>
       <tbody>
         {#each environments as env}
           <tr class="group border-b border-nx-border last:border-0">
-            <td class="px-4 py-3">
+            <td class="w-8 px-2 py-3">
+              {#if versionManagedTypes.includes(env.lang_type)}
+                <button
+                  class="flex items-center justify-center p-0.5 text-nx-text-muted"
+                  onclick={() => toggleExpand(env)}
+                >
+                  <span class="material-symbols-outlined text-base transition-transform duration-200 {expanded[env.name] ? 'rotate-90' : ''}">
+                    chevron_right
+                  </span>
+                </button>
+              {/if}
+            </td>
+            <td class="px-2 py-3">
               <div class="flex items-center gap-2">
                 <span class="text-sm font-medium text-nx-text">{env.name}</span>
                 <span class="font-mono text-xs text-nx-text-muted">v{env.version}</span>
               </div>
             </td>
-            <td class="px-4 py-3 font-mono text-xs text-nx-text-secondary">{env.path}</td>
-            <td class="px-4 py-3">
+            <td class="px-2 py-3 font-mono text-xs text-nx-text-secondary">{env.path}</td>
+            <td class="px-2 py-3">
               <span class="inline-flex items-center gap-1.5 bg-nx-success/15 px-2 py-0.5 text-xs font-medium text-nx-success">
                 <span class="h-1.5 w-1.5 bg-nx-success"></span>
                 {env.status}
@@ -174,6 +292,68 @@
               </div>
             </td>
           </tr>
+          <!-- 展开的版本列表行 -->
+          {#if expanded[env.name]}
+            <tr class="border-b border-nx-border last:border-0">
+              <td colspan="5" class="bg-nx-bg/50 px-4 py-2">
+                <!-- 版本列表头部：标题 + 刷新按钮 -->
+                <div class="mb-2 flex items-center justify-between">
+                  <span class="text-xs font-medium text-nx-text-muted uppercase tracking-wide">
+                    {t("environments.versions")}
+                  </span>
+                  <button
+                    class="flex items-center gap-1 rounded px-2 py-0.5 text-xs text-nx-text-secondary hover:text-nx-text"
+                    onclick={() => refreshVersions(env)}
+                    disabled={refreshing[env.name]}
+                  >
+                    <span class="material-symbols-outlined text-sm {refreshing[env.name] ? 'animate-spin' : ''}">
+                      {refreshing[env.name] ? 'progress_activity' : 'refresh'}
+                    </span>
+                    {t("environments.refresh")}
+                  </button>
+                </div>
+                {#if loadingVersions[env.name]}
+                  <div class="flex items-center justify-center py-4">
+                    <span class="material-symbols-outlined animate-spin text-nx-text-muted text-xl">progress_activity</span>
+                    <span class="ml-2 text-xs text-nx-text-muted">Loading versions...</span>
+                  </div>
+                {:else if versionsMap[env.name] && versionsMap[env.name].length > 0}
+                  <div class="space-y-1">
+                    {#each versionsMap[env.name] as ver}
+                      <div class="flex items-center justify-between rounded px-3 py-1.5 text-sm {ver.is_active ? 'bg-nx-accent/10 border border-nx-accent/30' : 'hover:bg-nx-bg border border-transparent'}">
+                        <div class="flex items-center gap-3">
+                          {#if ver.is_active}
+                            <span class="material-symbols-outlined text-nx-accent text-base">check_circle</span>
+                          {:else}
+                            <span class="material-symbols-outlined text-nx-text-muted text-base">radio_button_unchecked</span>
+                          {/if}
+                          <span class="font-mono text-sm text-nx-text">{ver.version}</span>
+                          {#if ver.path}
+                            <span class="font-mono text-xs text-nx-text-muted">{ver.path}</span>
+                          {/if}
+                        </div>
+                        <div class="flex items-center gap-2">
+                          {#if ver.is_active}
+                            <span class="text-xs text-nx-accent font-medium">{t("environments.active")}</span>
+                          {:else}
+                            <button
+                              class="rounded border border-nx-border bg-nx-surface px-2.5 py-1 text-xs font-medium text-nx-text-secondary hover:bg-nx-accent hover:text-white disabled:opacity-40"
+                              onclick={() => switchVersion(env, ver)}
+                              disabled={switchingVersion[env.name]}
+                            >
+                              {switchingVersion[env.name] ? '...' : t("environments.switch")}
+                            </button>
+                          {/if}
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="py-3 text-center text-xs text-nx-text-muted">{t("environments.no_versions")}</div>
+                {/if}
+              </td>
+            </tr>
+          {/if}
         {/each}
       </tbody>
     </table>

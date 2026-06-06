@@ -10,6 +10,7 @@ mod tests {
     fn test_environment_serialization() {
         let env = Environment {
             name: "Python".to_string(),
+            lang_type: "python".to_string(),
             version: "Python 3.11.0".to_string(),
             path: "/usr/local/bin/python3".to_string(),
             status: "Active".to_string(),
@@ -24,6 +25,7 @@ mod tests {
     fn test_environment_no_shell_config() {
         let env = Environment {
             name: "Go".to_string(),
+            lang_type: "go".to_string(),
             version: "go1.21.0".to_string(),
             path: "/usr/local/go/bin/go".to_string(),
             status: "Active".to_string(),
@@ -39,6 +41,7 @@ mod tests {
     fn test_environment_not_found_status() {
         let env = Environment {
             name: "Missing".to_string(),
+            lang_type: "unknown".to_string(),
             version: "not found".to_string(),
             path: String::new(),
             status: "Inactive".to_string(),
@@ -63,7 +66,8 @@ pub struct Environment {
     pub version: String,
     pub path: String,
     pub status: String,
-    pub shell_config: Option<String>, // 存储配置文件路径
+    pub shell_config: Option<String>,
+    pub lang_type: String, // "python", "node", "java", "go", "rust", "ruby", "docker", "git", "cpp"
 }
 
 /// 执行命令获取版本信息
@@ -84,6 +88,7 @@ fn get_version(cmd: &str, args: &[&str]) -> String {
 /// 检测单个环境
 fn detect_environment(
     name: &str,
+    lang_type: &str,
     check_cmd: &str,
     version_args: &[&str],
     config_files: &[&str],
@@ -105,6 +110,7 @@ fn detect_environment(
 
         Some(Environment {
             name: name.to_string(),
+            lang_type: lang_type.to_string(),
             version,
             path,
             status: "Active".to_string(),
@@ -122,6 +128,7 @@ pub fn list_environments() -> Vec<Environment> {
     // 检测 Python
     if let Some(env) = detect_environment(
         "Python",
+        "python",
         "python3",
         &["--version"],
         &["~/.bashrc", "~/.zshrc", "~/.profile"],
@@ -133,6 +140,7 @@ pub fn list_environments() -> Vec<Environment> {
     if let Some(env) = detect_environment(
         "Node.js",
         "node",
+        "node",
         &["--version"],
         &["~/.bashrc", "~/.zshrc", "~/.profile"],
     ) {
@@ -143,6 +151,7 @@ pub fn list_environments() -> Vec<Environment> {
     if let Some(env) = detect_environment(
         "Go",
         "go",
+        "go",
         &["version"],
         &["~/.bashrc", "~/.zshrc", "~/.profile"],
     ) {
@@ -152,6 +161,7 @@ pub fn list_environments() -> Vec<Environment> {
     // 检测 Rust
     if let Some(env) = detect_environment(
         "Rust",
+        "rust",
         "rustc",
         &["--version"],
         &["~/.bashrc", "~/.zshrc", "~/.cargo/env"],
@@ -163,6 +173,7 @@ pub fn list_environments() -> Vec<Environment> {
     if let Some(env) = detect_environment(
         "Ruby",
         "ruby",
+        "ruby",
         &["--version"],
         &["~/.bashrc", "~/.zshrc", "~/.profile"],
     ) {
@@ -173,6 +184,7 @@ pub fn list_environments() -> Vec<Environment> {
     if let Some(env) = detect_environment(
         "Java",
         "java",
+        "java",
         &["-version"],
         &["~/.bashrc", "~/.zshrc", "~/.profile"],
     ) {
@@ -180,12 +192,12 @@ pub fn list_environments() -> Vec<Environment> {
     }
 
     // 检测 Docker
-    if let Some(env) = detect_environment("Docker", "docker", &["--version"], &[]) {
+    if let Some(env) = detect_environment("Docker", "docker", "docker", &["--version"], &[]) {
         envs.push(env);
     }
 
     // 检测 Git
-    if let Some(env) = detect_environment("Git", "git", &["--version"], &[]) {
+    if let Some(env) = detect_environment("Git", "git", "git", &["--version"], &[]) {
         envs.push(env);
     }
 

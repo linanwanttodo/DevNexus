@@ -1,6 +1,6 @@
 [package]
 name = "devnexus"
-version = "1.0.3"
+version = "1.0.4"
 description = "One-stop developer toolstack manager"
 authors = ["DevNexus"]
 edition = "2021"
@@ -39,6 +39,7 @@ keyring = "3"
 walkdir = "2"
 regex = "1"
 semver = "1"
+dirs = "5"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = [
