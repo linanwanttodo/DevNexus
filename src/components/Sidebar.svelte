@@ -52,6 +52,6 @@
   </nav>
 
   <div class="border-t border-nx-border px-5 py-3">
-    <span class="text-xs text-nx-text-muted">{t("version")} 1.0.2</span>
+    <span class="text-xs text-nx-text-muted">{t("version")} 1.0.3</span>
   </div>
 </aside>

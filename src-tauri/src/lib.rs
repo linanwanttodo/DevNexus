@@ -84,6 +84,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::system::get_system_info,
             commands::system::get_resource_usage,
+            commands::system::get_app_version,
             commands::environment::list_environments,
             commands::environment::add_to_path,
             commands::environment::remove_from_path,

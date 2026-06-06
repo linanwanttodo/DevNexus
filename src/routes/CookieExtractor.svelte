@@ -6,6 +6,7 @@
   import BrandIcons from "../icons/BrandIcons.svelte";
   import { t } from "../lib/i18n.svelte.js";
 
+  const MAX_DISPLAY = 500;
   let browsers = $state([]);
   let selectedBrowser = $state(null);
   let domainFilter = $state("");
@@ -44,6 +45,7 @@
       cookies = await invoke("extract_cookies", {
         browserName: selectedBrowser,
         domainFilter: filter,
+        maxResults: null,
       });
     } catch (err) {
       showToast(t('cookies.extract_failed').replace('{error}', err.message || err));
@@ -111,7 +113,7 @@
 
   function formatDate(timestamp) {
     if (timestamp === 0 || timestamp === null) return t('cookies.session');
-    const date = new Date((timestamp - 116444736000000000) / 10000); // Chrome epoch
+    const date = new Date(timestamp * 1000);
     return date.toLocaleDateString();
   }
 
@@ -197,6 +199,13 @@
 
   <!-- Results -->
   {#if cookies.length > 0}
+    <!-- 显示上限提示 -->
+    {#if cookies.length >= MAX_DISPLAY}
+      <div class="border-b border-nx-border bg-amber-500/10 px-4 py-2 text-xs text-amber-600">
+        仅显示前 {MAX_DISPLAY} 条 cookie，请使用域名过滤或导出功能获取完整数据。
+      </div>
+    {/if}
+    <!-- Results -->
     <div class="border border-nx-border bg-nx-surface">
       <!-- Toolbar -->
       <div class="flex items-center justify-between border-b border-nx-border px-4 py-3">
@@ -274,6 +283,7 @@
       <span class="material-symbols-outlined text-nx-text-muted text-4xl">cookie</span>
       <div class="mt-4 text-sm text-nx-text-muted">{t('cookies.no_cookies')}</div>
       <div class="mt-1 text-xs text-nx-text-muted">{t('cookies.extract_begin')}</div>
+      <div class="mt-3 text-xs text-amber-600">{t('cookies.extract_hint')}</div>
     </div>
   {/if}
 </div>

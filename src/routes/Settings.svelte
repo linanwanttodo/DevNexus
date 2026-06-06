@@ -2,7 +2,6 @@
   import { onMount } from "svelte";
   import { t, initI18n, getLang } from "../lib/i18n.svelte.js";
   import { invoke } from "@tauri-apps/api/core";
-  import { check } from "@tauri-apps/plugin-updater";
 
   let theme = $state("dark");
   let lang = $state(getLang());
@@ -12,6 +11,7 @@
   let proxyEnabled = $state(false);
   let proxyAddress = $state("");
   let proxyPort = $state("");
+  let appVersion = $state("");
 
   // Update state
   let updateState = $state("idle");
@@ -19,7 +19,6 @@
   function isState(v) { return updateState === v; }
   let updateInfo = $state(null);
   let updateError = $state("");
-  let downloadProgress = $state(0);
 
   function applyTheme(t) {
     document.documentElement.setAttribute("data-theme", t);
@@ -46,26 +45,7 @@
     updateError = "";
     updateInfo = null;
 
-    try {
-      // Try Tauri plugin updater first
-      const update = await check();
-      if (update && update.available) {
-        updateInfo = {
-          has_update: true,
-          latest_version: update.version,
-          current_version: "",
-          download_url: "",
-          release_notes: update.body || "New version available",
-          published_at: update.date,
-        };
-        updateState = "available";
-        return;
-      }
-    } catch (e) {
-      // Plugin updater not configured (no endpoint/pubkey), fall back to GitHub API
-      console.log("Plugin updater unavailable, falling back to GitHub API:", e);
-    }
-
+    // 直接使用 GitHub API 检测更新（Tauri 插件需要 valid 签名文件，容易静默失败）
     try {
       const result = await invoke("check_for_updates_github");
       if (result.has_update) {
@@ -82,32 +62,40 @@
 
   async function downloadAndInstall() {
     updateState = "downloading";
-    downloadProgress = 0;
+    updateError = "";
 
     try {
+      // 优先使用 Tauri updater 插件（需要 updates.json 签名验证通过）
+      const { check, Update } = await import("@tauri-apps/plugin-updater");
       const update = await check();
-      if (update && update.available) {
-        await update.downloadAndInstall((event) => {
-          if (event.event === "Progress") {
-            // Tauri v2 updater: cast event data to access progress info
-            const progressData = /** @type {{ totalBytes: number, transferredBytes: number }} */ (/** @type {any} */ (event).data);
-            if (progressData) {
-              downloadProgress = Math.round((progressData.transferredBytes / progressData.totalBytes) * 100);
-            }
-          }
-        });
-        // App will restart after install
+
+      if (update) {
+        // has .version, .date, .body, .downloadAndInstall()
+        console.log(`[updater] found ${update.version}, downloading...`);
+        await update.downloadAndInstall();
+        updateState = "installed";
+        // 提示用户重启
       } else {
-        // Fallback: open release page in browser
-        if (updateInfo?.download_url) {
-          const { open } = await import("@tauri-apps/plugin-shell");
-          await open(updateInfo.download_url);
-        }
-        updateState = "available";
+        // updates.json 无更新 ⇒ 打开 GitHub Release 页
+        const { open } = await import("@tauri-apps/plugin-shell");
+        await open(`https://github.com/linanwanttodo/DevNexus/releases/latest`);
+        updateState = "idle";
       }
     } catch (err) {
-      updateError = err.message || String(err);
-      updateState = "error";
+      // 插件失败（签名未配置、updates.json 不存在等）→ 回退到 GitHub 发布页
+      console.warn("[updater] plugin failed, falling back to GitHub release page:", err);
+      try {
+        const { open } = await import("@tauri-apps/plugin-shell");
+        if (updateInfo?.html_url) {
+          await open(updateInfo.html_url);
+        } else {
+          await open(`https://github.com/linanwanttodo/DevNexus/releases/latest`);
+        }
+        updateState = "idle";
+      } catch (fallbackErr) {
+        updateError = fallbackErr.message || String(fallbackErr);
+        updateState = "error";
+      }
     }
   }
 
@@ -115,6 +103,8 @@
     const saved = localStorage.getItem("devnexus-theme") || "dark";
     theme = saved === "light" || saved === "dark" ? saved : "system";
     setTheme(theme);
+    // 动态获取应用版本号
+    invoke("get_app_version").then(v => appVersion = v).catch(() => appVersion = "1.0.2");
   });
 </script>
 
@@ -284,7 +274,7 @@
       <div class="flex items-center justify-between">
         <div>
           <div class="text-sm text-nx-text">{t("settings.current_version")}</div>
-          <div class="font-mono text-xs text-nx-text-secondary">v1.0.0</div>
+          <div class="font-mono text-xs text-nx-text-secondary">v{appVersion || "—"}</div>
         </div>
         <button
           class="border border-nx-border bg-nx-bg px-4 py-2 text-xs font-medium text-nx-text-secondary transition-colors hover:bg-nx-raised disabled:opacity-50"
@@ -342,7 +332,7 @@
               {#if isState('downloading')}
                 <span class="flex items-center justify-center gap-2">
                   <span class="material-symbols-outlined text-sm animate-spin">refresh</span>
-                  {t("settings.downloading")} {downloadProgress}%
+                  {t("settings.downloading")}...
                 </span>
               {:else}
                 <span class="flex items-center justify-center gap-2">
@@ -351,16 +341,21 @@
                 </span>
               {/if}
             </button>
-            {#if isState('downloading')}
-              <div class="mt-2 h-1 w-full bg-nx-border rounded-full overflow-hidden">
-                <div class="h-full bg-nx-accent transition-all" style="width: {downloadProgress}%"></div>
-              </div>
-            {/if}
+          </div>
+        {:else if isState('installed')}
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-nx-success text-sm">check_circle</span>
+            <span class="text-xs text-nx-text-secondary">{t("settings.restart_to_apply")}</span>
           </div>
         {:else if isState('error')}
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-red-500 text-sm">error</span>
             <span class="text-xs text-red-500">{t("settings.update_error")}: {updateError}</span>
+          </div>
+        {:else if isState('idle')}
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-nx-text-muted text-sm">info</span>
+            <span class="text-xs text-nx-text-muted">{t("settings.click_to_check")}</span>
           </div>
         {:else}
           <div class="flex items-center gap-2">
