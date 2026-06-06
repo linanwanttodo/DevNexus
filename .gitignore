@@ -26,3 +26,4 @@ Thumbs.db
 
 # Tauri signing private key (keep secret!)
 tauri-signing-key
+.omo/

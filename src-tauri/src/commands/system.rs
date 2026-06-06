@@ -2,6 +2,12 @@ use serde::Serialize;
 use std::sync::OnceLock;
 use sysinfo::System;
 
+/// 获取当前应用版本号（编译时从 Cargo.toml 读取）
+#[tauri::command]
+pub fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 /// 缓存磁盘总量（GB），避免每次 get_resource_usage 都枚举磁盘
 fn cached_disk_total_gb() -> f64 {
     static DISK_TOTAL: OnceLock<f64> = OnceLock::new();

@@ -35,14 +35,12 @@ pub async fn check_for_updates_github() -> Result<UpdateInfo, String> {
         .map_err(|e| format!("Failed to fetch latest release: {}", e))?;
 
     if !response.status().is_success() {
-        return Ok(UpdateInfo {
-            has_update: false,
-            latest_version: "unknown".to_string(),
-            current_version,
-            download_url: String::new(),
-            release_notes: None,
-            published_at: None,
-        });
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!(
+            "GitHub API 请求失败 (HTTP {}): {}",
+            status, body
+        ));
     }
 
     let release: GithubRelease = response
