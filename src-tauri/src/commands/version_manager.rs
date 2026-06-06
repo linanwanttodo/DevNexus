@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
 use std::process::Command;
 use std::sync::Mutex;
 
@@ -916,7 +915,7 @@ fn list_cpp_versions() -> Vec<VersionInfo> {
         ] {
             if let Ok(entries) = glob(pattern) {
                 for path in entries {
-                    let name = Path::new(&path)
+                    let name = std::path::Path::new(&path)
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
