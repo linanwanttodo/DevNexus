@@ -709,7 +709,11 @@ fn switch_java_version(version: &str) -> Result<String, String> {
         .args(["--set", "java", &alt_path.to_string_lossy()])
         .output();
     let _ = Command::new("update-alternatives")
-        .args(["--set", "javac", &java_home.join("bin").join("javac").to_string_lossy()])
+        .args([
+            "--set",
+            "javac",
+            &java_home.join("bin").join("javac").to_string_lossy(),
+        ])
         .output();
 
     Ok(format!(
