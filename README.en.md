@@ -32,6 +32,28 @@ Only **~10MB** installation, **~60MB** memory usage — say goodbye to Electron 
 
 ---
 
+## Development Docs
+
+Detailed module design, cross-platform implementation, and development guide are available in the [`docs/`](docs/) directory:
+
+| Document | Description |
+|----------|-------------|
+| [Architecture Overview](docs/architecture.md) | Module dependencies, data flow, security boundaries |
+| [Development Guide](docs/dev-guide.md) | Setup, coding standards, build, debugging |
+| [System Dashboard](docs/modules/01-system.md) | sysinfo + OnceLock disk caching |
+| [Software Center](docs/modules/02-software.md) | 37 tools, 9 package managers, cross-platform mapping |
+| [Environment Manager](docs/modules/03-environment.md) | Runtime detection, Unix/Windows PATH editing |
+| [Mirror Settings](docs/modules/04-mirror.md) | 12 package source switches, latency testing |
+| [Port Manager](docs/modules/05-port.md) | lsof / procfs / netstat three-platform solution |
+| [Task Scheduler](docs/modules/06-scheduler.md) | Cron engine, Shell/Python execution, system actions |
+| [Password Manager](docs/modules/07-password.md) | AES-256-GCM + PBKDF2 + SQLite |
+| [Cookie Extractor](docs/modules/08-cookie.md) | 5 browsers, 3 encryption mechanisms |
+| [Deep Uninstall](docs/modules/09-uninstall.md) | Residue path DB + keyword scanning |
+| [Version Manager](docs/modules/10-version.md) | pyenv/fnm/jenv/rustup/gvm unified API |
+| [Cross-Platform Deep Dive](docs/modules/99-cross-platform.md) | 3-layer strategy, path mapping, command difference tables |
+
+---
+
 ## Screenshots
 
 | ![Overview](docs/Picture/概览.png) |
