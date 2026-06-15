@@ -1100,7 +1100,7 @@ pub async fn uninstall_software_deep(
 ) -> Result<String, String> {
     // (a) 先执行标准卸载
     let result = uninstall_software(package_name.clone()).await;
-    
+
     // (b) 获取所有可能的清理路径
     let cleanup_paths = get_cleanup_paths(&app_name, &package_name);
 
@@ -1825,7 +1825,8 @@ pub async fn install_software_from_url(
     // 创建符号链接到 bin 目录
     // 安全获取 bin 目录，避免 parent() 返回 None 时的 panic
     let install_base = get_install_base_dir();
-    let bin_dir = install_base.parent()
+    let bin_dir = install_base
+        .parent()
         .map(|p| p.join("bin"))
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join("bin"));
     std::fs::create_dir_all(&bin_dir).map_err(|e| format!("Failed to create bin dir: {}", e))?;
