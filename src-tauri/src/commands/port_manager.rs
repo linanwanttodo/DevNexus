@@ -242,10 +242,15 @@ fn list_ports_impl() -> Result<Vec<PortEntry>, String> {
         let state = parts[3];
         if state != "LISTENING" {
             continue;
-        }
-
-        let local_addr = parts[1];
-        let pid: u32 = parts[4].parse().unwrap_or(0);
+        }            let local_addr = parts[1];
+            let pid: u32 = parts[4].parse().unwrap_or_else(|_| {
+                // 解析失败，记录警告
+                eprintln!("[DevNexus] Warning: Failed to parse PID from '{}'", parts[4]);
+                0
+            });
+            if pid == 0 {
+                continue;
+            }
         if pid == 0 {
             continue;
         }

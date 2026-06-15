@@ -1099,8 +1099,8 @@ pub async fn uninstall_software_deep(
     app_name: String,
 ) -> Result<String, String> {
     // (a) 先执行标准卸载
-    let result = uninstall_software(package_name.clone()).await?;
-
+    let result = uninstall_software(package_name.clone()).await;
+    
     // (b) 获取所有可能的清理路径
     let cleanup_paths = get_cleanup_paths(&app_name, &package_name);
 
@@ -1122,7 +1122,10 @@ pub async fn uninstall_software_deep(
     }
 
     // (d) 构造结果消息
-    let mut message = result;
+    let mut message = match &result {
+        Ok(r) => r.clone(),
+        Err(e) => format!("Uninstall warning: {}", e),
+    };
     if !cleaned_dirs.is_empty() || !error_dirs.is_empty() {
         message.push_str("\n\n");
     }
@@ -1136,7 +1139,10 @@ pub async fn uninstall_software_deep(
         message.push_str(&format!("清理失败:\n{}", error_dirs.join("\n")));
     }
 
-    // 至少清理了一些内容才算成功，但即使全部失败也返回 Ok（让上层决定）
+    // 如果标准卸载失败但清理成功，仍然算部分成功
+    if result.is_err() && cleaned_dirs.is_empty() && error_dirs.is_empty() {
+        return result; // 完全没有做任何清理，返回原始错误
+    }
     Ok(message)
 }
 
@@ -1817,7 +1823,11 @@ pub async fn install_software_from_url(
     std::fs::remove_file(&filepath).ok();
 
     // 创建符号链接到 bin 目录
-    let bin_dir = get_install_base_dir().parent().unwrap().join("bin");
+    // 安全获取 bin 目录，避免 parent() 返回 None 时的 panic
+    let install_base = get_install_base_dir();
+    let bin_dir = install_base.parent()
+        .map(|p| p.join("bin"))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join("bin"));
     std::fs::create_dir_all(&bin_dir).map_err(|e| format!("Failed to create bin dir: {}", e))?;
 
     let binary_name = match def.name {

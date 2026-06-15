@@ -2,12 +2,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::RwLock;
 use std::time::Instant;
 
 /// 镜像测速缓存：URL -> (延迟ms, 缓存时间)，TTL 60 秒
-static LATENCY_CACHE: std::sync::LazyLock<Mutex<HashMap<String, (i64, Instant)>>> =
-    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+/// 使用 RwLock 提升读并发性能，多线程读取时不需要互斥
+static LATENCY_CACHE: std::sync::LazyLock<RwLock<HashMap<String, (i64, Instant)>>> =
+    std::sync::LazyLock::new(|| RwLock::new(HashMap::new()));
 
 #[cfg(test)]
 mod tests {
@@ -657,12 +658,14 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
 #[tauri::command]
 pub async fn test_mirror_latency(url: String) -> i64 {
     {
-        if let Ok(cache) = LATENCY_CACHE.lock() {
+        if let Ok(cache) = LATENCY_CACHE.read() {
             if let Some(&(latency, cached_at)) = cache.get(&url) {
                 if cached_at.elapsed().as_secs() < 60 {
                     return latency;
                 }
             }
+        } else {
+            eprintln!("[DevNexus] Warning: Failed to acquire LATENCY_CACHE read lock");
         }
     }
 
@@ -689,7 +692,7 @@ pub async fn test_mirror_latency(url: String) -> i64 {
         _ => 0,
     };
 
-    if let Ok(mut cache) = LATENCY_CACHE.lock() {
+    if let Ok(mut cache) = LATENCY_CACHE.write() {
         cache.insert(url, (latency, Instant::now()));
     }
 

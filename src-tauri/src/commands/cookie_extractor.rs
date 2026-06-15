@@ -734,7 +734,8 @@ fn decrypt_chrome_v10(encrypted_data: &[u8], host_key: &str, has_integrity_check
         return result2;
     }
 
-    format!("{} | {}", result1, result2)
+    // 所有解密尝试都失败，返回第一个错误（更简洁的反馈）
+    result1
 }
 
 /// 尝试 AES-128-CBC 解密

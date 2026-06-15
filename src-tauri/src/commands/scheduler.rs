@@ -290,6 +290,7 @@ impl TaskScheduler {
                 // 收集到期任务
                 {
                     let Ok(tasks) = tasks_arc.lock() else {
+                        eprintln!("[DevNexus] Failed to acquire tasks lock, skipping this cycle");
                         continue;
                     };
                     for t in tasks.iter() {

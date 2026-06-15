@@ -4,6 +4,7 @@
   import TopBar from "./components/TopBar.svelte";
   import Toast from "./components/Toast.svelte";
   import ConfirmDialog from "./components/ConfirmDialog.svelte";
+  import ErrorBoundary from "./components/ErrorBoundary.svelte";
   import Dashboard from "./routes/Dashboard.svelte";
   import EnvironmentManager from "./routes/EnvironmentManager.svelte";
   import SoftwareCenter from "./routes/SoftwareCenter.svelte";
@@ -50,4 +51,5 @@
   </div>
   <Toast />
   <ConfirmDialog />
+  <ErrorBoundary />
 </div>
