@@ -82,8 +82,11 @@ pub fn save_export_file(path: String) -> Result<String, String> {
         versions: vec![],
     })?;
 
-    std::fs::write(&path, &json)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    std::fs::write(&path, &json).map_err(|e| format!("Failed to write file: {}", e))?;
 
-    Ok(format!("Exported {} environments to {}", all_envs.len(), path))
+    Ok(format!(
+        "Exported {} environments to {}",
+        all_envs.len(),
+        path
+    ))
 }

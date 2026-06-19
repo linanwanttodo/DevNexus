@@ -106,7 +106,7 @@ pub fn list_processes() -> Result<ProcessSummary, String> {
         let now = now_secs();
         let mut groups_map: HashMap<String, ProcessGroup> = HashMap::new();
 
-        for (_pid, proc_) in sys.processes() {
+        for proc_ in sys.processes().values() {
             let name = process_name(proc_);
             if name.is_empty() {
                 continue;
@@ -114,14 +114,16 @@ pub fn list_processes() -> Result<ProcessSummary, String> {
 
             let entry = entry_from(proc_);
 
-            let group = groups_map.entry(name.clone()).or_insert_with(|| ProcessGroup {
-                name,
-                count: 0,
-                total_cpu: 0.0,
-                total_memory_bytes: 0,
-                earliest_start: now,
-                entries: Vec::new(),
-            });
+            let group = groups_map
+                .entry(name.clone())
+                .or_insert_with(|| ProcessGroup {
+                    name,
+                    count: 0,
+                    total_cpu: 0.0,
+                    total_memory_bytes: 0,
+                    earliest_start: now,
+                    entries: Vec::new(),
+                });
 
             group.count += 1;
             group.total_cpu += entry.cpu_usage;
@@ -161,10 +163,7 @@ pub fn kill_process(pid: u32) -> Result<String, String> {
                 "Failed to terminate {} (PID {}): permission denied or process already exited",
                 name, pid
             )),
-            None => Err(format!(
-                "Signal not supported for {} (PID {})",
-                name, pid
-            )),
+            None => Err(format!("Signal not supported for {} (PID {})", name, pid)),
         }
     })?
 }
@@ -184,10 +183,7 @@ pub fn kill_process_force(pid: u32) -> Result<String, String> {
                 "Failed to force kill {} (PID {}): permission denied or process already exited",
                 name, pid
             )),
-            None => Err(format!(
-                "Signal not supported for {} (PID {})",
-                name, pid
-            )),
+            None => Err(format!("Signal not supported for {} (PID {})", name, pid)),
         }
     })?
 }

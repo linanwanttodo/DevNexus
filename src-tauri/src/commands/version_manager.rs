@@ -106,7 +106,11 @@ fn run_cmd_any(cmd: &str, args: &[&str]) -> Option<String> {
         let out = String::from_utf8_lossy(&output.stdout).to_string();
         let err = String::from_utf8_lossy(&output.stderr).to_string();
         let combined = out + &err;
-        if combined.is_empty() { None } else { Some(combined) }
+        if combined.is_empty() {
+            None
+        } else {
+            Some(combined)
+        }
     } else {
         None
     }
@@ -326,14 +330,16 @@ fn switch_node_version(version: &str) -> Result<String, String> {
 fn get_actual_java_version() -> Option<String> {
     let output = run_cmd_any("java", &["-version"])?;
     let v = extract_version_string(&output);
-    if v.is_empty() { None } else { Some(v) }
+    if v.is_empty() {
+        None
+    } else {
+        Some(v)
+    }
 }
 
 /// 模糊匹配两个版本号（"25" ≈ "25.0.1"）
 fn fuzzy_match_version(a: &str, b: &str) -> bool {
-    a == b
-        || a.starts_with(&format!("{}.", b))
-        || b.starts_with(&format!("{}.", a))
+    a == b || a.starts_with(&format!("{}.", b)) || b.starts_with(&format!("{}.", a))
 }
 
 /// 用 `java -version` 的实际结果修正版本列表的活跃标记
@@ -343,7 +349,10 @@ fn correct_active_by_system(versions: &mut Vec<VersionInfo>) {
             v.is_active = fuzzy_match_version(&v.version, &actual);
         }
         // 如果实际版本不在列表中，追加它（确保系统真实 Java 始终可见）
-        if !versions.iter().any(|v| fuzzy_match_version(&v.version, &actual)) {
+        if !versions
+            .iter()
+            .any(|v| fuzzy_match_version(&v.version, &actual))
+        {
             if let Some(path) = resolve_current_java_path() {
                 versions.push(VersionInfo {
                     version: actual,
