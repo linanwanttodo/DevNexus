@@ -1,7 +1,18 @@
 <script>
+  import { onMount } from "svelte";
   import BrandIcons from "../icons/BrandIcons.svelte";
   import { getRoute, navigate } from "../lib/stores.svelte.js";
   import { t } from "../lib/i18n.svelte.js";
+  import { getVersion } from "@tauri-apps/api/app";
+
+  let appVersion = $state("1.0.5");
+  onMount(async () => {
+    try {
+      appVersion = await getVersion();
+    } catch {
+      // 非 Tauri 环境(如 vite dev)回退到硬编码
+    }
+  });
 
   let navItems = $derived.by(() => {
     return [
@@ -10,6 +21,7 @@
       { route: "/software", label: t("nav.software"), icon: "apps" },
       { route: "/mirrors", label: t("nav.mirrors"), icon: "sync" },
       { route: "/ports", label: t("nav.ports"), icon: "lan" },
+      { route: "/processes", label: t("nav.processes"), icon: "memory" },
       { route: "/scheduler", label: t("nav.scheduler"), icon: "schedule" },
       { route: "/passwords", label: t("nav.passwords"), icon: "key" },
       { route: "/cookies", label: t("nav.cookies"), icon: "cookie" },
@@ -52,6 +64,6 @@
   </nav>
 
   <div class="border-t border-nx-border px-5 py-3">
-    <span class="text-xs text-nx-text-muted">{t("version")} 1.0.3</span>
+    <span class="text-xs text-nx-text-muted">{t("version")} {appVersion}</span>
   </div>
 </aside>

@@ -13,7 +13,8 @@
     "passwords": "密码管理",
     "cookies": "Cookie 提取",
     "settings": "设置",
-    "uninstall": "应用卸载"
+    "uninstall": "应用卸载",
+    "processes": "进程管理"
   },
   "settings": {
     "title": "设置",
@@ -127,7 +128,8 @@
     "switch": "切换",
     "no_versions": "未找到可切换的版本",
     "versions": "版本列表",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "export": "导出 JSON"
   },
   "software": {
     "title": "软件中心",
@@ -393,5 +395,34 @@
     "active": "启用",
     "disabled": "禁用",
     "actions": "操作"
+  },
+  "process": {
+    "title": "进程管理",
+    "desc": "查看和管理系统进程，终止异常进程",
+    "search_placeholder": "搜索进程名称或 PID...",
+    "refresh": "刷新",
+    "auto_refresh": "自动刷新",
+    "name": "进程名称",
+    "instances": "实例数",
+    "cpu": "CPU",
+    "memory": "内存",
+    "elapsed": "运行时长",
+    "actions": "操作",
+    "kill": "终止",
+    "kill_force": "强制终止",
+    "kill_all": "终止全部",
+    "kill_confirm": "确定终止进程 {name}（{count} 个实例）？",
+    "kill_force_confirm": "强制终止进程 {pid}（可能丢失未保存数据）？",
+    "kill_success": "进程 {name} 已终止",
+    "kill_failed": "终止失败：{error}",
+    "no_processes": "暂无进程",
+    "no_matching": "未找到匹配的进程",
+    "sort_memory": "按内存",
+    "sort_cpu": "按 CPU",
+    "sort_count": "按实例数",
+    "sort_name": "按名称",
+    "groups": "组",
+    "total_processes": "个进程",
+    "memory_total": "总计"
   }
 }

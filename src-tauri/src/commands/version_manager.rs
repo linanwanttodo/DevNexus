@@ -99,6 +99,19 @@ fn run_cmd(cmd: &str, args: &[&str]) -> Option<String> {
         .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
 }
 
+/// 执行命令并返回 stdout + stderr（用于 java -version 等输出到 stderr 的命令）
+fn run_cmd_any(cmd: &str, args: &[&str]) -> Option<String> {
+    let output = Command::new(cmd).args(args).output().ok()?;
+    if output.status.success() {
+        let out = String::from_utf8_lossy(&output.stdout).to_string();
+        let err = String::from_utf8_lossy(&output.stderr).to_string();
+        let combined = out + &err;
+        if combined.is_empty() { None } else { Some(combined) }
+    } else {
+        None
+    }
+}
+
 /// 列出指定语言的所有已安装版本（永久缓存，除非手动强制刷新）
 #[tauri::command]
 pub fn list_versions(
@@ -309,6 +322,39 @@ fn switch_node_version(version: &str) -> Result<String, String> {
 
 // ==================== Java (jenv / SDKMAN / Homebrew / system) ====================
 
+/// 通过 `java -version` 获取系统实际运行的 Java 版本号（输出到 stderr，需用 run_cmd_any）
+fn get_actual_java_version() -> Option<String> {
+    let output = run_cmd_any("java", &["-version"])?;
+    let v = extract_version_string(&output);
+    if v.is_empty() { None } else { Some(v) }
+}
+
+/// 模糊匹配两个版本号（"25" ≈ "25.0.1"）
+fn fuzzy_match_version(a: &str, b: &str) -> bool {
+    a == b
+        || a.starts_with(&format!("{}.", b))
+        || b.starts_with(&format!("{}.", a))
+}
+
+/// 用 `java -version` 的实际结果修正版本列表的活跃标记
+fn correct_active_by_system(versions: &mut Vec<VersionInfo>) {
+    if let Some(actual) = get_actual_java_version() {
+        for v in versions.iter_mut() {
+            v.is_active = fuzzy_match_version(&v.version, &actual);
+        }
+        // 如果实际版本不在列表中，追加它（确保系统真实 Java 始终可见）
+        if !versions.iter().any(|v| fuzzy_match_version(&v.version, &actual)) {
+            if let Some(path) = resolve_current_java_path() {
+                versions.push(VersionInfo {
+                    version: actual,
+                    path: path.to_string_lossy().to_string(),
+                    is_active: true,
+                });
+            }
+        }
+    }
+}
+
 fn list_java_versions() -> Vec<VersionInfo> {
     // 1) 优先 jenv
     if let Some(output) = run_cmd("jenv", &["versions", "--bare"]) {
@@ -316,7 +362,7 @@ fn list_java_versions() -> Vec<VersionInfo> {
             .unwrap_or_default()
             .trim()
             .to_string();
-        return output
+        let mut versions: Vec<VersionInfo> = output
             .lines()
             .map(|v| v.trim())
             .filter(|v| !v.is_empty())
@@ -330,20 +376,25 @@ fn list_java_versions() -> Vec<VersionInfo> {
                 }
             })
             .collect();
+        // 用系统实际 java 版本纠正活跃标记
+        correct_active_by_system(&mut versions);
+        return versions;
     }
     // 2) SDKMAN
     let sdkman = dirs::home_dir().map(|h| h.join(".sdkman").join("candidates").join("java"));
-    let mut results = Vec::new();
     if let Some(ref sdkman_dir) = sdkman {
         if sdkman_dir.exists() {
-            results.extend(scan_jdk_dir(sdkman_dir, true));
-            if !results.is_empty() {
-                return results;
+            let mut sdkman_versions = scan_jdk_dir(sdkman_dir, true);
+            if !sdkman_versions.is_empty() {
+                correct_active_by_system(&mut sdkman_versions);
+                return sdkman_versions;
             }
         }
     }
     // 3) 扫描所有常见 JVM 路径
-    scan_all_jvm_dirs()
+    let mut results = scan_all_jvm_dirs();
+    correct_active_by_system(&mut results);
+    results
 }
 
 /// 扫描所有已知的 JVM 安装目录（跨平台，无硬编码单一路径）
@@ -415,7 +466,7 @@ fn scan_all_jvm_dirs() -> Vec<VersionInfo> {
     // 最后，如果什么都没发现但 java 可用，至少显示当前版本
     if versions.is_empty() {
         if let Some(ref cur) = current_java {
-            let v = run_cmd("java", &["-version"]).unwrap_or_default();
+            let v = run_cmd_any("java", &["-version"]).unwrap_or_default();
             versions.push(VersionInfo {
                 version: extract_version_string(&v),
                 path: cur.to_string_lossy().to_string(),
@@ -670,10 +721,7 @@ fn extract_java_version_from_dir(dir_name: &str) -> String {
 }
 
 fn switch_java_version(version: &str) -> Result<String, String> {
-    // 1) 可选：尝试 jenv（不依赖它，只作为附加操作）
-    let _ = Command::new("jenv").args(["global", version]).output();
-
-    // 2) 复用 scan_all_jvm_dirs 的发现结果——与前端展示的版本列表完全一致
+    // 1) 复用 scan_all_jvm_dirs 的发现结果——与前端展示的版本列表完全一致
     let all = scan_all_jvm_dirs();
     let matched = all.iter().find(|v| {
         // version 可能是 "21" 或 "21.0.2"，直接比较完整字符串或取前两段
@@ -693,7 +741,47 @@ fn switch_java_version(version: &str) -> Result<String, String> {
         find_java_home_for_version(version)?
     };
 
-    // 3) 写入 shell 配置
+    // 2) 辅助：尝试 jenv（不依赖它）
+    let _ = Command::new("jenv").args(["global", version]).output();
+
+    // 3) 主方案：update-alternatives（立即生效，Linux 标准做法）
+    let alt_java = java_home.join("bin").join("java");
+    let alt_javac = java_home.join("bin").join("javac");
+
+    let alt_java_set = Command::new("update-alternatives")
+        .args(["--set", "java", &alt_java.to_string_lossy()])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if alt_java_set {
+        // 也设 javac（可选，失败不影响）
+        let _ = Command::new("update-alternatives")
+            .args(["--set", "javac", &alt_javac.to_string_lossy()])
+            .output();
+
+        // 验证：java -version 确认切换成功
+        let verified = run_cmd_any("java", &["-version"])
+            .and_then(|v| {
+                let extracted = extract_version_string(&v);
+                if fuzzy_match_version(&extracted, version) {
+                    Some(())
+                } else {
+                    None
+                }
+            })
+            .is_some();
+
+        if verified {
+            return Ok(format!(
+                "Java switched to {} at {} (system-wide)",
+                version,
+                java_home.display()
+            ));
+        }
+    }
+
+    // 4) Fallback：写入 shell 配置文件（新终端生效）
     let marker = "# DevNexus: Java";
     let export_line = format!(
         "{}\nexport JAVA_HOME=\"{}\"\nexport PATH=\"$JAVA_HOME/bin:$PATH\"\n",
@@ -702,23 +790,10 @@ fn switch_java_version(version: &str) -> Result<String, String> {
     );
     upsert_shell_config(marker, &export_line)?;
 
-    // 4) 也尝试 update-alternatives（如果系统有）
-    let alt_path = java_home.join("bin").join("java");
-    let _ = Command::new("update-alternatives")
-        .args(["--set", "java", &alt_path.to_string_lossy()])
-        .output();
-    let _ = Command::new("update-alternatives")
-        .args([
-            "--set",
-            "javac",
-            &java_home.join("bin").join("javac").to_string_lossy(),
-        ])
-        .output();
-
-    Ok(format!(
-        "Java switched to {} at {}",
-        version,
-        java_home.display()
+    Err(format!(
+        "Java {} was configured in shell profiles (~/.zshrc etc.), but couldn't be applied to the current session.\n\
+         Please restart your terminal or run: source ~/.zshrc",
+        version
     ))
 }
 

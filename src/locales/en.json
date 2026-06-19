@@ -13,7 +13,8 @@
     "passwords": "Password Manager",
     "cookies": "Cookie Extractor",
     "settings": "Settings",
-    "uninstall": "App Uninstaller"
+    "uninstall": "App Uninstaller",
+    "processes": "Process Manager"
   },
   "settings": {
     "title": "Settings",
@@ -103,7 +104,8 @@
     "switch": "Switch",
     "no_versions": "No versions available",
     "versions": "Versions",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "export": "Export JSON"
   },
   "mirrors": {
     "title": "Package Mirrors",
@@ -381,8 +383,8 @@
     "loading": "Loading...",
     "error": "Error",
     "retry": "Retry",
-    "confirm": "Confirm",
     "cancel": "Cancel",
+    "confirm": "Confirm",
     "save": "Save",
     "delete": "Delete",
     "close": "Close",
@@ -391,5 +393,34 @@
     "active": "Active",
     "disabled": "Disabled",
     "actions": "Actions"
+  },
+  "process": {
+    "title": "Process Manager",
+    "desc": "View and manage system processes, terminate abnormal processes",
+    "search_placeholder": "Search by process name or PID...",
+    "refresh": "Refresh",
+    "auto_refresh": "Auto Refresh",
+    "name": "Process Name",
+    "instances": "Instances",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "elapsed": "Uptime",
+    "actions": "Actions",
+    "kill": "Terminate",
+    "kill_force": "Force Kill",
+    "kill_all": "Kill All",
+    "kill_confirm": "Terminate process {name} ({count} instances)?",
+    "kill_force_confirm": "Force kill process {pid}? (Unsaved data may be lost)",
+    "kill_success": "Process {name} terminated",
+    "kill_failed": "Termination failed: {error}",
+    "no_processes": "No processes found",
+    "no_matching": "No matching processes found",
+    "sort_memory": "By Memory",
+    "sort_cpu": "By CPU",
+    "sort_count": "By Instances",
+    "sort_name": "By Name",
+    "groups": "groups",
+    "total_processes": "processes",
+    "memory_total": "Total:"
   }
 }

@@ -1,5 +1,6 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
+  import { save } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
@@ -43,12 +44,32 @@
     }
   }
 
+  // 导出环境配置为 JSON
+  async function exportEnvironments() {
+    try {
+      const filePath = await save({
+        filters: [{ name: "JSON", extensions: ["json"] }],
+        defaultPath: `devnexus-environments-${new Date().toISOString().slice(0, 10)}.json`,
+      });
+      if (!filePath) return; // 用户取消
+      const msg = await invoke("save_export_file", { path: filePath });
+      showToast(msg, "success");
+    } catch (err) {
+      showToast(`Export failed: ${err.message || err}`, "error");
+    }
+  }
+
   // 切换展开/折叠
   async function toggleExpand(env) {
     if (!expanded[env.name]) {
       expanded[env.name] = true;
       // 展开时加载版本列表（走缓存，不会卡顿）
       await loadVersions(env);
+      // 如果版本数 ≤ 1，自动收起，没必要展示
+      const versions = versionsMap[env.name];
+      if (!versions || versions.length <= 1) {
+        expanded[env.name] = false;
+      }
     } else {
       expanded[env.name] = false;
     }
@@ -200,6 +221,13 @@
           {refreshingAll ? 'progress_activity' : 'refresh'}
         </span>
         {t("environments.refresh")}
+      </button>
+      <button
+        class="flex items-center gap-2 border border-nx-border px-4 py-2 text-sm font-medium text-nx-text-secondary hover:text-nx-text"
+        onclick={exportEnvironments}
+      >
+        <span class="material-symbols-outlined text-lg">file_download</span>
+        {t("environments.export")}
       </button>
       <button class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={() => showCreateModal = true}>
         <span class="material-symbols-outlined text-lg">add</span>

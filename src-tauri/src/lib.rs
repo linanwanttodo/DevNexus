@@ -18,6 +18,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(task_scheduler)
         .manage(password_manager)
         .manage(version_cache)
@@ -104,6 +105,8 @@ pub fn run() {
             commands::mirror::list_mirrors,
             commands::mirror::test_mirror_latency,
             commands::mirror::switch_mirror,
+            commands::migration::export_migration,
+            commands::migration::save_export_file,
             commands::scheduler::add_task,
             commands::scheduler::list_tasks,
             commands::scheduler::delete_task,
@@ -132,6 +135,9 @@ pub fn run() {
             commands::cookie_extractor::export_as_json,
             commands::port_manager::list_ports,
             commands::port_manager::kill_port,
+            commands::process_manager::list_processes,
+            commands::process_manager::kill_process,
+            commands::process_manager::kill_process_force,
             commands::updater::check_for_updates_github,
             commands::version_manager::list_versions,
             commands::version_manager::switch_version,

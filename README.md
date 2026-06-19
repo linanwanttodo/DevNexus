@@ -179,6 +179,8 @@ devnexus/
 │   │   ├── TaskScheduler.svelte
 │   │   ├── PasswordManager.svelte
 │   │   ├── CookieExtractor.svelte
+│   │   ├── AppUninstaller.svelte # 深度卸载
+│   │   ├── VersionManager.svelte # 版本管理
 │   │   └── Settings.svelte
 │   ├── components/
 │   │   ├── Sidebar.svelte
@@ -199,7 +201,8 @@ devnexus/
 │   │       ├── scheduler.rs      # 任务调度
 │   │       ├── password_manager.rs
 │   │       ├── cookie_extractor.rs
-│   │       ├── terminal.rs       # PTY 终端
+│   │       ├── version_manager.rs # 版本管理（pyenv/fnm/jenv/gvm/rustup）
+│   │       ├── updater.rs         # 自动更新
 │   │       └── mod.rs
 │   ├── icons/
 │   │   └── DevNexus.png          # 应用图标源文件
@@ -250,14 +253,29 @@ pnpm tauri build
 
 ## 路线图
 
-- [ ] 项目骨架搭建
-- [ ] 系统包管理器后端（brew / apt / winget）
-- [ ] 软件中心 UI 与后端对接
-- [ ] 环境变量读写与可视化编辑
-- [ ] 镜像源配置
-- [ ] 系统信息仪表板
-- [ ] 自动更新机制
-- [ ] 主题与国际化
+### 已完成 ✅
+
+- [x] 项目骨架搭建
+- [x] 系统包管理器后端（brew / apt / winget）
+- [x] 软件中心 UI 与后端对接
+- [x] 环境变量读写与可视化编辑
+- [x] 镜像源配置
+- [x] 系统信息仪表板
+- [x] 端口管理（lsof / procfs / netstat）
+- [x] 任务调度（Cron 引擎 + Shell/Python/关机）
+- [x] 密码管理器（AES-256-GCM + SQLite）
+- [x] Cookie 提取（5 种浏览器）
+- [x] 深度卸载（残留扫描 + 注册表 + 快捷方式）
+- [x] 版本管理（pyenv/fnm/jenv/gvm/rustup/gcc）
+- [x] 主题与国际化（zh / en / ru）
+- [x] 自动更新机制（GitHub Release + updater 插件）
+
+### 进行中 / 计划中 🚧
+
+- [ ] 嵌入式 PTY 终端集成到主界面
+- [ ] 进程管理器（实时进程列表 + 杀进程）
+- [ ] Docker / Podman 容器管理
+- [ ] 云服务配置（AWS / GCP CLI 凭证管理）
 
 ---
 

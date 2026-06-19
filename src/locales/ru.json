@@ -13,7 +13,8 @@
     "passwords": "Менеджер паролей",
     "cookies": "Cookie Extractor",
     "settings": "Настройки",
-    "uninstall": "Удаление приложений"
+    "uninstall": "Удаление приложений",
+    "processes": "Диспетчер процессов"
   },
   "settings": {
     "title": "Настройки",
@@ -127,7 +128,8 @@
     "switch": "Переключить",
     "no_versions": "Нет доступных версий",
     "versions": "Версии",
-    "refresh": "Обновить"
+    "refresh": "Обновить",
+    "export": "Экспорт JSON"
   },
   "software": {
     "title": "Центр ПО",
@@ -358,5 +360,34 @@
     "type_shortcut": "Ярлык",
     "type_service": "Служба",
     "type_registry": "Реестр"
+  },
+  "process": {
+    "title": "Диспетчер процессов",
+    "desc": "Просмотр и управление системными процессами, завершение аномальных процессов",
+    "search_placeholder": "Поиск по имени процесса или PID...",
+    "refresh": "Обновить",
+    "auto_refresh": "Автообновление",
+    "name": "Имя процесса",
+    "instances": "Экземпляры",
+    "cpu": "ЦП",
+    "memory": "Память",
+    "elapsed": "Время работы",
+    "actions": "Действия",
+    "kill": "Завершить",
+    "kill_force": "Принудительно",
+    "kill_all": "Завершить все",
+    "kill_confirm": "Завершить процесс {name} ({count} экземпляров)?",
+    "kill_force_confirm": "Принудительно завершить процесс {pid}? (Несохранённые данные могут быть потеряны)",
+    "kill_success": "Процесс {name} завершён",
+    "kill_failed": "Ошибка завершения: {error}",
+    "no_processes": "Процессы не найдены",
+    "no_matching": "Совпадающие процессы не найдены",
+    "sort_memory": "По памяти",
+    "sort_cpu": "По ЦП",
+    "sort_count": "По экземплярам",
+    "sort_name": "По имени",
+    "groups": "групп",
+    "total_processes": "процессов",
+    "memory_total": "Всего:"
   }
 }
