@@ -105,7 +105,9 @@
     "no_versions": "No versions available",
     "versions": "Versions",
     "refresh": "Refresh",
-    "export": "Export JSON"
+    "export": "Export JSON",
+    "status": "Status",
+    "actions": "Actions"
   },
   "mirrors": {
     "title": "Package Mirrors",

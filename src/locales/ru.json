@@ -129,7 +129,9 @@
     "no_versions": "Нет доступных версий",
     "versions": "Версии",
     "refresh": "Обновить",
-    "export": "Экспорт JSON"
+    "export": "Экспорт JSON",
+    "status": "Статус",
+    "actions": "Действия"
   },
   "software": {
     "title": "Центр ПО",

@@ -129,7 +129,9 @@
     "no_versions": "未找到可切换的版本",
     "versions": "版本列表",
     "refresh": "刷新",
-    "export": "导出 JSON"
+    "export": "导出 JSON",
+    "status": "状态",
+    "actions": "操作"
   },
   "software": {
     "title": "软件中心",

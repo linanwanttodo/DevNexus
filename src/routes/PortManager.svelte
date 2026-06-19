@@ -136,7 +136,7 @@
                 <button
                   class="px-3 py-1 text-xs font-medium text-nx-danger border border-nx-border disabled:opacity-30"
                   onclick={() => killPort(entry.port)}
-                  disabled={killing !== null}
+                  disabled={killing === entry.port}
                 >
                   {killing === entry.port ? "..." : t("port_manager.kill")}
                 </button>

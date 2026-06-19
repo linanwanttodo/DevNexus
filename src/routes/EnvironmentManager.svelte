@@ -265,8 +265,8 @@
           <th class="w-8 px-2 py-3"></th>
           <th class="px-2 py-3 text-left font-medium">{t("environments.name")}</th>
           <th class="px-2 py-3 text-left font-medium">{t("environments.path")}</th>
-          <th class="px-2 py-3 text-left font-medium">{t("software.status")}</th>
-          <th class="px-4 py-3 text-right font-medium">{t("port_manager.actions")}</th>
+          <th class="px-2 py-3 text-left font-medium">{t("environments.status")}</th>
+          <th class="px-4 py-3 text-right font-medium">{t("environments.actions")}</th>
         </tr>
       </thead>
       <tbody>

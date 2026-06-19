@@ -52,14 +52,19 @@
       // 找出该组所有 PID，逐个终止
       const group = groups.find(g => g.name === name);
       if (!group) return;
+      let killErrors = [];
       for (const entry of group.entries) {
         try {
           await invoke("kill_process_force", { pid: entry.pid });
         } catch {
-          // 忽略单个失败，继续杀其余
+          killErrors.push(entry.pid);
         }
       }
-      showToast(t("process.kill_success").replace("{name}", name), "success");
+      if (killErrors.length > 0) {
+        showToast(`Failed to kill PID(s): ${killErrors.join(", ")}`, "warning");
+      } else {
+        showToast(t("process.kill_success").replace("{name}", name), "success");
+      }
       await loadProcesses();
     } catch (err) {
       showToast(`${t("process.kill_failed")}: ${err.message || err}`, "error");
@@ -269,7 +274,7 @@
               </td>
               <td class="px-4 py-3 text-right text-sm text-nx-text-secondary">{group.count}</td>
               <td class="px-4 py-3 text-right">
-                <span class="font-mono text-sm {group.total_cpu > 50 ? 'text-nx-danger' : group.total_cpu > 20 ? 'text-orange-400' : 'text-nx-text-secondary'}">
+                <span class="font-mono text-sm {group.total_cpu > 50 ? 'text-nx-danger' : group.total_cpu > 20 ? 'text-nx-warning' : 'text-nx-text-secondary'}">
                   {group.total_cpu.toFixed(1)}%
                 </span>
               </td>

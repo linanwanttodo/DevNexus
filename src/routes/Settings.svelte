@@ -71,7 +71,6 @@
 
       if (update) {
         // has .version, .date, .body, .downloadAndInstall()
-        console.log(`[updater] found ${update.version}, downloading...`);
         await update.downloadAndInstall();
         updateState = "installed";
         // 提示用户重启

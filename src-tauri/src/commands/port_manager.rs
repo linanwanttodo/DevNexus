@@ -255,9 +255,6 @@ fn list_ports_impl() -> Result<Vec<PortEntry>, String> {
         if pid == 0 {
             continue;
         }
-        if pid == 0 {
-            continue;
-        }
 
         if let Some(port_str) = local_addr.rsplit(':').next() {
             if let Ok(port) = port_str.parse::<u16>() {

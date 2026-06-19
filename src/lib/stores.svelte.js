@@ -7,7 +7,7 @@ export function getRoute() {
 }
 
 export function navigate(r) {
-  console.log('[navigate]', r);
+  route = r;
   route = r;
   if (typeof window !== 'undefined') {
     window.location.hash = r;
