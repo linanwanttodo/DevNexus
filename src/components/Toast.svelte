@@ -36,7 +36,7 @@
     <div
       class="flex items-start gap-3 rounded border-2 bg-nx-surface px-4 py-3 shadow-lg max-w-sm {borderClass(toast.type)}"
     >
-      <span class="mt-0.5 text-sm font-bold {iconClass(toast.type)}">{typeIcon(toast.type)}</span>
+      <span class="material-symbols-outlined mt-0.5 text-sm font-bold {iconClass(toast.type)}">{typeIcon(toast.type)}</span>
       <p class="flex-1 text-sm text-nx-text">{toast.message}</p>
       <button
         class="text-nx-text/50 hover:text-nx-text transition-colors"

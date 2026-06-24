@@ -262,6 +262,7 @@ pnpm tauri build
 - [x] 镜像源配置
 - [x] 系统信息仪表板
 - [x] 端口管理（lsof / procfs / netstat）
+- [x] 进程管理器（实时进程列表 + 分组视图 + 杀进程）
 - [x] 任务调度（Cron 引擎 + Shell/Python/关机）
 - [x] 密码管理器（AES-256-GCM + SQLite）
 - [x] Cookie 提取（5 种浏览器）
@@ -272,8 +273,6 @@ pnpm tauri build
 
 ### 进行中 / 计划中 🚧
 
-- [ ] 嵌入式 PTY 终端集成到主界面
-- [ ] 进程管理器（实时进程列表 + 杀进程）
 - [ ] Docker / Podman 容器管理
 - [ ] 云服务配置（AWS / GCP CLI 凭证管理）
 

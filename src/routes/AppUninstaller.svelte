@@ -225,13 +225,13 @@
         type="text"
         placeholder={t("uninstall_mgr.search")}
         value={search}
-        oninput={(e) => { search = e.currentTarget.value; setSearchQuery(e.currentTarget.value); }}
+        oninput={(e) => { setSearchQuery(e.currentTarget.value); }}
         class="w-full border border-nx-border bg-nx-surface px-10 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-accent"
       />
       {#if search}
         <button
           class="absolute right-3 top-1/2 -translate-y-1/2 text-nx-text-muted cursor-pointer"
-          onclick={() => { search = ""; setSearchQuery(""); }}
+          onclick={() => { setSearchQuery(""); }}
         >
           <span class="material-symbols-outlined text-sm">close</span>
         </button>

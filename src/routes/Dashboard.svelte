@@ -56,7 +56,7 @@
       label: "CPU Cores", 
       tkey: "dashboard.cpu_cores",
       value: systemInfo ? systemInfo.cpu_cores.toString() : "--", 
-      sub: systemInfo ? systemInfo.cpu_model.split(" ").slice(0, 2).join(" ") : "", 
+      sub: systemInfo?.cpu_model ? systemInfo.cpu_model.split(" ").slice(0, 2).join(" ") : "", 
       subKey: systemInfo ? "" : "dashboard.loading",
       icon: "memory", 
       color: "text-nx-text-secondary" 
