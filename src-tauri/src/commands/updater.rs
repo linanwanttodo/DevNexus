@@ -72,7 +72,10 @@ pub async fn check_for_updates_github() -> Result<UpdateInfo, String> {
 pub fn get_download_url(version: String) -> Result<String, String> {
     let version = version.trim_start_matches('v');
     let tag = format!("v{}", version);
-    let base = format!("https://github.com/linanwanttodo/DevNexus/releases/download/{}", tag);
+    let base = format!(
+        "https://github.com/linanwanttodo/DevNexus/releases/download/{}",
+        tag
+    );
 
     #[cfg(target_os = "linux")]
     let url = format!("{}/DevNexus_{}_amd64.AppImage", base, version);
