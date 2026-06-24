@@ -56,15 +56,15 @@
 <div class="mx-auto max-w-4xl">
   <div class="mb-6 flex items-center justify-between">
     <div>
-      <h1 class="text-xl font-semibold text-nx-text">{t("port_manager.title")}</h1>
-      <p class="mt-1 text-xs text-nx-text-muted">{t("port_manager.description")}</p>
+      <h1 class="text-xl font-semibold text-nx-text">{t("ports.title")}</h1>
+      <p class="mt-1 text-xs text-nx-text-muted">{t("ports.description")}</p>
     </div>
     <button
       class="flex items-center gap-2 border border-nx-border px-4 py-2 text-sm font-medium text-nx-text-secondary"
       onclick={loadPorts}
     >
       <span class="material-symbols-outlined text-lg">refresh</span>
-      {t("port_manager.refresh")}
+      {t("ports.refresh")}
     </button>
   </div>
 
@@ -74,7 +74,7 @@
       <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-nx-text-muted">search</span>
       <input
         type="text"
-        placeholder={t("port_manager.search_placeholder")}
+        placeholder={t("ports.search_placeholder")}
         value={search}
         oninput={(e) => { setSearchQuery(e.currentTarget.value); }}
         class="w-full border border-nx-border bg-nx-surface px-10 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-accent"
@@ -106,18 +106,18 @@
       <div class="p-12 text-center">
         <span class="material-symbols-outlined text-nx-text-muted text-4xl">lan</span>
         <div class="mt-4 text-sm text-nx-text-muted">
-          {search ? t("port_manager.no_matching") : t("port_manager.no_ports")}
+          {search ? t("ports.no_matching") : t("ports.no_ports")}
         </div>
       </div>
     {:else}
     <table class="w-full">
       <thead>
         <tr class="border-b border-nx-border text-xs text-nx-text-muted">
-          <th class="px-4 py-3 text-left font-medium w-20">{t("port_manager.port")}</th>
-          <th class="px-4 py-3 text-left font-medium w-16">{t("port_manager.proto")}</th>
-          <th class="px-4 py-3 text-left font-medium">{t("port_manager.process")}</th>
-          <th class="px-4 py-3 text-left font-medium w-20">{t("port_manager.pid")}</th>
-          <th class="px-4 py-3 text-right font-medium w-24">{t("port_manager.actions")}</th>
+          <th class="px-4 py-3 text-left font-medium w-20">{t("ports.port")}</th>
+          <th class="px-4 py-3 text-left font-medium w-16">{t("ports.proto")}</th>
+          <th class="px-4 py-3 text-left font-medium">{t("ports.process")}</th>
+          <th class="px-4 py-3 text-left font-medium w-20">{t("ports.pid")}</th>
+          <th class="px-4 py-3 text-right font-medium w-24">{t("ports.actions")}</th>
         </tr>
       </thead>
       <tbody>
@@ -138,7 +138,7 @@
                   onclick={() => killPort(entry.port)}
                   disabled={killing === entry.port}
                 >
-                  {killing === entry.port ? "..." : t("port_manager.kill")}
+                  {killing === entry.port ? "..." : t("ports.kill")}
                 </button>
               </div>
             </td>
@@ -148,8 +148,8 @@
     </table>
 
     <div class="flex items-center justify-between border-t border-nx-border px-4 py-2">
-      <span class="text-xs text-nx-text-muted">{filtered.length} {t(filtered.length === 1 ? "port_manager.port" : "port_manager.ports")}</span>
-      <button class="text-xs text-nx-text-muted" onclick={loadPorts}>{t("port_manager.refresh")}</button>
+      <span class="text-xs text-nx-text-muted">{filtered.length} {t(filtered.length === 1 ? "ports.port" : "ports.ports")}</span>
+      <button class="text-xs text-nx-text-muted" onclick={loadPorts}>{t("ports.refresh")}</button>
     </div>
     {/if}
   </div>

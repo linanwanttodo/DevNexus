@@ -216,11 +216,23 @@ fn list_node_versions() -> Vec<VersionInfo> {
     if let Some(output) = run_cmd("fnm", &["list", "--core18-enabled=false"]) {
         let current = run_cmd("fnm", &["current"]).unwrap_or_default();
         let current = current.trim();
+        // fnm current 可能返回完整路径，提取版本号
+        let current_ver = current
+            .rsplit('/')
+            .next()
+            .and_then(|s| if s.starts_with('v') { Some(s) } else { None })
+            .or_else(|| {
+                if current.starts_with('v') {
+                    Some(current)
+                } else {
+                    None
+                }
+            });
         return output
             .lines()
             .filter_map(|line| {
                 let trimmed = line.trim();
-                if trimmed.is_empty() || trimmed.starts_with("*") {
+                if trimmed.is_empty() {
                     return None;
                 }
                 let (is_active, version) = if trimmed.starts_with(">") {
@@ -238,7 +250,7 @@ fn list_node_versions() -> Vec<VersionInfo> {
                 Some(VersionInfo {
                     version: version.to_string(),
                     path: path.trim().to_string(),
-                    is_active: is_active || version == current,
+                    is_active: is_active || Some(version) == current_ver,
                 })
             })
             .collect();
@@ -301,7 +313,11 @@ fn nvm_list_versions() -> Vec<VersionInfo> {
 
 fn switch_node_version(version: &str) -> Result<String, String> {
     // 先试 fnm
-    let _ = Command::new("fnm").args(["use", version]).output();
+    if let Ok(output) = Command::new("fnm").args(["use", version]).output() {
+        if output.status.success() {
+            return Ok(format!("Node.js switched to {}", version));
+        }
+    }
     // 再试 nvm
     if cfg!(unix) {
         let output = Command::new("bash")

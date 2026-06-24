@@ -67,6 +67,23 @@ pub async fn check_for_updates_github() -> Result<UpdateInfo, String> {
     })
 }
 
+/// Get the download URL for the current platform's installer
+#[tauri::command]
+pub fn get_download_url(version: String) -> Result<String, String> {
+    let version = version.trim_start_matches('v');
+    let tag = format!("v{}", version);
+    let base = format!("https://github.com/linanwanttodo/DevNexus/releases/download/{}", tag);
+
+    #[cfg(target_os = "linux")]
+    let url = format!("{}/DevNexus_{}_amd64.AppImage", base, version);
+    #[cfg(target_os = "macos")]
+    let url = format!("{}/DevNexus_{}_aarch64.dmg", base, version);
+    #[cfg(target_os = "windows")]
+    let url = format!("{}/DevNexus_{}_x64-setup.exe", base, version);
+
+    Ok(url)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

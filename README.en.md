@@ -23,7 +23,6 @@ DevNexus is a **cross-platform desktop application** that integrates everyday de
 
 - **Software Center** — Visual management of system packages (brew / apt / winget / choco / pip / npm)
 - **Environment Manager** — Edit PATH, environment variables, dotfile configurations
-- **Terminal Core** — Embedded PTY terminal with real shell sessions
 - **Mirror Settings** — One-click configuration for pip / npm / apt mirror sources
 - **System Dashboard** — Real-time CPU, memory, disk, and runtime version monitoring
 - **Global Settings** — App preferences and theme management
@@ -96,7 +95,6 @@ Developers face these fragmented tools every day:
 | **Multi-runtime Mgr** | ✅ | ❌ Node only | ✅ 30+ SDKs | ✅ Plugin-based | ❌ | ❌ |
 | **npm/cargo/pip globals** | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | **Env Var / PATH Editor** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **Embedded Terminal** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Mirror Config** | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | **System Dashboard** | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | **macOS** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -108,9 +106,9 @@ Developers face these fragmented tools every day:
 
 - **nvm-desktop** — Only manages Node.js versions, limited scope
 - **VMR / vfox** — Powerful but pure CLI/TUI, no visual interface
-- **DevTool Manager** — Only manages npm/cargo/pip global packages, no system-level env or terminal
+- **DevTool Manager** — Only manages npm/cargo/pip global packages, no system-level env
 - **DevTools-X** — Developer utility collection (JSON formatter, JWT parser, etc.), not an environment manager
-- **DevNexus** — **The only project that integrates system package management + multi-runtime versions + env variables + terminal + mirror config into one GUI**
+- **DevNexus** — **The only project that integrates system package management + multi-runtime versions + env variables + mirror config into one GUI**
 
 ---
 
@@ -119,17 +117,17 @@ Developers face these fragmented tools every day:
 ```
 ┌──────────────────────────────────────────────┐
 │              Frontend (Svelte 5)              │
-│  Tailwind CSS · xterm.js · svelte-spa-router  │
+│           Tailwind CSS · svelte-spa-router     │
 ├──────────────────────────────────────────────┤
 │            Tauri 2.0 IPC Bridge              │
 │         invoke() / emit() / Channel          │
 ├──────────────────────────────────────────────┤
 │              Backend (Rust)                   │
 │  ┌─────────┬──────────┬──────────┬─────────┐  │
-│  │ pkg_mgr │ env_mgr  │ terminal │ sysinfo │  │
-│  │ brew/   │ PATH &   │ portable │ CPU/    │  │
-│  │ apt/    │ dotfile  │ -pty     │ MEM/Disk│  │
-│  │ winget  │ parser   │ tokio    │ which   │  │
+│  │ pkg_mgr │ env_mgr  │ scheduler│ sysinfo │  │
+│  │ brew/   │ PATH &   │ cron/    │ CPU/    │  │
+│  │ apt/    │ dotfile  │ shell    │ MEM/Disk│  │
+│  │ winget  │ parser   │ python   │ which   │  │
 │  └─────────┴──────────┴──────────┴─────────┘  │
 └──────────────────────────────────────────────┘
 ```
@@ -141,9 +139,7 @@ Developers face these fragmented tools every day:
 | **Desktop Framework** | [Tauri 2.0](https://tauri.app/) | Native system Webview, not Electron |
 | **Frontend** | [Svelte 5](https://svelte.dev/) | Compile-time framework, only ~2KB runtime |
 | **Styling** | [Tailwind CSS](https://tailwindcss.com/) | Utility-first CSS |
-| **Terminal** | [xterm.js](https://xtermjs.org/) | Web terminal rendering |
 | **Backend Language** | [Rust](https://www.rust-lang.org/) | System calls, performance, memory safety |
-| **PTY** | [portable-pty](https://crates.io/crates/portable-pty) | Cross-platform terminal backend |
 | **Async Runtime** | [tokio](https://crates.io/crates/tokio) | Rust async I/O |
 | **System Info** | [sysinfo](https://crates.io/crates/sysinfo) | CPU/Memory/Disk/Process |
 | **Executable Lookup** | [which](https://crates.io/crates/which) | Cross-platform PATH lookup |
@@ -153,7 +149,7 @@ Developers face these fragmented tools every day:
 
 - **Tauri over Electron** — 10MB vs 150MB install, 60MB vs 300MB memory, uses system Webview instead of bundled Chromium
 - **Svelte over React** — Compile-time elimination of framework runtime, smaller output; native HTML syntax, zero-cost migration from design prototypes
-- **Rust over Node.js** — Native system call capabilities, `portable-pty` is the most mature cross-platform PTY solution, memory safe
+- **Rust over Node.js** — Native system call capabilities, memory safe
 
 ---
 
@@ -178,6 +174,8 @@ devnexus/
 │   │   ├── TaskScheduler.svelte
 │   │   ├── PasswordManager.svelte
 │   │   ├── CookieExtractor.svelte
+│   │   ├── AppUninstaller.svelte # Deep uninstall
+│   │   ├── VersionManager.svelte # Version management
 │   │   └── Settings.svelte
 │   ├── components/
 │   │   ├── Sidebar.svelte
@@ -198,7 +196,8 @@ devnexus/
 │   │       ├── scheduler.rs      # Task scheduling
 │   │       ├── password_manager.rs
 │   │       ├── cookie_extractor.rs
-│   │       ├── terminal.rs       # PTY terminal
+│   │       ├── version_manager.rs # Version management (pyenv/fnm/jenv/gvm/rustup)
+│   │       ├── updater.rs         # Auto update
 │   │       └── mod.rs
 │   ├── icons/
 │   │   └── DevNexus.png          # App icon source
@@ -249,14 +248,28 @@ Build artifacts:
 
 ## Roadmap
 
+### Completed ✅
+
 - [ ] Project skeleton setup
 - [ ] System package manager backend (brew / apt / winget)
 - [ ] Software Center UI & backend integration
 - [ ] Environment variable read/write & visual editor
 - [ ] Mirror source configuration
 - [ ] System info dashboard
-- [ ] Auto-update mechanism
-- [ ] Theme & internationalization
+- [ ] Port management (lsof / procfs / netstat)
+- [ ] Process manager (real-time process list + group view + kill)
+- [ ] Task scheduler (Cron engine + Shell/Python/system actions)
+- [ ] Password manager (AES-256-GCM + SQLite)
+- [ ] Cookie extraction (5 browsers)
+- [ ] Deep uninstall (residue scanning + registry + shortcuts)
+- [ ] Version manager (pyenv/fnm/jenv/gvm/rustup/gcc)
+- [ ] Theme & internationalization (zh / en / ru)
+- [ ] Auto-update mechanism (GitHub Release + updater plugin)
+
+### In Progress / Planned 🚧
+
+- [ ] Docker / Podman container management
+- [ ] Cloud service configuration (AWS / GCP CLI credential management)
 
 ---
 

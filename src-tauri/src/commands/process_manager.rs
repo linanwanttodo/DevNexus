@@ -6,6 +6,25 @@ use sysinfo::{Pid, Process, ProcessesToUpdate, Signal, System};
 
 // ==================== 全局 System 实例 ====================
 
+const CPU_REFRESH_INTERVAL_MS: u64 = 500;
+
+fn last_cpu_refresh() -> &'static std::sync::Mutex<u64> {
+    static LAST: OnceLock<std::sync::Mutex<u64>> = OnceLock::new();
+    LAST.get_or_init(|| std::sync::Mutex::new(0))
+}
+
+fn ensure_cpu_refreshed(sys: &mut System) {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let mut last = last_cpu_refresh().lock().unwrap();
+    if now - *last > CPU_REFRESH_INTERVAL_MS {
+        sys.refresh_cpu_usage();
+        *last = now;
+    }
+}
+
 fn sys() -> &'static Mutex {
     static SYS: OnceLock<Mutex> = OnceLock::new();
     SYS.get_or_init(|| Mutex::new(System::new_all()))
@@ -26,7 +45,10 @@ impl Mutex {
     where
         F: FnOnce(&mut System) -> R,
     {
-        let mut guard = self.inner.lock().map_err(|e| e.to_string())?;
+        let mut guard = match self.inner.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         let sys = guard.as_mut().ok_or("System not initialized")?;
         Ok(f(sys))
     }
@@ -99,9 +121,8 @@ fn entry_from(p: &Process) -> ProcessEntry {
 #[tauri::command]
 pub fn list_processes() -> Result<ProcessSummary, String> {
     sys().with(|sys| {
-        // 第二次 refresh 才能拿到准确的 cpu_usage（首次为 0）
+        ensure_cpu_refreshed(sys);
         sys.refresh_processes(ProcessesToUpdate::All, true);
-        sys.refresh_processes(ProcessesToUpdate::All, false);
 
         let now = now_secs();
         let mut groups_map: HashMap<String, ProcessGroup> = HashMap::new();
@@ -152,6 +173,7 @@ pub fn list_processes() -> Result<ProcessSummary, String> {
 #[tauri::command]
 pub fn kill_process(pid: u32) -> Result<String, String> {
     sys().with(|sys| {
+        sys.refresh_processes(ProcessesToUpdate::All, true);
         let pid_key = Pid::from(pid as usize);
         let proc_ = sys
             .process(pid_key)
@@ -172,6 +194,7 @@ pub fn kill_process(pid: u32) -> Result<String, String> {
 #[tauri::command]
 pub fn kill_process_force(pid: u32) -> Result<String, String> {
     sys().with(|sys| {
+        sys.refresh_processes(ProcessesToUpdate::All, true);
         let pid_key = Pid::from(pid as usize);
         let proc_ = sys
             .process(pid_key)

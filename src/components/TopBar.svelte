@@ -13,6 +13,8 @@
       "/passwords": t("nav.passwords"),
       "/cookies": t("nav.cookies"),
       "/settings": t("nav.settings"),
+      "/processes": t("nav.processes"),
+      "/uninstall": t("nav.uninstall"),
     };
   });
 

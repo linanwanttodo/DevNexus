@@ -65,34 +65,33 @@
     updateError = "";
 
     try {
-      // 优先使用 Tauri updater 插件（需要 updates.json 签名验证通过）
-      const { check, Update } = await import("@tauri-apps/plugin-updater");
+      // 优先使用 Tauri updater 插件（需要 CI 构建时生成有效的 updates.json）
+      const { check } = await import("@tauri-apps/plugin-updater");
       const update = await check();
 
       if (update) {
-        // has .version, .date, .body, .downloadAndInstall()
         await update.downloadAndInstall();
         updateState = "installed";
-        // 提示用户重启
-      } else {
-        // updates.json 无更新 ⇒ 打开 GitHub Release 页
-        const { open } = await import("@tauri-apps/plugin-shell");
-        await open(`https://github.com/linanwanttodo/DevNexus/releases/latest`);
-        updateState = "idle";
+        return;
       }
-    } catch (err) {
-      // 插件失败（签名未配置、updates.json 不存在等）→ 回退到 GitHub 发布页
-      console.warn("[updater] plugin failed, falling back to GitHub release page:", err);
+    } catch (_) {
+      // 插件失败（签名未配置、updates.json 缺失等）— 走 fallback
+    }
+
+    // Fallback: 调用后端获取当前平台下载链接，用浏览器打开
+    try {
+      const url = await invoke("get_download_url", { version: updateInfo?.latest_version || "" });
+      const { open } = await import("@tauri-apps/plugin-shell");
+      await open(url);
+      updateState = "idle";
+    } catch (fallbackErr) {
+      // 最后的兜底：打开 GitHub Release 页
       try {
         const { open } = await import("@tauri-apps/plugin-shell");
-        if (updateInfo?.html_url) {
-          await open(updateInfo.html_url);
-        } else {
-          await open(`https://github.com/linanwanttodo/DevNexus/releases/latest`);
-        }
+        await open(updateInfo?.html_url || `https://github.com/linanwanttodo/DevNexus/releases/latest`);
         updateState = "idle";
-      } catch (fallbackErr) {
-        updateError = fallbackErr.message || String(fallbackErr);
+      } catch (e) {
+        updateError = e.message || String(e);
         updateState = "error";
       }
     }

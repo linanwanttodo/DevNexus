@@ -125,7 +125,7 @@
       : groups
   );
 
-  let sorted = $derived(() => {
+  let sorted = $derived.by(() => {
     const arr = [...filtered];
     const cmp = (a, b) => {
       let va, vb;
@@ -251,7 +251,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each sorted() as group}
+          {#each sorted as group}
             <!-- 分组行 -->
             <tr
               class="border-b border-nx-border cursor-pointer hover:bg-nx-surface/80 transition-colors"

@@ -26,7 +26,7 @@ export function tFormat(key, vars) {
   let text = t(key);
   if (typeof text === "string") {
     for (const [k, v] of Object.entries(vars)) {
-      text = text.replace(`{${k}}`, v);
+      text = text.replaceAll(`{${k}}`, v);
     }
   }
   return text;

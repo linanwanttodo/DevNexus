@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicehash/Tauri/dev/crates/tauri-config-schema/schema.json",
   "productName": "DevNexus",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "identifier": "com.devnexus.app",
   "build": {
     "beforeDevCommand": "bash scripts/dev.sh",
@@ -64,7 +64,7 @@
       "endpoints": [
         "https://github.com/linanwanttodo/DevNexus/releases/latest/download/updates.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQwQzg0QjQ5RDgwMkNERUQKUldUdHpRTFlTVXZJUU9MdWxkVE1iVVNXTXlCWkE0bG5lSUhqbEZVVXVUYy84bFVvYTdmUkFUc3MK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJCM0NGMTgzMTUxMjZDMzAKUldRd2JCSVZnL0U4S3pWaU5VcmkxbXpWVU0zc0FMY2p1M1lmREhtOHlWT0pXdXY2VytsRVFJekcK"
     }
   }
 }

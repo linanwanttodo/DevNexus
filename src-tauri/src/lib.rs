@@ -139,6 +139,7 @@ pub fn run() {
             commands::process_manager::kill_process,
             commands::process_manager::kill_process_force,
             commands::updater::check_for_updates_github,
+            commands::updater::get_download_url,
             commands::version_manager::list_versions,
             commands::version_manager::switch_version,
         ])
