@@ -53,12 +53,8 @@ jobs:
           cargo clippy -- -D warnings
 
       - name: Setup Tauri signing key
-        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
-        run: |
-          echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 --decode > "$RUNNER_TEMP/updater.key"
-          KEY_B64=$(base64 < "$RUNNER_TEMP/updater.key" | tr -d '\r\n')
-          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
-          echo "Signing key configured ✓"
+        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: echo "TAURI_SIGNING_PRIVATE_KEY=$TAURI_SIGNING_PRIVATE_KEY" >> "$GITHUB_ENV"
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
@@ -146,12 +142,8 @@ jobs:
           cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
       - name: Setup Tauri signing key
-        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
-        run: |
-          echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 --decode > "$RUNNER_TEMP/updater.key"
-          KEY_B64=$(base64 < "$RUNNER_TEMP/updater.key" | tr -d '\r\n')
-          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
-          echo "Signing key configured ✓"
+        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: echo "TAURI_SIGNING_PRIVATE_KEY=$TAURI_SIGNING_PRIVATE_KEY" >> "$GITHUB_ENV"
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
@@ -216,12 +208,8 @@ jobs:
         shell: bash
 
       - name: Setup Tauri signing key
-        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
-        run: |
-          echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 --decode > "$RUNNER_TEMP/updater.key"
-          KEY_B64=$(base64 < "$RUNNER_TEMP/updater.key" | tr -d '\r\n')
-          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
-          echo "Signing key configured ✓"
+        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: echo "TAURI_SIGNING_PRIVATE_KEY=$TAURI_SIGNING_PRIVATE_KEY" >> "$GITHUB_ENV"
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         shell: bash
