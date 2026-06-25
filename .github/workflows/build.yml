@@ -146,11 +146,11 @@ jobs:
         run: pnpm check
 
       - name: Build Tauri
-        run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg,app
 
       - name: Collect signature & updater archives
         run: |
-          mkdir -p sig-artifacts
+          mkdir -p sig-artifacts updater-archives
           # Collect ALL .sig files from both possible build output paths
           for dir in src-tauri/target/${{ matrix.target }}/release/bundle target/${{ matrix.target }}/release/bundle; do
             if [ -d "$dir" ]; then
@@ -158,6 +158,11 @@ jobs:
                 base=$(basename "$f")
                 cp "$f" "sig-artifacts/$base"
                 echo "Found sig: $f → sig-artifacts/$base"
+              done
+              # Collect updater archives (.app.tar.gz)
+              find "$dir" -name "*.app.tar.gz" -type f 2>/dev/null | while read f; do
+                cp "$f" updater-archives/
+                echo "Found updater archive: $f"
               done
             fi
           done
@@ -171,7 +176,10 @@ jobs:
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
             target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/app/*.app.tar.gz
+            target/${{ matrix.target }}/release/bundle/app/*.app.tar.gz
             sig-artifacts/
+            updater-archives/
 
   # ============================================================
   # Windows (x86_64 MSI + NSIS)
@@ -310,16 +318,16 @@ jobs:
             fi
           done
 
-          # Windows: find NSIS and MSI sig
+          # Windows: find NSIS (.exe.sig) and MSI (.msi.sig) sig
           for f in $(find windows-packages -name "*.sig" -type f 2>/dev/null); do
             bn=$(basename "$f")
             echo "  Found: $f"
-            if echo "$bn" | grep -qi "nsis"; then
-              cp "$f" updates-dist/windows-x86_64.sig
-              echo "    → mapped to windows-x86_64.sig"
-            elif echo "$bn" | grep -qi "msi"; then
+            if echo "$bn" | grep -qi "msi"; then
               cp "$f" updates-dist/windows-x86_64.msi.sig
               echo "    → mapped to windows-x86_64.msi.sig"
+            elif echo "$bn" | grep -qi "nsis\|setup\.exe\|\.exe\.sig"; then
+              cp "$f" updates-dist/windows-x86_64.sig
+              echo "    → mapped to windows-x86_64.sig"
             fi
           done
 
@@ -359,6 +367,8 @@ jobs:
             linux-packages/**/*.tar.gz
             macos-x86_64-apple-darwin/**/*.dmg
             macos-aarch64-apple-darwin/**/*.dmg
+            macos-x86_64-apple-darwin/**/*.app.tar.gz
+            macos-aarch64-apple-darwin/**/*.app.tar.gz
             windows-packages/**/*.msi
             windows-packages/**/*.exe
             windows-packages/**/*.zip

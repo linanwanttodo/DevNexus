@@ -87,26 +87,26 @@ add_entry "linux-x86_64-deb" \
   "${RELEASE_BASE}/DevNexus_${VERSION}_amd64.deb"
 
 # ── macOS aarch64 (Apple Silicon) ────────────────────────────
-# 默认匹配条目
+# 默认匹配条目（Tauri updater 使用 .app.tar.gz）
 add_entry "darwin-aarch64" \
   "$OUTPUT_DIR/darwin-aarch64.sig" \
-  "${RELEASE_BASE}/DevNexus_${VERSION}_aarch64.dmg"
+  "${RELEASE_BASE}/DevNexus_aarch64.app.tar.gz"
 
 # 显式 app 条目
 add_entry "darwin-aarch64-app" \
   "$OUTPUT_DIR/darwin-aarch64.sig" \
-  "${RELEASE_BASE}/DevNexus_${VERSION}_aarch64.dmg"
+  "${RELEASE_BASE}/DevNexus_aarch64.app.tar.gz"
 
 # ── macOS x86_64 (Intel) ─────────────────────────────────────
 # 默认匹配条目
 add_entry "darwin-x86_64" \
   "$OUTPUT_DIR/darwin-x86_64.sig" \
-  "${RELEASE_BASE}/DevNexus_${VERSION}_x64.dmg"
+  "${RELEASE_BASE}/DevNexus_x64.app.tar.gz"
 
 # 显式 app 条目
 add_entry "darwin-x86_64-app" \
   "$OUTPUT_DIR/darwin-x86_64.sig" \
-  "${RELEASE_BASE}/DevNexus_${VERSION}_x64.dmg"
+  "${RELEASE_BASE}/DevNexus_x64.app.tar.gz"
 
 # ── Windows x86_64 — NSIS ───────────────────────────────────
 # 默认匹配条目（NSIS 安装的用户）
