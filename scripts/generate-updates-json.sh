@@ -81,14 +81,14 @@ EOF
   first_platform=false
 fi
 
-# Windows x86_64 — MSI
+# Windows x86_64 — NSIS (primary updater format, more common than MSI)
 if [ -f "$OUTPUT_DIR/windows-x86_64.sig" ]; then
   SIG=$(read_signature "$OUTPUT_DIR/windows-x86_64.sig")
   $first_platform || echo "," >> "$OUTPUT_DIR/updates.json"
   cat >> "$OUTPUT_DIR/updates.json" << EOF
     "windows-x86_64": {
       "signature": "${SIG}",
-      "url": "${RELEASE_BASE}/DevNexus_${VERSION}_x64.msi.zip"
+      "url": "${RELEASE_BASE}/DevNexus_${VERSION}_x64-setup.exe.nsis.zip"
     }
 EOF
   first_platform=false

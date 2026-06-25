@@ -68,6 +68,9 @@ pub async fn check_for_updates_github() -> Result<UpdateInfo, String> {
 }
 
 /// Get the download URL for the current platform's installer
+///
+/// Detects architecture and installed bundle format at runtime to return
+/// the correct download URL for the user's specific installation.
 #[tauri::command]
 pub fn get_download_url(version: String) -> Result<String, String> {
     let version = version.trim_start_matches('v');
@@ -78,13 +81,63 @@ pub fn get_download_url(version: String) -> Result<String, String> {
     );
 
     #[cfg(target_os = "linux")]
-    let url = format!("{}/DevNexus_{}_amd64.AppImage", base, version);
-    #[cfg(target_os = "macos")]
-    let url = format!("{}/DevNexus_{}_aarch64.dmg", base, version);
-    #[cfg(target_os = "windows")]
-    let url = format!("{}/DevNexus_{}_x64-setup.exe", base, version);
+    {
+        // APPIMAGE env var is set when running from an AppImage
+        if std::env::var("APPIMAGE").is_ok() {
+            return Ok(format!("{}/DevNexus_{}_amd64.AppImage", base, version));
+        }
+        // System-installed (deb / rpm / manual)
+        return Ok(format!("{}/DevNexus_{}_amd64.deb", base, version));
+    }
 
-    Ok(url)
+    #[cfg(target_os = "macos")]
+    {
+        // Binary is arch-specific on macOS — compile-time detection is correct
+        #[cfg(target_arch = "aarch64")]
+        {
+            return Ok(format!("{}/DevNexus_{}_aarch64.dmg", base, version));
+        }
+        #[cfg(target_arch = "x86_64")]
+        {
+            return Ok(format!("{}/DevNexus_{}_x64.dmg", base, version));
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if is_nsis_install() {
+            return Ok(format!("{}/DevNexus_{}_x64-setup.exe", base, version));
+        }
+        return Ok(format!("{}/DevNexus_{}_x64_zh-CN.msi", base, version));
+    }
+
+    #[allow(unreachable_code)]
+    Err("Unsupported platform".to_string())
+}
+
+/// Detect whether the app was installed via NSIS on Windows by checking the
+/// registry UninstallString for the NSIS uninstaller marker.
+#[cfg(target_os = "windows")]
+fn is_nsis_install() -> bool {
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    if let Ok(key) = hklm.open_subkey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall") {
+        for name in key.enum_keys().filter_map(|k| k.ok()) {
+            if let Ok(sub) = key.open_subkey(&name) {
+                if let Ok(display_name) = sub.get_value::<String, _>("DisplayName") {
+                    if display_name.contains("DevNexus") {
+                        if let Ok(uninstall_str) = sub.get_value::<String, _>("UninstallString") {
+                            // NSIS uses its own uninstaller exe; MSI uses msiexec
+                            return uninstall_str.to_lowercase().contains("uninstall.exe");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
 }
 
 #[cfg(test)]

@@ -83,13 +83,13 @@
       const url = await invoke("get_download_url", { version: updateInfo?.latest_version || "" });
       const { open } = await import("@tauri-apps/plugin-shell");
       await open(url);
-      updateState = "idle";
+      updateState = "opened";
     } catch (fallbackErr) {
       // 最后的兜底：打开 GitHub Release 页
       try {
         const { open } = await import("@tauri-apps/plugin-shell");
         await open(updateInfo?.html_url || `https://github.com/linanwanttodo/DevNexus/releases/latest`);
-        updateState = "idle";
+        updateState = "opened";
       } catch (e) {
         updateError = e.message || String(e);
         updateState = "error";
@@ -349,6 +349,11 @@
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-red-500 text-sm">error</span>
             <span class="text-xs text-red-500">{t("settings.update_error")}: {updateError}</span>
+          </div>
+        {:else if isState('opened')}
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-nx-success text-sm">check_circle</span>
+            <span class="text-xs text-nx-text-secondary">{t("settings.download_opened")}</span>
           </div>
         {:else if isState('idle')}
           <div class="flex items-center gap-2">

@@ -48,6 +48,7 @@
     "download_update": "Скачать и установить",
     "downloading": "Загрузка...",
     "restart_to_apply": "Перезапустите приложение",
+    "download_opened": "Страница загрузки открыта в браузере",
     "language": "Язык",
     "language_desc": "Выберите язык интерфейса"
   },

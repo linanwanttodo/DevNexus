@@ -48,6 +48,7 @@
     "download_update": "Download & Install",
     "downloading": "Downloading...",
     "restart_to_apply": "Restart the app to apply update",
+    "download_opened": "Download page opened in browser",
     "language": "Language",
     "language_desc": "Select interface language"
   },

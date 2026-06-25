@@ -208,21 +208,31 @@ jobs:
 
       - name: Collect signature & updater archives
         run: |
-          mkdir -p sig-artifacts
-          # 查找 .msi.zip.sig 文件
-          for f in $(find target/release/bundle -name "*.msi.zip.sig" -type f 2>/dev/null); do
+          mkdir -p sig-artifacts updater-archives
+
+          # ── NSIS (primary updater format) ──────────────────────
+          for f in $(find target/release/bundle -name "*.nsis.zip.sig" -type f 2>/dev/null); do
             cp "$f" sig-artifacts/windows-x86_64.sig
-            echo "Found Windows signature: $f"
+            echo "Found Windows NSIS signature: $f"
           done
-          if [ ! -f sig-artifacts/windows-x86_64.sig ]; then
-            echo "WARNING: No Windows .sig file found for windows-x86_64"
-          fi
-          # 收集 updater 归档
-          mkdir -p updater-archives
+          for f in $(find target/release/bundle -name "*.nsis.zip" -type f 2>/dev/null); do
+            cp "$f" updater-archives/
+            echo "Found Windows NSIS updater archive: $f"
+          done
+
+          # ── MSI (fallback) ────────────────────────────────────
+          for f in $(find target/release/bundle -name "*.msi.zip.sig" -type f 2>/dev/null); do
+            cp "$f" sig-artifacts/windows-x86_64.msi.sig 2>/dev/null || true
+            echo "Found Windows MSI signature: $f"
+          done
           for f in $(find target/release/bundle -name "*.msi.zip" -type f 2>/dev/null); do
             cp "$f" updater-archives/
-            echo "Found Windows updater archive: $f"
+            echo "Found Windows MSI updater archive: $f"
           done
+
+          if [ ! -f sig-artifacts/windows-x86_64.sig ]; then
+            echo "WARNING: No Windows NSIS .sig file found for windows-x86_64"
+          fi
         shell: bash
 
       - name: Upload artifacts
