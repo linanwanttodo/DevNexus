@@ -73,25 +73,22 @@ jobs:
 
       - name: Collect signature & updater archives
         run: |
-          mkdir -p sig-artifacts
-          # AppImage sig
-          for f in $(find target/release/bundle -name "*.AppImage.tar.gz.sig" -type f 2>/dev/null); do
-            cp "$f" sig-artifacts/linux-x86_64.sig
-            echo "Found Linux AppImage signature: $f"
+          mkdir -p sig-artifacts updater-archives
+
+          # Collect ALL .sig files (naming varies with createUpdaterArtifacts)
+          find target/release/bundle -name "*.sig" -type f 2>/dev/null | while read f; do
+            base=$(basename "$f")
+            cp "$f" "sig-artifacts/$base"
+            echo "Found sig: $f → sig-artifacts/$base"
           done
-          # deb sig
-          for f in $(find target/release/bundle -name "*.deb.sig" -type f 2>/dev/null); do
-            cp "$f" sig-artifacts/linux-x86_64.deb.sig
-            echo "Found Linux deb signature: $f"
-          done
-          # updater archives
-          mkdir -p updater-archives
-          for f in $(find target/release/bundle -name "*.AppImage.tar.gz" -type f 2>/dev/null); do
+
+          # Collect ALL updater archives
+          find target/release/bundle \( -name "*.AppImage.tar.gz" -o -name "*.deb.sig" -o -name "*.AppImage.sig" \) -type f 2>/dev/null | while read f; do
             cp "$f" updater-archives/
           done
-          if [ ! -f sig-artifacts/linux-x86_64.sig ]; then
-            echo "WARNING: No Linux AppImage .sig file found"
-          fi
+
+          echo "=== All sig files ==="
+          ls -la sig-artifacts/ 2>/dev/null || echo "(none)"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -154,15 +151,18 @@ jobs:
       - name: Collect signature & updater archives
         run: |
           mkdir -p sig-artifacts
-          PLATFORM="${{ contains(matrix.target, 'aarch64') && 'darwin-aarch64' || 'darwin-x86_64' }}"
-          # 查找 .dmg.sig 文件
-          for f in $(find src-tauri/target/${{ matrix.target }}/release/bundle target/${{ matrix.target }}/release/bundle -name "*.dmg.sig" -type f 2>/dev/null); do
-            cp "$f" "sig-artifacts/${PLATFORM}.sig"
-            echo "Found macOS signature: $f → ${PLATFORM}.sig"
+          # Collect ALL .sig files from both possible build output paths
+          for dir in src-tauri/target/${{ matrix.target }}/release/bundle target/${{ matrix.target }}/release/bundle; do
+            if [ -d "$dir" ]; then
+              find "$dir" -name "*.sig" -type f 2>/dev/null | while read f; do
+                base=$(basename "$f")
+                cp "$f" "sig-artifacts/$base"
+                echo "Found sig: $f → sig-artifacts/$base"
+              done
+            fi
           done
-          if [ ! -f "sig-artifacts/${PLATFORM}.sig" ]; then
-            echo "WARNING: No macOS .sig file found for ${PLATFORM}"
-          fi
+          echo "=== macOS sig files ==="
+          ls -la sig-artifacts/ 2>/dev/null || echo "(none)"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -223,25 +223,21 @@ jobs:
         run: |
           mkdir -p sig-artifacts updater-archives
 
-          # ── NSIS (primary updater format) ──────────────────────
-          for f in $(find target/release/bundle -name "*.nsis.zip.sig" -type f 2>/dev/null); do
-            cp "$f" sig-artifacts/windows-x86_64.sig
-            echo "Found Windows NSIS signature: $f"
-          done
-          for f in $(find target/release/bundle -name "*.nsis.zip" -type f 2>/dev/null); do
-            cp "$f" updater-archives/
-            echo "Found Windows NSIS updater archive: $f"
+          # Collect ALL .sig files
+          find target/release/bundle -name "*.sig" -type f 2>/dev/null | while read f; do
+            base=$(basename "$f")
+            cp "$f" "sig-artifacts/$base"
+            echo "Found sig: $f → sig-artifacts/$base"
           done
 
-          # ── MSI (fallback) ────────────────────────────────────
-          for f in $(find target/release/bundle -name "*.msi.zip.sig" -type f 2>/dev/null); do
-            cp "$f" sig-artifacts/windows-x86_64.msi.sig 2>/dev/null || true
-            echo "Found Windows MSI signature: $f"
-          done
-          for f in $(find target/release/bundle -name "*.msi.zip" -type f 2>/dev/null); do
+          # Collect ALL updater archives (.nsis.zip, .msi.zip)
+          find target/release/bundle -name "*.zip" ! -name "*.zip.sig" -type f 2>/dev/null | while read f; do
             cp "$f" updater-archives/
-            echo "Found Windows MSI updater archive: $f"
+            echo "Found updater archive: $f"
           done
+
+          echo "=== Windows sig files ==="
+          ls -la sig-artifacts/ 2>/dev/null || echo "(none)"
 
           if [ ! -f sig-artifacts/windows-x86_64.sig ]; then
             echo "WARNING: No Windows NSIS .sig file found for windows-x86_64"
@@ -283,26 +279,54 @@ jobs:
       - name: Collect signatures and generate updates.json
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          VERSION="${VERSION#v}"  # 去掉 v 前缀
+          VERSION="${VERSION#v}"
           mkdir -p updates-dist
 
-          # 从各平台构件目录复制所有 .sig 文件
-          echo "=== Scanning artifact directories ==="
-          for dir in linux-packages macos-*-apple-darwin windows-packages; do
-            if [ ! -d "$dir" ]; then continue; fi
-            echo "--- $dir ---"
-            find "$dir" -name "*.sig" -type f | while read sig_file; do
-              base=$(basename "$sig_file")
-              cp "$sig_file" "updates-dist/$base"
-              echo "  Collected: $sig_file → updates-dist/$base"
-            done
+          echo "=== Scanning all .sig files ==="
+
+          # Linux: find AppImage sig and deb sig
+          for f in $(find linux-packages -name "*.sig" -type f 2>/dev/null); do
+            bn=$(basename "$f")
+            echo "  Found: $f"
+            if echo "$bn" | grep -qi "appimage\|\.tar\.gz"; then
+              cp "$f" updates-dist/linux-x86_64.sig
+              echo "    → mapped to linux-x86_64.sig"
+            elif echo "$bn" | grep -qi "deb"; then
+              cp "$f" updates-dist/linux-x86_64.deb.sig
+              echo "    → mapped to linux-x86_64.deb.sig"
+            fi
+          done
+
+          # macOS: find dmg sig (filename contains aarch64 or x64)
+          for f in $(find macos-*-apple-darwin -name "*.sig" -type f 2>/dev/null); do
+            bn=$(basename "$f")
+            echo "  Found: $f"
+            if echo "$bn" | grep -qi "aarch64"; then
+              cp "$f" updates-dist/darwin-aarch64.sig
+              echo "    → mapped to darwin-aarch64.sig"
+            elif echo "$bn" | grep -qi "x64\|x86_64"; then
+              cp "$f" updates-dist/darwin-x86_64.sig
+              echo "    → mapped to darwin-x86_64.sig"
+            fi
+          done
+
+          # Windows: find NSIS and MSI sig
+          for f in $(find windows-packages -name "*.sig" -type f 2>/dev/null); do
+            bn=$(basename "$f")
+            echo "  Found: $f"
+            if echo "$bn" | grep -qi "nsis"; then
+              cp "$f" updates-dist/windows-x86_64.sig
+              echo "    → mapped to windows-x86_64.sig"
+            elif echo "$bn" | grep -qi "msi"; then
+              cp "$f" updates-dist/windows-x86_64.msi.sig
+              echo "    → mapped to windows-x86_64.msi.sig"
+            fi
           done
 
           echo ""
-          echo "=== All signature files ==="
+          echo "=== Mapped signature files ==="
           ls -la updates-dist/
 
-          # 生成 updates.json
           GH_REPO="${{ github.repository }}" \
           GH_TAG="${{ steps.version.outputs.tag }}" \
           bash scripts/generate-updates-json.sh "$VERSION" updates-dist
