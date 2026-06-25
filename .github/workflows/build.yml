@@ -11,11 +11,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # 签名密钥由各 build job 的 "Setup Tauri signing key" 步骤处理。
-  # 在仓库 Settings → Secrets and variables → Actions 中添加：
-  #   TAURI_SIGNING_PRIVATE_KEY: tauri-signing-key 文件的 base64 编码内容
-  #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: devnexus-updater
+# 签名密钥由各 build job 的 "Setup Tauri signing key" 步骤处理。
+# 在仓库 Settings → Secrets and variables → Actions 中添加：
+#   TAURI_SIGNING_PRIVATE_KEY: tauri-signing-key 文件的 base64 编码内容
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: devnexus-updater
 
 jobs:
   # ============================================================
