@@ -48,6 +48,8 @@
     "download_update": "Download & Install",
     "downloading": "Downloading...",
     "restart_to_apply": "Restart the app to apply update",
+    "update_installed": "Update installed successfully",
+    "restart_now": "Restart Now",
     "download_opened": "Download page opened in browser",
     "language": "Language",
     "language_desc": "Select interface language"

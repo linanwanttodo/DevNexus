@@ -48,6 +48,8 @@
     "download_update": "Скачать и установить",
     "downloading": "Загрузка...",
     "restart_to_apply": "Перезапустите приложение",
+    "update_installed": "Обновление успешно установлено",
+    "restart_now": "Перезапустить",
     "download_opened": "Страница загрузки открыта в браузере",
     "language": "Язык",
     "language_desc": "Выберите язык интерфейса"

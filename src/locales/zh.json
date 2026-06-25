@@ -48,6 +48,8 @@
     "download_update": "下载并安装",
     "downloading": "正在下载...",
     "restart_to_apply": "请重启应用以应用更新",
+    "update_installed": "更新已安装成功",
+    "restart_now": "立即重启",
     "download_opened": "下载页面已在浏览器中打开",
     "language": "语言",
     "language_desc": "选择界面语言"

@@ -19,6 +19,7 @@
   function isState(v) { return updateState === v; }
   let updateInfo = $state(null);
   let updateError = $state("");
+  let downloadProgress = $state(0);
 
   function applyTheme(t) {
     document.documentElement.setAttribute("data-theme", t);
@@ -62,6 +63,7 @@
 
   async function downloadAndInstall() {
     updateState = "downloading";
+    downloadProgress = 0;
     updateError = "";
 
     try {
@@ -70,7 +72,20 @@
       const update = await check();
 
       if (update) {
-        await update.downloadAndInstall();
+        let totalBytes = 0;
+        let downloadedBytes = 0;
+        await update.downloadAndInstall((event) => {
+          if (event.event === "Started" && event.data.contentLength) {
+            totalBytes = event.data.contentLength;
+          } else if (event.event === "Progress") {
+            downloadedBytes += event.data.chunkLength;
+            downloadProgress = totalBytes > 0
+              ? Math.round((downloadedBytes / totalBytes) * 100)
+              : 0;
+          } else if (event.event === "Finished") {
+            downloadProgress = 100;
+          }
+        });
         updateState = "installed";
         return;
       }
@@ -94,6 +109,15 @@
         updateError = e.message || String(e);
         updateState = "error";
       }
+    }
+  }
+
+  async function restartApp() {
+    try {
+      const { relaunch } = await import("@tauri-apps/plugin-process");
+      await relaunch();
+    } catch (e) {
+      updateError = e.message || String(e);
     }
   }
 
@@ -323,27 +347,41 @@
               </div>
             </div>
             <button
-              class="mt-3 w-full border border-nx-accent bg-nx-accent/10 px-4 py-2 text-xs font-medium text-nx-accent transition-colors hover:bg-nx-accent/20 disabled:opacity-50"
+              class="mt-3 w-full border border-nx-accent bg-nx-accent/10 px-4 py-2 text-xs font-medium text-nx-accent transition-colors hover:bg-nx-accent/20"
               onclick={downloadAndInstall}
-              disabled={isState('downloading')}
             >
-              {#if isState('downloading')}
-                <span class="flex items-center justify-center gap-2">
-                  <span class="material-symbols-outlined text-sm animate-spin">refresh</span>
-                  {t("settings.downloading")}...
-                </span>
-              {:else}
-                <span class="flex items-center justify-center gap-2">
-                  <span class="material-symbols-outlined text-sm">download</span>
-                  {t("settings.download_update")}
-                </span>
-              {/if}
+              <span class="flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined text-sm">download</span>
+                {t("settings.download_update")}
+              </span>
             </button>
+          </div>
+        {:else if isState('downloading')}
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-nx-accent text-sm animate-spin">progress_activity</span>
+              <span class="text-xs text-nx-text-secondary">{t("settings.downloading")}...</span>
+              {#if downloadProgress > 0}
+                <span class="text-[10px] text-nx-text-muted">{downloadProgress}%</span>
+              {/if}
+            </div>
+            <div class="w-full bg-nx-bg-tertiary rounded-full h-1.5 overflow-hidden">
+              <div
+                class="bg-nx-accent h-1.5 rounded-full transition-all duration-300 ease-out"
+                style="width: {downloadProgress}%"
+              ></div>
+            </div>
           </div>
         {:else if isState('installed')}
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-nx-success text-sm">check_circle</span>
-            <span class="text-xs text-nx-text-secondary">{t("settings.restart_to_apply")}</span>
+            <span class="text-xs text-nx-text-secondary">{t("settings.update_installed")}</span>
+            <button
+              class="border border-nx-success bg-nx-success/10 px-2 py-0.5 text-[10px] font-medium text-nx-success transition-colors hover:bg-nx-success/20"
+              onclick={restartApp}
+            >
+              {t("settings.restart_now")}
+            </button>
           </div>
         {:else if isState('error')}
           <div class="flex items-center gap-2">

@@ -12,12 +12,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # 可选：设置签名密钥（仅在有 secret 时生效）
+  # 签名密钥由各 build job 的 "Setup Tauri signing key" 步骤处理。
   # 在仓库 Settings → Secrets and variables → Actions 中添加：
-  #   TAURI_SIGNING_PRIVATE_KEY: 从 tauri-signing-key 文件的全部内容
+  #   TAURI_SIGNING_PRIVATE_KEY: tauri-signing-key 文件的 base64 编码内容
   #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: devnexus-updater
-  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
 
 jobs:
   # ============================================================
@@ -55,6 +53,16 @@ jobs:
           cargo fmt --check
           cargo clippy -- -D warnings
 
+      - name: Setup Tauri signing key
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        run: |
+          echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 --decode > "$RUNNER_TEMP/updater.key"
+          KEY_B64=$(base64 < "$RUNNER_TEMP/updater.key" | tr -d '\r\n')
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
+          echo "Signing key configured ✓"
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
       - name: Setup pnpm
         run: npm install -g pnpm@9
 
@@ -70,20 +78,24 @@ jobs:
       - name: Collect signature & updater archives
         run: |
           mkdir -p sig-artifacts
-          # 查找所有 .sig 文件，用标准名称复制
+          # AppImage sig
           for f in $(find target/release/bundle -name "*.AppImage.tar.gz.sig" -type f 2>/dev/null); do
             cp "$f" sig-artifacts/linux-x86_64.sig
-            echo "Found Linux updater signature: $f"
+            echo "Found Linux AppImage signature: $f"
           done
-          if [ ! -f sig-artifacts/linux-x86_64.sig ]; then
-            echo "WARNING: No Linux .sig file found (signing key not configured in CI secrets)"
-          fi
-          # 收集 updater 归档文件
+          # deb sig
+          for f in $(find target/release/bundle -name "*.deb.sig" -type f 2>/dev/null); do
+            cp "$f" sig-artifacts/linux-x86_64.deb.sig
+            echo "Found Linux deb signature: $f"
+          done
+          # updater archives
           mkdir -p updater-archives
           for f in $(find target/release/bundle -name "*.AppImage.tar.gz" -type f 2>/dev/null); do
             cp "$f" updater-archives/
-            echo "Found Linux updater archive: $f"
           done
+          if [ ! -f sig-artifacts/linux-x86_64.sig ]; then
+            echo "WARNING: No Linux AppImage .sig file found"
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -133,6 +145,16 @@ jobs:
         run: |
           cargo fmt --check --manifest-path src-tauri/Cargo.toml
           cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+      - name: Setup Tauri signing key
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        run: |
+          echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 --decode > "$RUNNER_TEMP/updater.key"
+          KEY_B64=$(base64 < "$RUNNER_TEMP/updater.key" | tr -d '\r\n')
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
+          echo "Signing key configured ✓"
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
@@ -192,6 +214,17 @@ jobs:
         run: |
           cargo fmt --check --manifest-path src-tauri/Cargo.toml
           cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+        shell: bash
+
+      - name: Setup Tauri signing key
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        run: |
+          echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 --decode > "$RUNNER_TEMP/updater.key"
+          KEY_B64=$(base64 < "$RUNNER_TEMP/updater.key" | tr -d '\r\n')
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
+          echo "Signing key configured ✓"
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         shell: bash
 
       - name: Install frontend deps
@@ -273,17 +306,20 @@ jobs:
           VERSION="${VERSION#v}"  # 去掉 v 前缀
           mkdir -p updates-dist
 
-          # 从各平台构件目录复制 .sig 文件
+          # 从各平台构件目录复制所有 .sig 文件
+          echo "=== Scanning artifact directories ==="
           for dir in linux-packages macos-*-apple-darwin windows-packages; do
-            for sig_file in $(find "$dir" -name "*.sig" -type f 2>/dev/null); do
-              basename=$(basename "$sig_file")
-              cp "$sig_file" "updates-dist/$basename"
-              echo "Collected: $sig_file → updates-dist/$basename"
+            if [ ! -d "$dir" ]; then continue; fi
+            echo "--- $dir ---"
+            find "$dir" -name "*.sig" -type f | while read sig_file; do
+              base=$(basename "$sig_file")
+              cp "$sig_file" "updates-dist/$base"
+              echo "  Collected: $sig_file → updates-dist/$base"
             done
           done
 
-          # 检查收集到的签名文件
-          echo "=== Signature files ==="
+          echo ""
+          echo "=== All signature files ==="
           ls -la updates-dist/
 
           # 生成 updates.json
@@ -291,6 +327,7 @@ jobs:
           GH_TAG="${{ steps.version.outputs.tag }}" \
           bash scripts/generate-updates-json.sh "$VERSION" updates-dist
 
+          echo ""
           cat updates-dist/updates.json
 
       - name: Check if release exists
