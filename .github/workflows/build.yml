@@ -11,10 +11,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# 签名密钥由各 build job 的 "Setup Tauri signing key" 步骤处理。
 # 在仓库 Settings → Secrets and variables → Actions 中添加：
-#   TAURI_SIGNING_PRIVATE_KEY: tauri-signing-key 文件的 base64 编码内容
+#   TAURI_SIGNING_PRIVATE_KEY: tauri-signing-key 文件的原始内容（minisign 格式）
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: devnexus-updater
+
+env:
+  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
 
 jobs:
   # ============================================================
@@ -53,10 +55,8 @@ jobs:
           cargo clippy -- -D warnings
 
       - name: Setup Tauri signing key
-        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
-        run: echo "TAURI_SIGNING_PRIVATE_KEY=$TAURI_SIGNING_PRIVATE_KEY" >> "$GITHUB_ENV"
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        run: echo "TAURI_SIGNING_PRIVATE_KEY already set via workflow env"
 
       - name: Setup pnpm
         run: npm install -g pnpm@9
@@ -141,12 +141,6 @@ jobs:
           cargo fmt --check --manifest-path src-tauri/Cargo.toml
           cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
-      - name: Setup Tauri signing key
-        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
-        run: echo "TAURI_SIGNING_PRIVATE_KEY=$TAURI_SIGNING_PRIVATE_KEY" >> "$GITHUB_ENV"
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
@@ -208,10 +202,8 @@ jobs:
         shell: bash
 
       - name: Setup Tauri signing key
-        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
-        run: echo "TAURI_SIGNING_PRIVATE_KEY=$TAURI_SIGNING_PRIVATE_KEY" >> "$GITHUB_ENV"
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        run: echo "TAURI_SIGNING_PRIVATE_KEY already set via workflow env"
         shell: bash
 
       - name: Install frontend deps
