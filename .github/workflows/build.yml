@@ -305,14 +305,14 @@ jobs:
             fi
           done
 
-          # macOS: find dmg sig (filename contains aarch64 or x64)
+          # macOS: detect arch from parent directory name (macos-aarch64-apple-darwin or macos-x86_64-apple-darwin)
           for f in $(find macos-*-apple-darwin -name "*.sig" -type f 2>/dev/null); do
-            bn=$(basename "$f")
             echo "  Found: $f"
-            if echo "$bn" | grep -qi "aarch64"; then
+            dir_part=$(echo "$f" | cut -d/ -f1)
+            if echo "$dir_part" | grep -qi "aarch64"; then
               cp "$f" updates-dist/darwin-aarch64.sig
               echo "    → mapped to darwin-aarch64.sig"
-            elif echo "$bn" | grep -qi "x64\|x86_64"; then
+            elif echo "$dir_part" | grep -qi "x86_64"; then
               cp "$f" updates-dist/darwin-x86_64.sig
               echo "    → mapped to darwin-x86_64.sig"
             fi
