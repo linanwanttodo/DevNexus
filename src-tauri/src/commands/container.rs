@@ -58,7 +58,11 @@ fn run_docker(args: &[&str]) -> Result<(String, String), String> {
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     if !output.status.success() {
-        return Err(if stderr.is_empty() { stdout.trim().to_string() } else { stderr.trim().to_string() });
+        return Err(if stderr.is_empty() {
+            stdout.trim().to_string()
+        } else {
+            stderr.trim().to_string()
+        });
     }
     Ok((stdout, stderr))
 }
@@ -78,13 +82,23 @@ fn parse_json_lines<T: serde::de::DeserializeOwned>(output: &str) -> Vec<T> {
 pub fn check_docker() -> DockerStatus {
     let version = match run_docker(&["--version"]) {
         Ok((out, _)) => out.trim().to_string(),
-        Err(_) => return DockerStatus { installed: false, version: String::new(), running: false },
+        Err(_) => {
+            return DockerStatus {
+                installed: false,
+                version: String::new(),
+                running: false,
+            }
+        }
     };
     let running = match run_docker(&["info", "--format", "{{.ServerVersion}}"]) {
         Ok((out, _)) => !out.trim().is_empty(),
         Err(_) => false,
     };
-    DockerStatus { installed: true, version, running }
+    DockerStatus {
+        installed: true,
+        version,
+        running,
+    }
 }
 
 #[tauri::command]
@@ -99,15 +113,27 @@ pub fn list_containers(all: bool) -> Result<Vec<ContainerInfo>, String> {
     let containers = raw
         .iter()
         .map(|v| {
-            let id = v.get("ID").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let id = v
+                .get("ID")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
             let name = v
                 .get("Names")
                 .and_then(|x| x.as_str())
                 .unwrap_or("")
                 .trim_start_matches('/')
                 .to_string();
-            let image = v.get("Image").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let state = v.get("State").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let image = v
+                .get("Image")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let state = v
+                .get("State")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
             // Normalize status to one of: running, exited, paused, created
             let status = match state.as_str() {
                 "running" => "running".to_string(),
@@ -115,10 +141,31 @@ pub fn list_containers(all: bool) -> Result<Vec<ContainerInfo>, String> {
                 "paused" => "paused".to_string(),
                 _ => state.clone(),
             };
-            let ports = v.get("Ports").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let created = v.get("CreatedAt").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let size = v.get("Size").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            ContainerInfo { id, name, image, status, state, ports, created, size }
+            let ports = v
+                .get("Ports")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let created = v
+                .get("CreatedAt")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let size = v
+                .get("Size")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            ContainerInfo {
+                id,
+                name,
+                image,
+                status,
+                state,
+                ports,
+                created,
+                size,
+            }
         })
         .collect();
     Ok(containers)
@@ -135,14 +182,22 @@ pub fn get_container_logs(name: String, tail: Option<u32>) -> Result<String, Str
     let tail = tail.unwrap_or(200);
     let tail_str = tail.to_string();
     let (stdout, stderr) = run_docker(&["logs", "--tail", &tail_str, &name])?;
-    let combined = if stderr.is_empty() { stdout } else { format!("{}{}", stdout, stderr) };
+    let combined = if stderr.is_empty() {
+        stdout
+    } else {
+        format!("{}{}", stdout, stderr)
+    };
     Ok(combined)
 }
 
 #[tauri::command]
 pub fn exec_in_container(name: String, command: String) -> Result<String, String> {
     let (stdout, stderr) = run_docker(&["exec", &name, "sh", "-c", &command])?;
-    let combined = if stderr.is_empty() { stdout } else { format!("{}{}", stdout, stderr) };
+    let combined = if stderr.is_empty() {
+        stdout
+    } else {
+        format!("{}{}", stdout, stderr)
+    };
     Ok(combined)
 }
 
@@ -153,12 +208,38 @@ pub fn list_images() -> Result<Vec<ImageInfo>, String> {
     let images = raw
         .iter()
         .map(|v| {
-            let id = v.get("ID").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let repository = v.get("Repository").and_then(|x| x.as_str()).unwrap_or("<none>").to_string();
-            let tag = v.get("Tag").and_then(|x| x.as_str()).unwrap_or("<none>").to_string();
-            let size = v.get("Size").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let created = v.get("CreatedAt").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            ImageInfo { id, repository, tag, size, created }
+            let id = v
+                .get("ID")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let repository = v
+                .get("Repository")
+                .and_then(|x| x.as_str())
+                .unwrap_or("<none>")
+                .to_string();
+            let tag = v
+                .get("Tag")
+                .and_then(|x| x.as_str())
+                .unwrap_or("<none>")
+                .to_string();
+            let size = v
+                .get("Size")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let created = v
+                .get("CreatedAt")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            ImageInfo {
+                id,
+                repository,
+                tag,
+                size,
+                created,
+            }
         })
         .collect();
     Ok(images)
@@ -206,11 +287,32 @@ pub fn list_volumes() -> Result<Vec<VolumeInfo>, String> {
     let volumes = raw
         .iter()
         .map(|v| {
-            let name = v.get("Name").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let driver = v.get("Driver").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let mountpoint = v.get("Mountpoint").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let created = v.get("CreatedAt").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            VolumeInfo { name, driver, mountpoint, created }
+            let name = v
+                .get("Name")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let driver = v
+                .get("Driver")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let mountpoint = v
+                .get("Mountpoint")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let created = v
+                .get("CreatedAt")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            VolumeInfo {
+                name,
+                driver,
+                mountpoint,
+                created,
+            }
         })
         .collect();
     Ok(volumes)
@@ -230,11 +332,32 @@ pub fn list_networks() -> Result<Vec<NetworkInfo>, String> {
     let networks = raw
         .iter()
         .map(|v| {
-            let id = v.get("ID").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let name = v.get("Name").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let driver = v.get("Driver").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let scope = v.get("Scope").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            NetworkInfo { id, name, driver, scope }
+            let id = v
+                .get("ID")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let name = v
+                .get("Name")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let driver = v
+                .get("Driver")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let scope = v
+                .get("Scope")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            NetworkInfo {
+                id,
+                name,
+                driver,
+                scope,
+            }
         })
         .collect();
     Ok(networks)
@@ -281,7 +404,10 @@ pub fn compose_down(file: Option<String>, project_name: Option<String>) -> Resul
 }
 
 #[tauri::command]
-pub fn compose_ps(file: Option<String>, project_name: Option<String>) -> Result<Vec<ContainerInfo>, String> {
+pub fn compose_ps(
+    file: Option<String>,
+    project_name: Option<String>,
+) -> Result<Vec<ContainerInfo>, String> {
     let mut args = vec!["compose"];
     if let Some(f) = &file {
         args.push("-f");
@@ -299,27 +425,60 @@ pub fn compose_ps(file: Option<String>, project_name: Option<String>) -> Result<
     let containers = raw
         .iter()
         .map(|v| {
-            let id = v.get("ID").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let name = v.get("Name").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let image = v.get("Image").and_then(|x| x.as_str()).unwrap_or("").to_string();
-            let state = v.get("State").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let id = v
+                .get("ID")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let name = v
+                .get("Name")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let image = v
+                .get("Image")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+            let state = v
+                .get("State")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
             let status = match state.as_str() {
                 "running" => "running".to_string(),
                 "exited" => "exited".to_string(),
                 "paused" => "paused".to_string(),
                 _ => state.clone(),
             };
-            let ports = v.get("Ports").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let ports = v
+                .get("Ports")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
             let created = String::new();
             let size = String::new();
-            ContainerInfo { id, name, image, status, state, ports, created, size }
+            ContainerInfo {
+                id,
+                name,
+                image,
+                status,
+                state,
+                ports,
+                created,
+                size,
+            }
         })
         .collect();
     Ok(containers)
 }
 
 #[tauri::command]
-pub fn compose_logs(file: Option<String>, project_name: Option<String>, tail: Option<u32>) -> Result<String, String> {
+pub fn compose_logs(
+    file: Option<String>,
+    project_name: Option<String>,
+    tail: Option<u32>,
+) -> Result<String, String> {
     let mut args = vec!["compose"];
     if let Some(f) = &file {
         args.push("-f");
@@ -335,6 +494,10 @@ pub fn compose_logs(file: Option<String>, project_name: Option<String>, tail: Op
     args.push("--tail");
     args.push(&tail_str);
     let (stdout, stderr) = run_docker(&args)?;
-    let combined = if stderr.is_empty() { stdout } else { format!("{}{}", stdout, stderr) };
+    let combined = if stderr.is_empty() {
+        stdout
+    } else {
+        format!("{}{}", stdout, stderr)
+    };
     Ok(combined)
 }
