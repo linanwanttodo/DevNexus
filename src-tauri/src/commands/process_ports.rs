@@ -17,14 +17,19 @@ struct Mutex {
 
 impl Mutex {
     fn new(sys: System) -> Self {
-        Self { inner: std::sync::Mutex::new(Some(sys)) }
+        Self {
+            inner: std::sync::Mutex::new(Some(sys)),
+        }
     }
 
     fn with<F, R>(&self, f: F) -> Result<R, String>
     where
         F: FnOnce(&mut System) -> R,
     {
-        let mut guard = self.inner.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
         let sys = guard.as_mut().ok_or("System not initialized")?;
         Ok(f(sys))
     }
@@ -70,7 +75,10 @@ pub struct PortEntry {
 // ==================== Process helpers ====================
 
 fn now_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 fn process_name(p: &sysinfo::Process) -> String {
@@ -117,53 +125,80 @@ fn list_ports_unix() -> Result<Vec<PortEntry>, String> {
 
     let output = match lsof_result {
         Ok(o) if o.status.success() => o,
-        _ => {
-            Command::new("ss")
-                .args(["-tlnp"])
-                .output()
-                .map_err(|e| format!("Neither lsof nor ss available: {}", e))?
-        }
+        _ => Command::new("ss")
+            .args(["-tlnp"])
+            .output()
+            .map_err(|e| format!("Neither lsof nor ss available: {}", e))?,
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut entries = Vec::new();
 
-    let is_ss = stdout.lines().next()
+    let is_ss = stdout
+        .lines()
+        .next()
         .map(|l| l.contains("State") || l.contains("Recv-Q"))
         .unwrap_or(false);
 
     if is_ss {
         for line in stdout.lines().skip(1) {
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() < 6 { continue; }
+            if parts.len() < 6 {
+                continue;
+            }
 
-            let port = parts[3].rsplit(':').next()
+            let port = parts[3]
+                .rsplit(':')
+                .next()
                 .and_then(|p| p.parse::<u16>().ok());
             let Some(port) = port else { continue };
 
             let info = parts[5..].join(" ");
             let pid = extract_ss_pid(&info).unwrap_or(0);
-            if pid == 0 { continue; }
+            if pid == 0 {
+                continue;
+            }
 
-            let process_name = extract_ss_process_name(&info).unwrap_or_else(|| "unknown".to_string());
+            let process_name =
+                extract_ss_process_name(&info).unwrap_or_else(|| "unknown".to_string());
 
-            if !entries.iter().any(|e: &PortEntry| e.port == port && e.pid == pid) {
-                entries.push(PortEntry { port, protocol: "TCP".to_string(), process_name, pid });
+            if !entries
+                .iter()
+                .any(|e: &PortEntry| e.port == port && e.pid == pid)
+            {
+                entries.push(PortEntry {
+                    port,
+                    protocol: "TCP".to_string(),
+                    process_name,
+                    pid,
+                });
             }
         }
     } else {
         for line in stdout.lines().skip(1) {
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() < 9 { continue; }
+            if parts.len() < 9 {
+                continue;
+            }
 
             let process_name = parts[0].to_string();
             let pid: u32 = parts[1].parse().unwrap_or(0);
-            if pid == 0 { continue; }
+            if pid == 0 {
+                continue;
+            }
 
             if let Some(port_str) = parts[8].split(':').next_back() {
                 if let Ok(port) = port_str.parse::<u16>() {
-                    if !entries.iter().any(|e: &PortEntry| e.port == port && e.pid == pid) {
-                        entries.push(PortEntry { port, protocol: "TCP".to_string(), process_name, pid });
+                    if !entries
+                        .iter()
+                        .any(|e: &PortEntry| e.port == port && e.pid == pid)
+                    {
+                        entries.push(PortEntry {
+                            port,
+                            protocol: "TCP".to_string(),
+                            process_name,
+                            pid,
+                        });
                     }
                 }
             }
@@ -177,7 +212,8 @@ fn list_ports_unix() -> Result<Vec<PortEntry>, String> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn extract_ss_process_name(info: &str) -> Option<String> {
     info.find("(\"").and_then(|start| {
-        info[start + 2..].find('"')
+        info[start + 2..]
+            .find('"')
             .map(|end| info[start + 2..start + 2 + end].to_string())
     })
 }
@@ -186,7 +222,8 @@ fn extract_ss_process_name(info: &str) -> Option<String> {
 fn extract_ss_pid(info: &str) -> Option<u32> {
     info.find("pid=").and_then(|start| {
         let rest = &info[start + 4..];
-        rest.find(',').or_else(|| rest.find(')'))
+        rest.find(',')
+            .or_else(|| rest.find(')'))
             .and_then(|end| rest[..end].parse::<u32>().ok())
     })
 }
@@ -205,21 +242,34 @@ fn list_ports_windows() -> Result<Vec<PortEntry>, String> {
 
     for line in stdout.lines().skip(3) {
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 5 { continue; }
+        if parts.len() < 5 {
+            continue;
+        }
 
         let proto = parts[0].to_uppercase();
-        if !proto.starts_with("TCP") { continue; }
-        if parts[3] != "LISTENING" { continue; }
+        if !proto.starts_with("TCP") {
+            continue;
+        }
+        if parts[3] != "LISTENING" {
+            continue;
+        }
 
         let pid: u32 = parts[4].parse().unwrap_or(0);
-        if pid == 0 { continue; }
+        if pid == 0 {
+            continue;
+        }
 
         if let Some(port_str) = parts[1].rsplit(':').next() {
             if let Ok(port) = port_str.parse::<u16>() {
-                if !entries.iter().any(|e: &PortEntry| e.port == port && e.pid == pid) {
+                if !entries
+                    .iter()
+                    .any(|e: &PortEntry| e.port == port && e.pid == pid)
+                {
                     entries.push(PortEntry {
-                        port, protocol: "TCP".to_string(),
-                        process_name: format!("PID:{}", pid), pid,
+                        port,
+                        protocol: "TCP".to_string(),
+                        process_name: format!("PID:{}", pid),
+                        pid,
                     });
                 }
             }
@@ -236,7 +286,9 @@ fn build_port_map() -> HashMap<u32, Vec<u16>> {
         .unwrap_or_default()
         .into_iter()
         .fold(HashMap::new(), |mut map, entry| {
-            map.entry(entry.pid).or_insert_with(Vec::new).push(entry.port);
+            map.entry(entry.pid)
+                .or_insert_with(Vec::new)
+                .push(entry.port);
             map
         })
 }
@@ -252,7 +304,10 @@ pub fn list_processes() -> Result<ProcessSummary, String> {
         // Refresh CPU at most every 500ms
         static LAST_CPU: OnceLock<std::sync::Mutex<u64>> = OnceLock::new();
         let last_cpu = LAST_CPU.get_or_init(|| std::sync::Mutex::new(0));
-        let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
         {
             let mut last = last_cpu.lock().unwrap();
             if now_ms - *last > 500 {
@@ -269,14 +324,23 @@ pub fn list_processes() -> Result<ProcessSummary, String> {
 
         for proc_ in sys.processes().values() {
             let name = process_name(proc_);
-            if name.is_empty() { continue; }
+            if name.is_empty() {
+                continue;
+            }
 
             let entry = entry_from(proc_);
 
-            let group = groups_map.entry(name.clone()).or_insert_with(|| ProcessGroup {
-                name, count: 0, total_cpu: 0.0, total_memory_bytes: 0,
-                earliest_start: now, entries: Vec::new(), ports: Vec::new(),
-            });
+            let group = groups_map
+                .entry(name.clone())
+                .or_insert_with(|| ProcessGroup {
+                    name,
+                    count: 0,
+                    total_cpu: 0.0,
+                    total_memory_bytes: 0,
+                    earliest_start: now,
+                    entries: Vec::new(),
+                    ports: Vec::new(),
+                });
 
             group.count += 1;
             group.total_cpu += entry.cpu_usage;
@@ -302,7 +366,11 @@ pub fn list_processes() -> Result<ProcessSummary, String> {
         }
 
         let mut groups: Vec<ProcessGroup> = groups_map.into_values().collect();
-        groups.sort_by(|a, b| b.total_memory_bytes.partial_cmp(&a.total_memory_bytes).unwrap_or(std::cmp::Ordering::Equal));
+        groups.sort_by(|a, b| {
+            b.total_memory_bytes
+                .partial_cmp(&a.total_memory_bytes)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let total = groups.iter().map(|g| g.count).sum();
 
@@ -322,7 +390,8 @@ pub fn kill_process(pid: u32) -> Result<String, String> {
     sys().with(|sys| {
         sys.refresh_processes(ProcessesToUpdate::All, true);
         let pid_key = Pid::from(pid as usize);
-        let proc_ = sys.process(pid_key)
+        let proc_ = sys
+            .process(pid_key)
             .ok_or_else(|| format!("Process {} not found", pid))?;
         let name = process_name(proc_);
 
@@ -333,7 +402,10 @@ pub fn kill_process(pid: u32) -> Result<String, String> {
         // Fallback to SIGKILL
         match proc_.kill_with(Signal::Kill) {
             Some(true) => Ok(format!("Force killed {} (PID {})", name, pid)),
-            Some(false) => Err(format!("Failed to kill {} (PID {}): permission denied", name, pid)),
+            Some(false) => Err(format!(
+                "Failed to kill {} (PID {}): permission denied",
+                name, pid
+            )),
             None => Err(format!("Signal not supported for {} (PID {})", name, pid)),
         }
     })?
@@ -345,12 +417,16 @@ pub fn kill_process_force(pid: u32) -> Result<String, String> {
     sys().with(|sys| {
         sys.refresh_processes(ProcessesToUpdate::All, true);
         let pid_key = Pid::from(pid as usize);
-        let proc_ = sys.process(pid_key)
+        let proc_ = sys
+            .process(pid_key)
             .ok_or_else(|| format!("Process {} not found", pid))?;
         let name = process_name(proc_);
         match proc_.kill_with(Signal::Kill) {
             Some(true) => Ok(format!("Force killed {} (PID {})", name, pid)),
-            Some(false) => Err(format!("Failed to force kill {} (PID {}): permission denied", name, pid)),
+            Some(false) => Err(format!(
+                "Failed to force kill {} (PID {}): permission denied",
+                name, pid
+            )),
             None => Err(format!("Signal not supported for {} (PID {})", name, pid)),
         }
     })?
@@ -360,7 +436,8 @@ pub fn kill_process_force(pid: u32) -> Result<String, String> {
 #[tauri::command]
 pub fn kill_port(port: u16) -> Result<String, String> {
     let entries = list_ports_impl()?;
-    let target = entries.iter()
+    let target = entries
+        .iter()
         .find(|e| e.port == port)
         .ok_or_else(|| format!("No process found on port {}", port))?;
     // Reuse sysinfo-based kill
