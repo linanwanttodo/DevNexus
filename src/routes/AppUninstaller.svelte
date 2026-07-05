@@ -269,10 +269,10 @@
     {:else}
       <!-- Column headers -->
       <div class="hidden md:flex items-center border-b border-nx-border px-4 py-2 text-xs text-nx-text-muted font-medium">
-        <div class="flex-1 min-w-0">{t("uninstall_mgr.app_name")}</div>
-        <div class="w-36 text-right">{t("uninstall_mgr.version")}</div>
-        <div class="w-28 text-right">{t("uninstall_mgr.source")}</div>
-        <div class="w-28 text-right">{t("common.actions")}</div>
+        <div class="min-w-0" style="width: 40%;">{t("uninstall_mgr.app_name")}</div>
+        <div class="text-right" style="width: 18%;">{t("uninstall_mgr.version")}</div>
+        <div class="text-right" style="width: 16%;">{t("uninstall_mgr.source")}</div>
+        <div class="text-right" style="width: 26%;">{t("common.actions")}</div>
       </div>
 
       {#each filtered as app (app.name + app.source)}
@@ -281,7 +281,7 @@
             <!-- Main row -->
             <div class="flex items-center px-4 py-3 hover:bg-nx-surface-hover transition-colors">
               <!-- Name -->
-              <div class="flex-1 min-w-0">
+              <div class="min-w-0" style="width: 40%;">
                 <span class="text-sm font-medium text-nx-text">{app.name}</span>
                 {#if residueScans[app.name]}
                   <span class="ml-2 inline-block rounded bg-nx-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-nx-warning">
@@ -291,17 +291,17 @@
               </div>
 
               <!-- Version -->
-              <div class="w-36 text-right">
+              <div class="text-right" style="width: 18%;">
                 <span class="text-xs font-mono text-nx-text-secondary">{app.version}</span>
               </div>
 
               <!-- Source (Package Manager) -->
-              <div class="w-28 text-right">
+              <div class="text-right" style="width: 16%;">
                 <span class="inline-block rounded bg-nx-accent/10 px-2 py-0.5 text-xs font-medium text-nx-accent">{app.source}</span>
               </div>
 
               <!-- Actions -->
-              <div class="w-28 flex justify-end gap-1">
+              <div class="flex justify-end gap-1" style="width: 26%;">
                 <button
                   class="nx-btn nx-btn-ghost px-2 py-1 text-xs cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                   onclick={() => toggleScan(app)}
@@ -311,11 +311,11 @@
                     <span class="material-symbols-outlined text-xs inline nx-animate-spin">progress_activity</span>
                   {:else}
                     <span class="material-symbols-outlined text-xs inline">search</span>
-                  {residueScans[app.name] ? t("uninstall_mgr.close_scan") : t("uninstall_mgr.residue_scan")}
                   {/if}
+                  {residueScans[app.name] ? t("uninstall_mgr.close_scan") : t("uninstall_mgr.residue_scan")}
                 </button>
                 <button
-                  class="nx-btn nx-btn-danger px-3 py-1 text-xs cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                  class="nx-btn text-xs text-nx-danger hover:bg-nx-danger/10 px-3 py-1 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                   onclick={() => handleUninstall(app)}
                   disabled={uninstalling !== null || scanning === app.name}
                 >
