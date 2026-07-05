@@ -85,7 +85,7 @@
       });
     } catch (err) {
       console.error(`Error loading versions for ${env.name}:`, err);
-      showToast(`Error: ${err.message || err}`);
+      showToast(t('common.error_msg').replace('{error}', err.message || err));
       versionsMap[env.name] = [];
     } finally {
       loadingVersions[env.name] = false;
@@ -111,7 +111,7 @@
       .map(env => loadVersions(env, true));
     await Promise.all(promises);
     refreshingAll = false;
-    showToast("All environments refreshed");
+    showToast(t('common.all_refreshed'));
   }
 
   // 切换版本
@@ -136,7 +136,7 @@
       // 刷新环境列表（更新显示版本号）
       await loadEnvironments();
     } catch (err) {
-      showToast(`Error: ${err.message || err}`);
+      showToast(t('common.error_msg').replace('{error}', err.message || err));
     } finally {
       switchingVersion[env.name] = false;
     }
@@ -152,7 +152,7 @@
       showToast(result);
       await loadEnvironments();
     } catch (err) {
-      showToast(`Error: ${err.message || err}`);
+      showToast(t('common.error_msg').replace('{error}', err.message || err));
     }
   }
 
@@ -168,7 +168,7 @@
       showToast(result);
       await loadEnvironments();
     } catch (err) {
-      showToast(`Error: ${err.message || err}`);
+      showToast(t('common.error_msg').replace('{error}', err.message || err));
     }
   }
 
@@ -196,7 +196,7 @@
       newEnvPath = "";
       await loadEnvironments();
     } catch (err) {
-      showToast(`Error: ${err.message || err}`);
+      showToast(t('common.error_msg').replace('{error}', err.message || err));
     } finally {
       creating = false;
     }
@@ -207,29 +207,29 @@
   });
 </script>
 
-<div class="mx-auto max-w-5xl">
+<div class="mx-auto max-w-5xl p-5">
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-semibold text-nx-text">{t("environments.title")}</h1>
     <div class="flex items-center gap-2">
       <button
-        class="flex items-center gap-2 border border-nx-border px-4 py-2 text-sm font-medium text-nx-text-secondary hover:text-nx-text"
+        class="nx-btn nx-btn-ghost flex items-center gap-2"
         onclick={refreshAll}
         disabled={refreshingAll}
       >
-        <span class="material-symbols-outlined text-lg {refreshingAll ? 'animate-spin' : ''}">
+        <span class="material-symbols-outlined text-lg {refreshingAll ? 'nx-animate-spin' : ''}">
           {refreshingAll ? 'progress_activity' : 'refresh'}
         </span>
         {t("environments.refresh")}
       </button>
       <button
-        class="flex items-center gap-2 border border-nx-border px-4 py-2 text-sm font-medium text-nx-text-secondary hover:text-nx-text"
+        class="nx-btn nx-btn-ghost flex items-center gap-2"
         onclick={exportEnvironments}
       >
         <span class="material-symbols-outlined text-lg">file_download</span>
         {t("environments.export")}
       </button>
-      <button class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={() => showCreateModal = true}>
+      <button class="nx-btn nx-btn-primary flex items-center gap-2" onclick={() => showCreateModal = true}>
         <span class="material-symbols-outlined text-lg">add</span>
         {t("environments.new")}
       </button>
@@ -237,29 +237,29 @@
   </div>
 
   <!-- Environment Table -->
-  <div class="border border-nx-border bg-nx-surface">
+  <div class="nx-section">
     {#if loading}
       <div class="flex items-center justify-center py-12">
-        <span class="material-symbols-outlined animate-spin text-nx-text-muted text-3xl">progress_activity</span>
+        <span class="material-symbols-outlined nx-animate-spin text-nx-text-muted text-3xl">progress_activity</span>
       </div>
     {:else if error}
-      <div class="p-6 text-center">
+      <div class="nx-empty">
         <span class="material-symbols-outlined text-nx-text-muted text-3xl">error</span>
         <div class="mt-2 text-sm text-nx-text-secondary">{error}</div>
         <button 
-          class="mt-4 bg-nx-text px-4 py-2 text-sm font-medium text-nx-deep"
+          class="nx-btn nx-btn-primary mt-4"
           onclick={loadEnvironments}>
           {t("common.retry")}
         </button>
       </div>
     {:else if environments.length === 0}
-      <div class="p-6 text-center">
+      <div class="nx-empty">
         <span class="material-symbols-outlined text-nx-text-muted text-3xl">inbox</span>
         <div class="mt-2 text-sm text-nx-text-muted">{t("environments.none")}</div>
         <div class="mt-1 text-xs text-nx-text-muted">{t("environments.none_hint")}</div>
       </div>
     {:else}
-    <table class="w-full">
+    <table class="nx-table w-full">
       <thead>
         <tr class="border-b border-nx-border text-xs text-nx-text-muted">
           <th class="w-8 px-2 py-3"></th>
@@ -292,8 +292,8 @@
             </td>
             <td class="px-2 py-3 font-mono text-xs text-nx-text-secondary">{env.path}</td>
             <td class="px-2 py-3">
-              <span class="inline-flex items-center gap-1.5 bg-nx-success/15 px-2 py-0.5 text-xs font-medium text-nx-success">
-                <span class="h-1.5 w-1.5 bg-nx-success"></span>
+              <span class="nx-pill inline-flex items-center gap-1.5 bg-nx-success/15 px-2 py-0.5 text-xs font-medium text-nx-success">
+                <span class="nx-status-dot bg-nx-success"></span>
                 {env.status}
               </span>
             </td>
@@ -330,11 +330,11 @@
                     {t("environments.versions")}
                   </span>
                   <button
-                    class="flex items-center gap-1 rounded px-2 py-0.5 text-xs text-nx-text-secondary hover:text-nx-text"
+                    class="nx-btn nx-btn-ghost flex items-center gap-1 px-2 py-0.5 text-xs"
                     onclick={() => refreshVersions(env)}
                     disabled={refreshing[env.name]}
                   >
-                    <span class="material-symbols-outlined text-sm {refreshing[env.name] ? 'animate-spin' : ''}">
+                    <span class="material-symbols-outlined text-sm {refreshing[env.name] ? 'nx-animate-spin' : ''}">
                       {refreshing[env.name] ? 'progress_activity' : 'refresh'}
                     </span>
                     {t("environments.refresh")}
@@ -342,7 +342,7 @@
                 </div>
                 {#if loadingVersions[env.name]}
                   <div class="flex items-center justify-center py-4">
-                    <span class="material-symbols-outlined animate-spin text-nx-text-muted text-xl">progress_activity</span>
+                    <span class="material-symbols-outlined nx-animate-spin text-nx-text-muted text-xl">progress_activity</span>
                     <span class="ml-2 text-xs text-nx-text-muted">Loading versions...</span>
                   </div>
                 {:else if versionsMap[env.name] && versionsMap[env.name].length > 0}
@@ -365,7 +365,7 @@
                             <span class="text-xs text-nx-accent font-medium">{t("environments.active")}</span>
                           {:else}
                             <button
-                              class="rounded border border-nx-border bg-nx-surface px-2.5 py-1 text-xs font-medium text-nx-text-secondary hover:bg-nx-accent hover:text-white disabled:opacity-40"
+                              class="nx-btn nx-btn-primary px-2.5 py-1 text-xs"
                               onclick={() => switchVersion(env, ver)}
                               disabled={switchingVersion[env.name]}
                             >
@@ -400,10 +400,12 @@
 <!-- Create Environment Modal -->
 {#if showCreateModal}
   <!-- eslint-disable-next-line a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="button" tabindex="-1" onclick={() => showCreateModal = false} onkeydown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') showCreateModal = false; }}>
-    <div class="w-full max-w-md border border-nx-border bg-nx-surface p-6" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
-      <h3 class="text-base font-semibold text-nx-text">{t("environments.title")} - {t("environments.new")}</h3>
-      <div class="mt-4 space-y-4">
+  <div class="nx-dialog-overlay" role="button" tabindex="-1" onclick={() => showCreateModal = false} onkeydown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') showCreateModal = false; }}>
+    <div class="nx-dialog" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
+      <div class="nx-dialog-header">
+        <h3 class="text-base font-semibold text-nx-text">{t("environments.title")} - {t("environments.new")}</h3>
+      </div>
+      <div class="nx-dialog-body space-y-4">
         <div>
           <label for="envName" class="block text-sm text-nx-text-secondary">{t("environments.name")}</label>
           <input
@@ -411,7 +413,7 @@
             type="text"
             bind:value={newEnvName}
             placeholder="e.g. Node.js v20"
-            class="mt-1 w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text outline-none focus:border-nx-accent"
+            class="nx-input mt-1 w-full"
           />
         </div>
         <div>
@@ -421,19 +423,19 @@
             type="text"
             bind:value={newEnvPath}
             placeholder="e.g. /usr/local/bin"
-            class="mt-1 w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text outline-none focus:border-nx-accent"
+            class="nx-input mt-1 w-full"
           />
         </div>
       </div>
-      <div class="mt-6 flex justify-end gap-2">
+      <div class="nx-dialog-footer">
         <button
-          class="border border-nx-border px-4 py-2 text-sm text-nx-text-secondary"
+          class="nx-btn nx-btn-ghost"
           onclick={() => showCreateModal = false}
         >
           {t("common.cancel")}
         </button>
         <button
-          class="bg-nx-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          class="nx-btn nx-btn-primary"
           onclick={createEnvironment}
           disabled={!newEnvName.trim() || !newEnvPath.trim() || creating}
         >

@@ -261,7 +261,7 @@
   });
 </script>
 
-<div class="mx-auto h-full">
+<div class="mx-auto h-full p-5">
   <!-- Header -->
   <div class="mb-4 flex items-center justify-between">
     <div>
@@ -269,7 +269,7 @@
       <p class="mt-1 text-xs text-nx-text-muted">{t('scheduler.desc')}</p>
     </div>
     <button
-      class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white"
+      class="nx-btn nx-btn-primary flex items-center gap-2"
       onclick={openAddModal}>
       <span class="material-symbols-outlined text-lg">add</span>
       {t('scheduler.add')}
@@ -280,8 +280,8 @@
   <div class="flex gap-4" style="height: calc(100vh - 160px);">
 
     <!-- Left: Task List -->
-    <div class="w-96 flex-shrink-0 border border-nx-border bg-nx-surface overflow-hidden flex flex-col">
-      <div class="border-b border-nx-border px-4 py-3">
+    <div class="w-96 flex-shrink-0 nx-section overflow-hidden flex flex-col">
+      <div class="nx-section-header">
         <span class="text-sm font-medium text-nx-text">{t('scheduler.task_list')}</span>
         <span class="ml-2 text-xs text-nx-text-muted">({tasks.length})</span>
       </div>
@@ -289,10 +289,10 @@
       <div class="flex-1 overflow-y-auto">
         {#if loading}
           <div class="flex items-center justify-center py-12">
-            <span class="material-symbols-outlined animate-spin text-nx-text-muted text-3xl">progress_activity</span>
+            <span class="material-symbols-outlined nx-animate-spin text-nx-text-muted text-3xl">progress_activity</span>
           </div>
         {:else if tasks.length === 0}
-          <div class="p-12 text-center">
+          <div class="nx-empty p-12">
             <span class="material-symbols-outlined text-nx-text-muted text-4xl">schedule</span>
             <div class="mt-4 text-sm text-nx-text-muted">{t('scheduler.no_tasks')}</div>
             <div class="mt-1 text-xs text-nx-text-muted">{t('scheduler.no_tasks_desc')}</div>
@@ -309,7 +309,7 @@
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
                     <span class="text-sm font-medium text-nx-text truncate">{task.name}</span>
-                    <span class="px-1.5 py-0.5 text-[10px] font-medium rounded {statusColor(task.status)}">
+                    <span class="nx-pill px-1.5 py-0.5 text-[10px] font-medium rounded {statusColor(task.status)}">
                       {statusLabel(task.status)}
                     </span>
                   </div>
@@ -335,10 +335,10 @@
     </div>
 
     <!-- Right: Detail Panel -->
-    <div class="flex-1 border border-nx-border bg-nx-surface overflow-hidden flex flex-col">
+    <div class="flex-1 nx-section overflow-hidden flex flex-col">
       {#if selectedTaskId === null}
         <div class="flex flex-1 items-center justify-center text-nx-text-muted">
-          <div class="text-center">
+          <div class="nx-empty">
             <span class="material-symbols-outlined text-5xl mb-2">touch_app</span>
             <div class="text-sm">{t('scheduler.select_task_hint')}</div>
           </div>
@@ -347,11 +347,11 @@
         {#each tasks as task}
           {#if task.id === selectedTaskId}
             <!-- Task Header -->
-            <div class="border-b border-nx-border px-4 py-3">
+            <div class="nx-section-header">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
                   <h3 class="text-sm font-semibold text-nx-text">{task.name}</h3>
-                  <span class="px-2 py-0.5 text-xs font-medium rounded {statusColor(task.status)}">
+                  <span class="nx-pill px-2 py-0.5 text-xs font-medium rounded {statusColor(task.status)}">
                     {statusLabel(task.status)}
                   </span>
                   {#if task.last_status}
@@ -517,7 +517,7 @@
                       type="text"
                       id="sched-name-edit"
                       bind:value={taskName}
-                      class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text outline-none focus:border-nx-accent"
+                      class="nx-input w-full"
                     />
                   </div>
 
@@ -528,12 +528,12 @@
                       type="text"
                       id="sched-cron-edit"
                       bind:value={cronExpression}
-                      class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text font-mono outline-none focus:border-nx-accent"
+                      class="nx-input w-full font-mono"
                     />
                     <div class="mt-2 flex flex-wrap gap-2">
                       {#each cronPresets as preset}
                         <button
-                          class="border border-nx-border bg-nx-bg px-2 py-1 text-xs text-nx-text-secondary hover:border-nx-accent"
+                          class="nx-btn nx-btn-ghost px-2 py-1 text-xs"
                           onclick={() => cronExpression = preset.value}>
                           {preset.label}
                         </button>
@@ -565,11 +565,11 @@
                         id="sched-content-edit"
                         bind:value={content}
                         rows="10"
-                        class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text font-mono outline-none focus:border-nx-accent"
+                        class="nx-input w-full font-mono"
                       ></textarea>
                     </div>
                   {:else}
-                    <div class="border border-nx-border bg-nx-bg p-4 text-sm text-nx-text-muted">
+                    <div class="nx-card p-4 text-sm text-nx-text-muted">
                       <span class="material-symbols-outlined text-lg align-middle mr-1">info</span>
                       {t('scheduler.shutdown_hint')}
                     </div>
@@ -585,7 +585,7 @@
                         bind:value={timeoutSecs}
                         min="1"
                         max="3600"
-                        class="w-32 border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text outline-none focus:border-nx-accent"
+                        class="nx-input w-32"
                       />
                     </div>
                   {/if}
@@ -593,12 +593,12 @@
                   <!-- Actions -->
                   <div class="flex gap-3 pt-2">
                     <button
-                      class="bg-nx-accent px-4 py-2 text-sm font-medium text-white"
+                      class="nx-btn nx-btn-primary"
                       onclick={updateTaskData}>
                       {t('scheduler.save')}
                     </button>
                     <button
-                      class="border border-nx-border bg-nx-bg px-4 py-2 text-sm font-medium text-nx-text-secondary"
+                      class="nx-btn nx-btn-ghost"
                       onclick={() => { editingTask = null; activeTab = 'logs'; }}
                     >
                       {t('scheduler.cancel')}
@@ -616,18 +616,20 @@
 
 <!-- Add Task Modal -->
 {#if showAddModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showAddModal = false)} onclick={() => showAddModal = false}>
-    <div class="w-full max-w-lg border border-nx-border bg-nx-surface p-6 max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
-      <h2 class="mb-4 text-lg font-semibold text-nx-text">{t('scheduler.add_new_task')}</h2>
+  <div class="nx-dialog-overlay" role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showAddModal = false)} onclick={() => showAddModal = false}>
+    <div class="nx-dialog max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
+      <div class="nx-dialog-header">
+        <h2 class="text-lg font-semibold text-nx-text">{t('scheduler.add_new_task')}</h2>
+      </div>
 
-      <div class="space-y-4">
+      <div class="nx-dialog-body space-y-4">
         <div>
           <label class="mb-1 block text-xs text-nx-text-muted" for="sched-name-add">{t('scheduler.name')} *</label>
           <input
             type="text"
             id="sched-name-add"
             bind:value={taskName}
-            class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text outline-none focus:border-nx-accent"
+            class="nx-input w-full"
           />
         </div>
 
@@ -637,12 +639,12 @@
             type="text"
             id="sched-cron-add"
             bind:value={cronExpression}
-            class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text font-mono outline-none focus:border-nx-accent"
+            class="nx-input w-full font-mono"
           />
           <div class="mt-2 flex flex-wrap gap-2">
             {#each cronPresets as preset}
               <button
-                class="border border-nx-border bg-nx-bg px-2 py-1 text-xs text-nx-text-secondary"
+                class="nx-btn nx-btn-ghost px-2 py-1 text-xs"
                 onclick={() => cronExpression = preset.value}>
                 {preset.label}
               </button>
@@ -672,7 +674,7 @@
               id="sched-content-add"
               bind:value={content}
               rows="8"
-              class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text font-mono outline-none focus:border-nx-accent"
+              class="nx-input w-full font-mono"
             ></textarea>
           </div>
           <div>
@@ -683,25 +685,25 @@
               bind:value={timeoutSecs}
               min="1"
               max="3600"
-              class="w-32 border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text outline-none focus:border-nx-accent"
+              class="nx-input w-32"
             />
           </div>
         {:else}
-          <div class="border border-nx-border bg-nx-bg p-4 text-sm text-nx-text-muted">
+          <div class="nx-card p-4 text-sm text-nx-text-muted">
             <span class="material-symbols-outlined text-lg align-middle mr-1">info</span>
             {t('scheduler.shutdown_hint')}
           </div>
         {/if}
       </div>
 
-      <div class="mt-6 flex justify-end gap-3">
+      <div class="nx-dialog-footer">
         <button
-          class="border border-nx-border bg-nx-bg px-4 py-2 text-sm font-medium text-nx-text-secondary"
+          class="nx-btn nx-btn-ghost"
           onclick={() => showAddModal = false}>
           {t('scheduler.cancel')}
         </button>
         <button
-          class="bg-nx-accent px-4 py-2 text-sm font-medium text-white"
+          class="nx-btn nx-btn-primary"
           onclick={addTask}>
           {t('scheduler.create')}
         </button>

@@ -201,7 +201,7 @@
   });
 </script>
 
-<div class="mx-auto max-w-5xl">
+<div class="mx-auto max-w-5xl p-5">
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between">
     <div>
@@ -209,7 +209,7 @@
       <p class="mt-1 text-xs text-nx-text-muted">{t("uninstall_mgr.desc")}</p>
     </div>
     <button
-      class="flex items-center gap-2 border border-nx-border px-4 py-2 text-sm font-medium text-nx-text-secondary cursor-pointer"
+      class="nx-btn nx-btn-ghost flex items-center gap-2 cursor-pointer"
       onclick={loadApps}
     >
       <span class="material-symbols-outlined text-lg">refresh</span>
@@ -219,26 +219,26 @@
 
   <!-- Search & Filter -->
   <div class="mb-4 flex items-center gap-3">
-    <div class="relative flex-1">
-      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-nx-text-muted">search</span>
+    <div class="nx-search flex-1">
+      <span class="nx-search-icon material-symbols-outlined">search</span>
       <input
+        class="nx-input"
         type="text"
         placeholder={t("uninstall_mgr.search")}
         value={search}
         oninput={(e) => { setSearchQuery(e.currentTarget.value); }}
-        class="w-full border border-nx-border bg-nx-surface px-10 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-accent"
       />
       {#if search}
         <button
-          class="absolute right-3 top-1/2 -translate-y-1/2 text-nx-text-muted cursor-pointer"
+          class="nx-search-clear material-symbols-outlined cursor-pointer"
           onclick={() => { setSearchQuery(""); }}
         >
-          <span class="material-symbols-outlined text-sm">close</span>
+          close
         </button>
       {/if}
     </div>
     <select
-      class="border border-nx-border bg-nx-surface px-3 py-2 text-sm text-nx-text outline-none focus:border-nx-accent"
+      class="nx-input px-3 py-2 text-sm"
       value={sourceFilter}
       onchange={(e) => sourceFilter = e.currentTarget.value}
     >
@@ -250,19 +250,19 @@
   </div>
 
   <!-- App List -->
-  <div class="border border-nx-border bg-nx-surface">
+  <div class="nx-section">
     {#if loading}
       <div class="flex items-center justify-center py-16">
-        <span class="material-symbols-outlined animate-spin text-nx-text-muted text-3xl">progress_activity</span>
+        <span class="material-symbols-outlined nx-animate-spin text-nx-text-muted text-3xl">progress_activity</span>
       </div>
     {:else if error}
-      <div class="p-8 text-center">
+      <div class="nx-empty">
         <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
         <div class="mt-2 text-sm text-nx-danger">{error}</div>
-        <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white cursor-pointer" onclick={loadApps}>{t("common.retry")}</button>
+        <button class="nx-btn nx-btn-primary mt-4 cursor-pointer" onclick={loadApps}>{t("common.retry")}</button>
       </div>
     {:else if apps.length === 0}
-      <div class="p-12 text-center">
+      <div class="nx-empty p-12">
         <span class="material-symbols-outlined text-nx-text-muted text-4xl">delete</span>
         <div class="mt-4 text-sm text-nx-text-muted">{t("uninstall_mgr.no_apps")}</div>
       </div>
@@ -303,24 +303,24 @@
               <!-- Actions -->
               <div class="w-28 flex justify-end gap-1">
                 <button
-                  class="px-2 py-1 text-xs font-medium text-nx-text border border-nx-border cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-nx-surface-hover"
+                  class="nx-btn nx-btn-ghost px-2 py-1 text-xs cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                   onclick={() => toggleScan(app)}
                   disabled={scanning === app.name || cleaningResidues === app.name}
                 >
                   {#if scanning === app.name}
-                    <span class="material-symbols-outlined text-xs inline animate-spin">progress_activity</span>
+                    <span class="material-symbols-outlined text-xs inline nx-animate-spin">progress_activity</span>
                   {:else}
                     <span class="material-symbols-outlined text-xs inline">search</span>
                   {residueScans[app.name] ? t("uninstall_mgr.close_scan") : t("uninstall_mgr.residue_scan")}
                   {/if}
                 </button>
                 <button
-                  class="px-3 py-1 text-xs font-medium text-nx-danger border border-nx-border cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-nx-danger/5"
+                  class="nx-btn nx-btn-danger px-3 py-1 text-xs cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                   onclick={() => handleUninstall(app)}
                   disabled={uninstalling !== null || scanning === app.name}
                 >
                   {#if uninstalling === app.name}
-                    <span class="material-symbols-outlined text-xs inline animate-spin">progress_activity</span>
+                    <span class="material-symbols-outlined text-xs inline nx-animate-spin">progress_activity</span>
                   {:else}
                     {t("uninstall_mgr.uninstall")}
                   {/if}
@@ -347,19 +347,19 @@
                     </div>
                     <div class="flex gap-2">
                       <button
-                        class="flex items-center gap-1 rounded border border-nx-border px-2.5 py-1 text-xs font-medium text-nx-text-secondary cursor-pointer hover:bg-nx-surface-hover disabled:opacity-30"
+                        class="nx-btn nx-btn-ghost flex items-center gap-1 px-2.5 py-1 text-xs cursor-pointer disabled:opacity-30"
                         onclick={() => cleanSelected(app.name)}
                         disabled={cleaningResidues !== null || scanning !== null}
                       >
                         {#if cleaningResidues === app.name}
-                          <span class="material-symbols-outlined text-xs animate-spin">progress_activity</span>
+                          <span class="material-symbols-outlined text-xs nx-animate-spin">progress_activity</span>
                         {:else}
                           <span class="material-symbols-outlined text-xs">cleaning_services</span>
                         {/if}
                         {t("uninstall_mgr.clean_selected")}
                       </button>
                       <button
-                        class="flex items-center gap-1 rounded border border-nx-danger/30 bg-nx-danger/5 px-2.5 py-1 text-xs font-medium text-nx-danger cursor-pointer hover:bg-nx-danger/10 disabled:opacity-30"
+                        class="nx-btn nx-btn-danger flex items-center gap-1 px-2.5 py-1 text-xs cursor-pointer disabled:opacity-30"
                         onclick={() => handleForceUninstall(app)}
                         disabled={uninstalling !== null || cleaningResidues !== null}
                       >
