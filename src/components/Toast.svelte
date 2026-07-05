@@ -12,34 +12,28 @@
     }
   }
 
-  function borderClass(type) {
+  function typeColor(type) {
     switch (type) {
-      case "success": return "border-nx-success";
-      case "error": return "border-nx-danger";
-      case "warning": return "border-nx-warning";
-      default: return "border-nx-info";
-    }
-  }
-
-  function iconClass(type) {
-    switch (type) {
-      case "success": return "text-nx-success";
-      case "error": return "text-nx-danger";
-      case "warning": return "text-nx-warning";
-      default: return "text-nx-info";
+      case "success": return "var(--nx-success)";
+      case "error": return "var(--nx-danger)";
+      case "warning": return "var(--nx-warning)";
+      default: return "var(--nx-text-secondary)";
     }
   }
 </script>
 
-<div class="fixed top-4 right-4 z-50 flex flex-col gap-2">
+<div class="fixed top-3 right-3 z-50 flex flex-col gap-2 pointer-events-none">
   {#each toasts as toast (toast.id)}
     <div
-      class="flex items-start gap-3 rounded border-2 bg-nx-surface px-4 py-3 shadow-lg max-w-sm {borderClass(toast.type)}"
+      class="pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg nx-animate-slide-up"
+      style="background: var(--nx-raised); min-width: 280px; max-width: 400px;"
     >
-      <span class="material-symbols-outlined mt-0.5 text-sm font-bold {iconClass(toast.type)}">{typeIcon(toast.type)}</span>
-      <p class="flex-1 text-sm text-nx-text">{toast.message}</p>
+      <span class="material-symbols-outlined text-sm flex-shrink-0" style="color: {typeColor(toast.type)}">
+        {typeIcon(toast.type)}
+      </span>
+      <p class="flex-1 text-sm text-nx-text leading-relaxed">{toast.message}</p>
       <button
-        class="text-nx-text/50 hover:text-nx-text transition-colors"
+        class="flex-shrink-0 text-nx-text-muted hover:text-nx-text transition-colors cursor-pointer bg-none border-none"
         onclick={() => removeToast(toast.id)}
       >
         <span class="material-symbols-outlined text-sm">close</span>

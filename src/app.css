@@ -2,23 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ===== Dark Theme (default) ===== */
+/* ===== ZCode-inspired Design Tokens ===== */
+
 :root {
-  --nx-deep: #010409;
-  --nx-bg: #0d1117;
-  --nx-surface: #161b22;
-  --nx-raised: #1c2128;
-  --nx-overlay: #25292e;
-  --nx-border: #30363d;
-  --nx-border-light: #444c56;
-  --nx-text: #e6edf3;
-  --nx-text-secondary: #9198a1;
-  --nx-text-muted: #6e7681;
+  /* ── Background layers (dark theme default) ── */
+  --nx-deep: #0d0d0d;
+  --nx-bg: #161616;
+  --nx-surface: #202020;
+  --nx-raised: #2b2b2b;
+  --nx-overlay: #363636;
+
+  /* ── Borders (extra subtle like ZCode) ── */
+  --nx-border: rgba(255, 255, 255, 0.06);
+  --nx-border-light: rgba(255, 255, 255, 0.10);
+  --nx-border-hover: rgba(255, 255, 255, 0.15);
+  --nx-border-active: rgba(255, 255, 255, 0.20);
+
+  /* ── Text hierarchy ── */
+  --nx-text: rgba(255, 255, 255, 0.87);
+  --nx-text-secondary: rgba(255, 255, 255, 0.56);
+  --nx-text-muted: rgba(255, 255, 255, 0.34);
+
+  /* ── Semantic colors ── */
   --nx-accent: #4493f8;
-  --nx-success: #3fb950;
-  --nx-danger: #f85149;
-  --nx-warning: #d29922;
-  --nx-info: #58a6ff;
+  --nx-accent-hover: #58a6ff;
+  --nx-success: #46bf72;
+  --nx-danger: #ff5c5c;
+  --nx-warning: #ff8a30;
+  --nx-info: #4099ff;
+
+  /* ── Interactive surfaces ── */
+  --nx-hover: rgba(255, 255, 255, 0.06);
+  --nx-selected: rgba(255, 255, 255, 0.10);
+  --nx-focus-ring: 0 0 0 2px rgba(68, 147, 248, 0.15);
+
+  /* ── Sidecar colors ── */
+  --nx-accent-bg: rgba(68, 147, 248, 0.12);
+  --nx-success-bg: rgba(70, 191, 114, 0.12);
+  --nx-danger-bg: rgba(255, 92, 92, 0.12);
+  --nx-warning-bg: rgba(255, 138, 48, 0.12);
+
+  /* ── Transition defaults ── */
+  --nx-transition-fast: 0.12s ease;
+  --nx-transition: 0.18s ease;
+  --nx-transition-slow: 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* ===== Light Theme ===== */
@@ -28,18 +55,34 @@
   --nx-surface: #f6f8fa;
   --nx-raised: #eaeef2;
   --nx-overlay: #d0d7de;
-  --nx-border: #d0d7de;
-  --nx-border-light: #afb8c1;
-  --nx-text: #1f2328;
-  --nx-text-secondary: #656d76;
-  --nx-text-muted: #8b949e;
+
+  --nx-border: rgba(0, 0, 0, 0.10);
+  --nx-border-light: rgba(0, 0, 0, 0.16);
+  --nx-border-hover: rgba(0, 0, 0, 0.20);
+  --nx-border-active: rgba(0, 0, 0, 0.25);
+
+  --nx-text: rgba(0, 0, 0, 0.87);
+  --nx-text-secondary: rgba(0, 0, 0, 0.56);
+  --nx-text-muted: rgba(0, 0, 0, 0.34);
+
   --nx-accent: #0969da;
+  --nx-accent-hover: #0550ae;
   --nx-success: #1a7f37;
   --nx-danger: #cf222e;
   --nx-warning: #9a6700;
   --nx-info: #0969da;
+
+  --nx-hover: rgba(0, 0, 0, 0.04);
+  --nx-selected: rgba(0, 0, 0, 0.08);
+  --nx-focus-ring: 0 0 0 2px rgba(9, 105, 218, 0.15);
+
+  --nx-accent-bg: rgba(9, 105, 218, 0.08);
+  --nx-success-bg: rgba(26, 127, 55, 0.08);
+  --nx-danger-bg: rgba(207, 34, 46, 0.08);
+  --nx-warning-bg: rgba(154, 103, 0, 0.08);
 }
 
+/* ===== Global Reset ===== */
 * {
   margin: 0;
   padding: 0;
@@ -56,23 +99,55 @@ body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background-color: var(--nx-bg);
   color: var(--nx-text);
-  font-size: 0.875rem;
-  line-height: 1.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
+/* ===== Focus: remove native outline, use custom ring ===== */
+:focus {
+  outline: none !important;
+}
+
+:focus-visible {
+  outline: none !important;
+  box-shadow: var(--nx-focus-ring) !important;
+  border-color: var(--nx-accent) !important;
+}
+
+/* ===== Scrollbar (ZCode style: thick, rounded, subtle) ===== */
+* {
+  scrollbar-width: auto;
+  scrollbar-color: var(--nx-border) transparent;
+}
+
+::-webkit-scrollbar { width: 14px; height: 14px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background-color: var(--nx-border); border-radius: 0; }
-::-webkit-scrollbar-thumb:hover { background-color: var(--nx-border-light); }
+::-webkit-scrollbar-thumb {
+  background: var(--nx-border);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  min-width: 32px;
+  min-height: 32px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--nx-border-light);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+}
+::-webkit-scrollbar-corner { background: transparent; }
 
 ::selection {
   background-color: var(--nx-accent);
   color: #ffffff;
 }
 
+/* ===== Form elements ===== */
 select {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(255,255,255,0.35)' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
   padding-right: 28px;
@@ -85,4 +160,430 @@ select option {
 
 input[type="checkbox"] {
   accent-color: var(--nx-accent);
+}
+
+/* ===== Reduced motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ========================================================
+   ZCode-Style Component Classes
+   ======================================================== */
+
+/* ── Card ── */
+.nx-card {
+  background-color: var(--nx-surface);
+  border: 1px solid var(--nx-border);
+  border-radius: 10px;
+  transition: border-color var(--nx-transition);
+}
+.nx-card:hover {
+  border-color: var(--nx-border-light);
+}
+
+/* ── Section ── */
+.nx-section {
+  background-color: var(--nx-surface);
+  border: 1px solid var(--nx-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.nx-section-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--nx-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.nx-section-body {
+  padding: 18px;
+}
+
+/* ── Table ── */
+.nx-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.nx-table th {
+  padding: 10px 16px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--nx-text-muted);
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--nx-border);
+}
+.nx-table td {
+  padding: 10px 16px;
+  font-size: 0.8125rem;
+  color: var(--nx-text);
+  border-bottom: 1px solid var(--nx-border);
+  transition: background-color var(--nx-transition-fast);
+}
+.nx-table tr:last-child td {
+  border-bottom: none;
+}
+.nx-table tbody tr {
+  transition: background-color var(--nx-transition-fast);
+}
+.nx-table tbody tr:hover td {
+  background-color: var(--nx-hover);
+}
+.nx-table tbody tr:active td {
+  background-color: var(--nx-selected);
+}
+
+/* ── Pill/Tag ── */
+.nx-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  height: 22px;
+  font-size: 0.6875rem;
+  border-radius: 99px;
+  background-color: var(--nx-hover);
+  color: var(--nx-text-secondary);
+}
+
+/* ── Back button ── */
+.nx-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 0.8125rem;
+  color: var(--nx-text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  transition: color var(--nx-transition-fast), background-color var(--nx-transition-fast);
+}
+.nx-back-btn:hover {
+  color: var(--nx-text);
+  background-color: var(--nx-hover);
+}
+.nx-back-btn:active {
+  background-color: var(--nx-selected);
+}
+
+/* ── Buttons ── */
+.nx-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color var(--nx-transition-fast), color var(--nx-transition-fast),
+              border-color var(--nx-transition-fast), opacity var(--nx-transition-fast);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--nx-text-secondary);
+  user-select: none;
+}
+.nx-btn:hover {
+  color: var(--nx-text);
+  background-color: var(--nx-hover);
+}
+.nx-btn:active {
+  background-color: var(--nx-selected);
+}
+.nx-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.nx-btn-primary {
+  background-color: var(--nx-accent);
+  color: #fff;
+  border-color: var(--nx-accent);
+}
+.nx-btn-primary:hover {
+  background-color: var(--nx-accent-hover);
+  border-color: var(--nx-accent-hover);
+  color: #fff;
+}
+.nx-btn-primary:active {
+  filter: brightness(0.92);
+}
+.nx-btn-danger {
+  background-color: var(--nx-danger);
+  color: #fff;
+}
+.nx-btn-danger:hover {
+  filter: brightness(1.1);
+  color: #fff;
+}
+.nx-btn-danger:active {
+  filter: brightness(0.9);
+}
+.nx-btn-ghost {
+  border-color: var(--nx-border);
+}
+.nx-btn-ghost:hover {
+  border-color: var(--nx-border-light);
+  background-color: var(--nx-hover);
+}
+.nx-btn-ghost:active {
+  background-color: var(--nx-selected);
+}
+
+/* ── Input ── */
+.nx-input {
+  background-color: var(--nx-bg);
+  border: 1px solid var(--nx-border);
+  color: var(--nx-text);
+  padding: 6px 10px;
+  font-size: 0.8125rem;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color var(--nx-transition-fast), box-shadow var(--nx-transition-fast);
+}
+.nx-input:hover {
+  border-color: var(--nx-border-hover);
+}
+.nx-input:focus {
+  border-color: var(--nx-accent);
+  box-shadow: var(--nx-focus-ring);
+}
+.nx-input::placeholder {
+  color: var(--nx-text-muted);
+}
+.nx-input:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ── Toggle Switch (ZCode style with data-state) ── */
+.nx-toggle {
+  position: relative;
+  display: inline-flex;
+  width: 32px;
+  height: 18px;
+  border-radius: 99px;
+  cursor: pointer;
+  transition: background-color var(--nx-transition);
+  background-color: var(--nx-border);
+  border: none;
+  padding: 0;
+  flex-shrink: 0;
+  user-select: none;
+}
+.nx-toggle[aria-checked="true"],
+.nx-toggle[data-state="checked"] {
+  background-color: var(--nx-accent);
+}
+.nx-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #fff;
+  transition: transform var(--nx-transition);
+}
+.nx-toggle[aria-checked="true"]::after,
+.nx-toggle[data-state="checked"]::after {
+  transform: translateX(14px);
+}
+.nx-toggle:active::after {
+  width: 16px; /* press expand effect */
+}
+.nx-toggle[aria-checked="true"]:active::after,
+.nx-toggle[data-state="checked"]:active::after {
+  transform: translateX(12px);
+}
+
+/* ── Dialog / Modal ── */
+.nx-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  animation: nx-fade-in var(--nx-transition) ease;
+}
+.nx-dialog {
+  background-color: var(--nx-surface);
+  border: 1px solid var(--nx-border);
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  animation: nx-scale-in var(--nx-transition-slow);
+  max-height: 85vh;
+}
+.nx-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--nx-border);
+}
+.nx-dialog-body {
+  padding: 18px;
+}
+.nx-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--nx-border);
+}
+
+/* ── Divider ── */
+.nx-divider {
+  height: 1px;
+  background-color: var(--nx-border);
+  border: none;
+  margin: 0;
+}
+
+/* ── Status dot (for live indicators) ── */
+.nx-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.nx-status-dot.running { background-color: var(--nx-success); }
+.nx-status-dot.stopped { background-color: var(--nx-text-muted); }
+.nx-status-dot.warning { background-color: var(--nx-warning); }
+.nx-status-dot.error { background-color: var(--nx-danger); }
+
+/* ── Empty state ── */
+.nx-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+/* ── Search input with icon ── */
+.nx-search {
+  position: relative;
+}
+.nx-search .nx-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--nx-text-muted);
+  font-size: 1rem;
+  pointer-events: none;
+}
+.nx-search .nx-input {
+  padding-left: 34px;
+  width: 100%;
+}
+.nx-search .nx-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--nx-text-muted);
+  cursor: pointer;
+  transition: color var(--nx-transition-fast);
+}
+.nx-search .nx-search-clear:hover {
+  color: var(--nx-text-secondary);
+}
+
+/* ── Progress bar ── */
+.nx-progress {
+  width: 100%;
+  height: 6px;
+  background-color: var(--nx-border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.nx-progress-bar {
+  height: 100%;
+  border-radius: 99px;
+  transition: width var(--nx-transition-slow);
+}
+.nx-progress-bar.accent { background-color: var(--nx-accent); }
+.nx-progress-bar.success { background-color: var(--nx-success); }
+.nx-progress-bar.warning { background-color: var(--nx-warning); }
+.nx-progress-bar.danger { background-color: var(--nx-danger); }
+
+/* ========================================================
+   Animations
+   ======================================================== */
+@keyframes nx-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes nx-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes nx-scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes nx-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes nx-spin {
+  to { transform: rotate(360deg); }
+}
+
+.nx-animate-fade-in { animation: nx-fade-in var(--nx-transition) ease; }
+.nx-animate-scale-in { animation: nx-scale-in var(--nx-transition-slow); }
+.nx-animate-slide-up { animation: nx-slide-up var(--nx-transition) ease; }
+.nx-animate-spin { animation: nx-spin 0.8s linear infinite; }
+
+/* ── Skeleton loading ── */
+@keyframes nx-skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 0.2; }
+}
+.nx-skeleton {
+  background-color: var(--nx-hover);
+  border-radius: 4px;
+  animation: nx-skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* ========================================================
+   Active / Pressed state helpers
+   ======================================================== */
+.nx-pressable {
+  cursor: pointer;
+  transition: background-color var(--nx-transition-fast), transform var(--nx-transition-fast);
+}
+.nx-pressable:hover {
+  background-color: var(--nx-hover);
+}
+.nx-pressable:active {
+  background-color: var(--nx-selected);
+  transform: scale(0.98);
+}
+
+/* ========================================================
+   Focus ring helper for custom elements
+   ======================================================== */
+.nx-focus-ring:focus-visible {
+  box-shadow: var(--nx-focus-ring) !important;
+  border-color: var(--nx-accent) !important;
 }

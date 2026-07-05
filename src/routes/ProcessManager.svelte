@@ -61,10 +61,21 @@
         }
       }
       if (killErrors.length > 0) {
-        showToast(`Failed to kill PID(s): ${killErrors.join(", ")}`, "warning");
+        showToast(t('common.error_msg').replace('{error}', `PID(s): ${killErrors.join(", ")}`), "warning");
       } else {
         showToast(t("process.kill_success").replace("{name}", name), "success");
       }
+      await loadProcesses();
+    } catch (err) {
+      showToast(`${t("process.kill_failed")}: ${err.message || err}`, "error");
+    }
+  }
+
+  async function killPortAction(port) {
+    if (!(await showConfirm(t("ports.kill_confirm").replace("{port}", port)))) return;
+    try {
+      const result = await invoke("kill_port", { port });
+      showToast(result, "success");
       await loadProcesses();
     } catch (err) {
       showToast(`${t("process.kill_failed")}: ${err.message || err}`, "error");
@@ -120,6 +131,7 @@
     search.trim()
       ? groups.filter(g =>
           g.name.toLowerCase().includes(search.toLowerCase()) ||
+          g.ports.some(p => p.toString().includes(search)) ||
           g.entries.some(e => e.pid.toString().includes(search))
         )
       : groups
@@ -151,7 +163,7 @@
   });
 </script>
 
-<div class="mx-auto max-w-5xl">
+<div class="mx-auto max-w-5xl p-5">
   <!-- 标题栏 -->
   <div class="mb-6 flex items-center justify-between">
     <div>
@@ -160,7 +172,7 @@
     </div>
     <div class="flex items-center gap-2">
       <button
-        class="flex items-center gap-1.5 border border-nx-border px-3 py-1.5 text-xs font-medium text-nx-text-secondary"
+        class="nx-btn nx-btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-xs"
         onclick={toggleAutoRefresh}
       >
         <span class="material-symbols-outlined text-sm {autoRefresh ? 'text-nx-accent' : ''}">
@@ -169,11 +181,11 @@
         {t("process.auto_refresh")}
       </button>
       <button
-        class="flex items-center gap-2 border border-nx-border px-4 py-2 text-sm font-medium text-nx-text-secondary disabled:opacity-40"
+        class="nx-btn nx-btn-ghost flex items-center gap-2"
         onclick={loadProcesses}
         disabled={loading}
       >
-        <span class="material-symbols-outlined text-lg {loading ? 'animate-spin' : ''}">refresh</span>
+        <span class="material-symbols-outlined text-lg {loading ? 'nx-animate-spin' : ''}">refresh</span>
         {t("process.refresh")}
       </button>
     </div>
@@ -181,27 +193,27 @@
 
   <!-- 搜索栏 + 排序 -->
   <div class="mb-4 flex items-center gap-3">
-    <div class="relative flex-1">
-      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-nx-text-muted">search</span>
+    <div class="nx-search flex-1">
+      <span class="nx-search-icon material-symbols-outlined">search</span>
       <input
+        class="nx-input"
         type="text"
         placeholder={t("process.search_placeholder")}
         value={search}
         oninput={(e) => { setSearchQuery(e.currentTarget.value); }}
-        class="w-full border border-nx-border bg-nx-surface px-10 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-accent"
       />
       {#if search}
         <button
-          class="absolute right-3 top-1/2 -translate-y-1/2 text-nx-text-muted"
+          class="nx-search-clear material-symbols-outlined"
           onclick={() => { setSearchQuery(""); }}
         >
-          <span class="material-symbols-outlined text-sm">close</span>
+          close
         </button>
       {/if}
     </div>
     <select
       bind:value={sortBy}
-      class="border border-nx-border bg-nx-surface px-3 py-2 text-sm text-nx-text-secondary outline-none focus:border-nx-accent"
+      class="nx-input px-3 py-2 text-sm"
     >
       <option value="memory">{t("process.sort_memory")}</option>
       <option value="cpu">{t("process.sort_cpu")}</option>
@@ -209,7 +221,7 @@
       <option value="name">{t("process.sort_name")}</option>
     </select>
     <button
-      class="flex items-center gap-1 border border-nx-border px-2 py-2 text-xs text-nx-text-secondary"
+      class="nx-btn nx-btn-ghost flex items-center gap-1 px-2 py-2 text-xs"
       onclick={() => { sortAsc = !sortAsc; }}
     >
       <span class="material-symbols-outlined text-sm">
@@ -219,35 +231,46 @@
   </div>
 
   <!-- 进程表格 -->
-  <div class="border border-nx-border bg-nx-surface">
+  <div class="nx-section">
     {#if loading && groups.length === 0}
       <div class="flex items-center justify-center py-12">
-        <span class="material-symbols-outlined animate-spin text-nx-text-muted text-3xl">progress_activity</span>
+        <span class="material-symbols-outlined nx-animate-spin text-nx-text-muted text-3xl">progress_activity</span>
       </div>
     {:else if error}
-      <div class="p-6 text-center">
+      <div class="nx-empty">
         <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
         <div class="mt-2 text-sm text-nx-danger">{error}</div>
-        <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={loadProcesses}>{t("common.retry")}</button>
+        <button class="nx-btn nx-btn-primary mt-4" onclick={loadProcesses}>{t("common.retry")}</button>
       </div>
     {:else if filtered.length === 0}
-      <div class="p-12 text-center">
+      <div class="nx-empty p-12">
         <span class="material-symbols-outlined text-nx-text-muted text-4xl">memory</span>
         <div class="mt-4 text-sm text-nx-text-muted">
           {search ? t("process.no_matching") : t("process.no_processes")}
         </div>
       </div>
     {:else}
-      <table class="w-full">
+      <table class="nx-table w-full" style="table-layout: fixed;">
+        <colgroup>
+          <col class="w-8" />
+          <col style="width: 22%;" />
+          <col style="width: 6%;" />
+          <col style="width: 7%;" />
+          <col style="width: 10%;" />
+          <col style="width: 14%;" />
+          <col style="width: 7%;" />
+          <col style="width: 14%;" />
+        </colgroup>
         <thead>
-          <tr class="border-b border-nx-border text-xs text-nx-text-muted">
-            <th class="w-8"></th>
-            <th class="px-4 py-3 text-left font-medium">{t("process.name")}</th>
-            <th class="px-4 py-3 text-right font-medium w-16">{t("process.instances")}</th>
-            <th class="px-4 py-3 text-right font-medium w-20">CPU</th>
-            <th class="px-4 py-3 text-right font-medium w-24">{t("process.memory")}</th>
-            <th class="px-4 py-3 text-right font-medium w-20">{t("process.elapsed")}</th>
-            <th class="px-4 py-3 text-right font-medium w-20">{t("process.actions")}</th>
+          <tr class="text-xs text-nx-text-muted">
+            <th></th>
+            <th class="text-left font-medium">{t("process.name")}</th>
+            <th class="text-right font-medium">{t("process.instances")}</th>
+            <th class="text-right font-medium">CPU</th>
+            <th class="text-right font-medium">{t("process.memory")}</th>
+            <th class="text-left font-medium">{t("process.ports")}</th>
+            <th class="text-right font-medium">{t("process.elapsed")}</th>
+            <th class="text-right font-medium">{t("process.actions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -283,12 +306,29 @@
                   {formatMemory(Math.round(group.total_memory_bytes / group.count))}
                 </span>
               </td>
+              <td class="px-4 py-3">
+                {#if group.ports.length > 0}
+                  <div class="flex flex-wrap gap-1">
+                    {#each group.ports as port}
+                      <span class="nx-pill inline-flex items-center gap-0.5 font-mono text-xs text-nx-accent bg-nx-accent/10 px-1.5 py-0.5">
+                        {port}
+                        <button class="text-nx-danger hover:text-nx-danger/80 leading-none" title={t("ports.kill")}
+                          onclick={(e) => { e.stopPropagation(); killPortAction(port); }}>
+                          ×
+                        </button>
+                      </span>
+                    {/each}
+                  </div>
+                {:else}
+                  <span class="text-xs text-nx-text-muted">—</span>
+                {/if}
+              </td>
               <td class="px-4 py-3 text-right">
                 <span class="text-xs text-nx-text-muted">{formatTime(group.earliest_start)}</span>
               </td>
               <td class="px-4 py-3 text-right">
                 <button
-                  class="px-2 py-1 text-xs font-medium text-nx-danger border border-nx-border hover:bg-nx-danger/10"
+                  class="nx-btn text-xs text-nx-danger hover:bg-nx-danger/10 px-2.5 py-1"
                   onclick={(e) => { e.stopPropagation(); killGroup(group.name, group.count); }}
                 >
                   {t("process.kill_all")}
@@ -299,24 +339,25 @@
             <!-- 展开行：子进程列表 -->
             {#if expanded.has(group.name)}
               {#each group.entries as entry}
-                <tr class="border-b border-nx-border/50 bg-nx-bg/50">
+                <tr class="bg-nx-bg/30">
                   <td class="w-8"></td>
-                  <td class="px-4 py-2 pl-8">
+                  <td class="pl-8">
                     <span class="font-mono text-xs text-nx-text-muted">PID {entry.pid}</span>
                   </td>
-                  <td class="px-4 py-2 text-right text-xs text-nx-text-muted">1</td>
-                  <td class="px-4 py-2 text-right">
+                  <td class="text-right text-xs text-nx-text-muted">1</td>
+                  <td class="text-right">
                     <span class="font-mono text-xs text-nx-text-muted">{entry.cpu_usage.toFixed(1)}%</span>
                   </td>
-                  <td class="px-4 py-2 text-right">
+                  <td class="text-right">
                     <span class="font-mono text-xs text-nx-text-muted">{formatMemory(entry.memory_bytes)}</span>
                   </td>
-                  <td class="px-4 py-2 text-right">
+                  <td class="text-xs text-nx-text-muted">—</td>
+                  <td class="text-right">
                     <span class="text-xs text-nx-text-muted">{formatTime(entry.start_time_secs)}</span>
                   </td>
-                  <td class="px-4 py-2 text-right">
+                  <td class="text-right">
                     <button
-                      class="px-2 py-1 text-xs font-medium text-nx-danger border border-nx-border hover:bg-nx-danger/10 disabled:opacity-30"
+                      class="nx-btn text-xs text-nx-danger hover:bg-nx-danger/10 px-2 py-1 disabled:opacity-30"
                       onclick={(e) => { e.stopPropagation(); killProcess(entry.pid); }}
                       disabled={killing === entry.pid}
                     >
@@ -335,7 +376,7 @@
         <span class="text-xs text-nx-text-muted">
           {filtered.length} {t("process.groups")} · {total} {t("process.total_processes")}
         </span>
-        <button class="text-xs text-nx-text-muted" onclick={loadProcesses}>{t("process.refresh")}</button>
+        <button class="nx-btn nx-btn-ghost text-xs" onclick={loadProcesses}>{t("process.refresh")}</button>
       </div>
     {/if}
   </div>

@@ -122,7 +122,7 @@
   });
 </script>
 
-<div class="mx-auto max-w-6xl">
+<div class="mx-auto max-w-6xl p-5">
   <!-- Header -->
   <div class="mb-6">
     <h1 class="text-xl font-semibold text-nx-text">{t('cookies.title')}</h1>
@@ -130,7 +130,7 @@
   </div>
 
   <!-- Browser Selection -->
-  <div class="mb-6 border border-nx-border bg-nx-surface p-5">
+  <div class="mb-6 nx-card p-5">
     <div class="mb-4 flex items-center justify-between">
       <h2 class="text-sm font-medium text-nx-text">{t('cookies.select_browser')}</h2>
       {#if selectedBrowser}
@@ -159,14 +159,14 @@
     </div>
 
     {#if browsers.length === 0}
-      <div class="mt-4 border border-nx-border bg-nx-text-secondary/10 p-3 text-xs text-nx-text-secondary">
+      <div class="mt-4 nx-card p-3 text-xs text-nx-text-secondary">
         {t('cookies.no_browsers')}
       </div>
     {/if}
   </div>
 
   <!-- Filter and Extract -->
-  <div class="mb-6 border border-nx-border bg-nx-surface p-5">
+  <div class="mb-6 nx-card p-5">
     <div class="flex items-end gap-3">
       <div class="flex-1">
         <label for="cookie-domain-filter" class="mb-1 block text-xs text-nx-text-muted">{t('cookies.domain_filter')}</label>
@@ -175,16 +175,16 @@
           type="text"
           bind:value={domainFilter}
           placeholder={t('cookies.filter_placeholder')}
-          class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-text-secondary"
+          class="nx-input w-full"
         />
       </div>
       <button
-        class="bg-nx-text px-6 py-2 text-sm font-medium text-nx-deep disabled:opacity-50 disabled:cursor-not-allowed"
+        class="nx-btn nx-btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
         onclick={extractCookies}
         disabled={!selectedBrowser || extracting}>
         {#if extracting}
           <span class="flex items-center gap-2">
-            <span class="material-symbols-outlined animate-spin text-lg">progress_activity</span>
+            <span class="material-symbols-outlined nx-animate-spin text-lg">progress_activity</span>
             {t('cookies.extracting')}
           </span>
         {:else}
@@ -206,25 +206,25 @@
       </div>
     {/if}
     <!-- Results -->
-    <div class="border border-nx-border bg-nx-surface">
+    <div class="nx-section">
       <!-- Toolbar -->
-      <div class="flex items-center justify-between border-b border-nx-border px-4 py-3">
+      <div class="nx-section-header flex items-center justify-between">
         <div class="text-sm text-nx-text">
           <span class="font-medium">{cookies.length}</span> {t('cookies.cookies_extracted')}
         </div>
         <div class="flex gap-2">
           <button
-            class="border border-nx-border bg-nx-bg px-3 py-1.5 text-xs font-medium text-nx-text-secondary"
+            class="nx-btn nx-btn-ghost px-3 py-1.5 text-xs"
             onclick={copyAllCookies}>
             {t('cookies.copy_all')}
           </button>
           <button
-            class="border border-nx-border bg-nx-bg px-3 py-1.5 text-xs font-medium text-nx-text-secondary"
+            class="nx-btn nx-btn-ghost px-3 py-1.5 text-xs"
             onclick={exportJSON}>
             {t('cookies.export_json')}
           </button>
           <button
-            class="border border-nx-border bg-nx-bg px-3 py-1.5 text-xs font-medium text-nx-text-secondary"
+            class="nx-btn nx-btn-ghost px-3 py-1.5 text-xs"
             onclick={exportNetscape}>
             {t('cookies.export_netscape')}
           </button>
@@ -233,7 +233,7 @@
 
       <!-- Cookie List -->
       <div class="max-h-96 overflow-y-auto">
-        <table class="w-full">
+        <table class="nx-table w-full">
           <thead class="sticky top-0 bg-nx-surface">
             <tr class="border-b border-nx-border text-xs text-nx-text-muted">
               <th class="px-4 py-2 text-left font-medium">{t('cookies.name')}</th>
@@ -279,7 +279,7 @@
       </div>
     </div>
   {:else if extracting === false && cookies.length === 0 && selectedBrowser}
-    <div class="border border-nx-border bg-nx-surface p-12 text-center">
+    <div class="nx-empty p-12 text-center">
       <span class="material-symbols-outlined text-nx-text-muted text-4xl">cookie</span>
       <div class="mt-4 text-sm text-nx-text-muted">{t('cookies.no_cookies')}</div>
       <div class="mt-1 text-xs text-nx-text-muted">{t('cookies.extract_begin')}</div>

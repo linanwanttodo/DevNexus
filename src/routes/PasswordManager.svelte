@@ -35,11 +35,11 @@ import { invoke } from "@tauri-apps/api/core";
 
   async function setupMasterPassword() {
     if (!setupPassword || setupPassword.length < 4) {
-      showToast("Master password must be at least 4 characters");
+      showToast(t('common.master_too_short'));
       return;
     }
     if (setupPassword !== setupPasswordConfirm) {
-      showToast("Passwords do not match");
+      showToast(t('common.no_match'));
       return;
     }
 
@@ -50,9 +50,9 @@ import { invoke } from "@tauri-apps/api/core";
       setupPassword = "";
       setupPasswordConfirm = "";
       await loadPasswords();
-      showToast("Master password set successfully");
+      showToast(t('common.master_set_ok'));
     } catch (err) {
-      showToast("Failed to set master password: " + (err.message || err));
+      showToast(t('common.set_master_failed').replace('{error}', err.message || err));
     }
   }
 
@@ -65,12 +65,12 @@ import { invoke } from "@tauri-apps/api/core";
         locked = false;
         masterPassword = "";
         await loadPasswords();
-        showToast("Password manager unlocked");
+        showToast(t('common.unlocked'));
       } else {
-        showToast("Incorrect master password");
+        showToast(t('common.incorrect'));
       }
     } catch (err) {
-      showToast("Failed to unlock: " + (err.message || err));
+      showToast(t('common.unlock_failed').replace('{error}', err.message || err));
     }
   }
 
@@ -79,7 +79,7 @@ import { invoke } from "@tauri-apps/api/core";
       await invoke("lock");
       locked = true;
       passwords = [];
-      showToast("Password manager locked");
+      showToast(t('common.locked'));
     } catch (err) {
       console.error("Failed to lock:", err);
     }
@@ -239,7 +239,7 @@ import { invoke } from "@tauri-apps/api/core";
   });
 </script>
 
-<div class="mx-auto max-w-6xl">
+<div class="mx-auto max-w-6xl p-5">
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between">
     <div>
@@ -251,30 +251,30 @@ import { invoke } from "@tauri-apps/api/core";
         <span></span>
       {:else}
         <button 
-          class="flex items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text"
+          class="nx-btn nx-btn-ghost flex items-center gap-2"
           onclick={exportCSV}>
           <span class="material-symbols-outlined text-lg">download</span>
           {t('passwords.export_csv')}
         </button>
-        <label class="flex cursor-pointer items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text">
+        <label class="nx-btn nx-btn-ghost flex cursor-pointer items-center gap-2">
           <span class="material-symbols-outlined text-lg">upload</span>
           {t('passwords.import_csv')}
           <input type="file" accept=".csv" class="hidden" onchange={importCSV} />
         </label>
         <button 
-          class="flex items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text"
+          class="nx-btn nx-btn-ghost flex items-center gap-2"
           onclick={saveToFile}>
           <span class="material-symbols-outlined text-lg">save</span>
           {t('passwords.save_encrypted')}
         </button>
         <button 
-          class="flex items-center gap-2 bg-nx-accent px-4 py-2 text-sm font-medium text-white"
+          class="nx-btn nx-btn-primary flex items-center gap-2"
           onclick={() => showAddModal = true}>
           <span class="material-symbols-outlined text-lg">add</span>
           {t('passwords.add')}
         </button>
         <button 
-          class="flex items-center gap-2 border border-nx-border bg-nx-surface px-4 py-2 text-sm font-medium text-nx-text-secondary"
+          class="nx-btn nx-btn-ghost flex items-center gap-2"
           onclick={lockVault}>
           <span class="material-symbols-outlined text-lg">lock</span>
           {t('passwords.lock')}
@@ -287,7 +287,7 @@ import { invoke } from "@tauri-apps/api/core";
   {#if locked}
     {#if hasMasterPassword}
       <!-- Unlock -->
-      <div class="mx-auto mt-16 max-w-md border border-nx-border bg-nx-surface p-8 text-center">
+      <div class="mx-auto mt-16 max-w-md nx-card p-8 text-center">
         <div class="mb-4">
           <span class="material-symbols-outlined text-nx-text-secondary text-5xl">lock</span>
         </div>
@@ -297,11 +297,11 @@ import { invoke } from "@tauri-apps/api/core";
           type="password"
           bind:value={masterPassword}
           placeholder={t('passwords.master_password_placeholder')}
-          class="mb-4 w-full border border-nx-border bg-nx-bg px-4 py-3 text-sm text-nx-text outline-none focus:border-nx-text-secondary"
+          class="nx-input mb-4 w-full"
           onkeydown={(e) => e.key === 'Enter' && unlock()}
         />
         <button
-          class="w-full bg-nx-text px-4 py-3 text-sm font-medium text-nx-deep disabled:opacity-50"
+          class="nx-btn nx-btn-primary w-full"
           onclick={unlock}
           disabled={!masterPassword}>
           {t('passwords.unlock')}
@@ -309,7 +309,7 @@ import { invoke } from "@tauri-apps/api/core";
       </div>
     {:else}
       <!-- Setup Master Password -->
-      <div class="mx-auto mt-16 max-w-md border border-nx-border bg-nx-surface p-8 text-center">
+      <div class="mx-auto mt-16 max-w-md nx-card p-8 text-center">
         <div class="mb-4">
           <span class="material-symbols-outlined text-nx-text-secondary text-5xl">lock_reset</span>
         </div>
@@ -319,17 +319,17 @@ import { invoke } from "@tauri-apps/api/core";
           type="password"
           bind:value={setupPassword}
           placeholder={t('passwords.setup_password_placeholder')}
-          class="mb-3 w-full border border-nx-border bg-nx-bg px-4 py-3 text-sm text-nx-text outline-none focus:border-nx-text-secondary"
+          class="nx-input mb-3 w-full"
         />
         <input
           type="password"
           bind:value={setupPasswordConfirm}
           placeholder={t('passwords.setup_password_confirm_placeholder')}
-          class="mb-4 w-full border border-nx-border bg-nx-bg px-4 py-3 text-sm text-nx-text outline-none focus:border-nx-text-secondary"
+          class="nx-input mb-4 w-full"
           onkeydown={(e) => e.key === 'Enter' && setupMasterPassword()}
         />
         <button
-          class="w-full bg-nx-text px-4 py-3 text-sm font-medium text-nx-deep disabled:opacity-50"
+          class="nx-btn nx-btn-primary w-full"
           onclick={setupMasterPassword}
           disabled={!setupPassword || !setupPasswordConfirm}>
           {t('passwords.setup')}
@@ -338,17 +338,17 @@ import { invoke } from "@tauri-apps/api/core";
     {/if}
   {:else if loading}
     <div class="flex items-center justify-center py-12">
-      <span class="material-symbols-outlined animate-spin text-nx-text-muted text-3xl">progress_activity</span>
+      <span class="material-symbols-outlined nx-animate-spin text-nx-text-muted text-3xl">progress_activity</span>
     </div>
   {:else if passwords.length === 0}
-    <div class="border border-nx-border bg-nx-surface p-12 text-center">
+    <div class="nx-empty p-12 text-center">
       <span class="material-symbols-outlined text-nx-text-muted text-4xl">lock</span>
       <div class="mt-4 text-sm text-nx-text-muted">{t('passwords.no_passwords')}</div>
       <div class="mt-1 text-xs text-nx-text-muted">{t('passwords.no_passwords_desc')}</div>
     </div>
   {:else}
-    <div class="border border-nx-border bg-nx-surface">
-      <table class="w-full">
+    <div class="nx-section">
+      <table class="nx-table w-full">
         <thead>
           <tr class="border-b border-nx-border text-xs text-nx-text-muted">
             <th class="px-4 py-3 text-left font-medium">{t('passwords.name')}</th>
@@ -408,11 +408,13 @@ import { invoke } from "@tauri-apps/api/core";
 
 <!-- Add Password Modal -->
 {#if showAddModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showAddModal = false)} onclick={() => showAddModal = false}>
-    <div class="w-full max-w-lg border border-nx-border bg-nx-surface p-6" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
-      <h2 class="mb-4 text-lg font-semibold text-nx-text">{t('passwords.add')}</h2>
+  <div class="nx-dialog-overlay" role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showAddModal = false)} onclick={() => showAddModal = false}>
+    <div class="nx-dialog" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
+      <div class="nx-dialog-header">
+        <h2 class="text-lg font-semibold text-nx-text">{t('passwords.add')}</h2>
+      </div>
       
-      <div class="space-y-4">
+      <div class="nx-dialog-body space-y-4">
         <div>
           <label class="mb-1 block text-xs text-nx-text-muted" for="pm-name-add">{t('passwords.name')} *</label>
           <input
@@ -420,7 +422,7 @@ import { invoke } from "@tauri-apps/api/core";
             type="text"
             bind:value={entryName}
             placeholder="GitHub Account"
-            class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-text-secondary"
+            class="nx-input w-full"
           />
         </div>
 
@@ -431,7 +433,7 @@ import { invoke } from "@tauri-apps/api/core";
             type="text"
             bind:value={username}
             placeholder="user@example.com"
-            class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-text-secondary"
+            class="nx-input w-full"
           />
         </div>
 
@@ -442,7 +444,7 @@ import { invoke } from "@tauri-apps/api/core";
             type="password"
             bind:value={password}
             placeholder="••••••••"
-            class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-text-secondary"
+            class="nx-input w-full"
           />
         </div>
 
@@ -453,7 +455,7 @@ import { invoke } from "@tauri-apps/api/core";
             type="url"
             bind:value={url}
             placeholder="https://github.com"
-            class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-text-secondary"
+            class="nx-input w-full"
           />
         </div>
 
@@ -464,18 +466,18 @@ import { invoke } from "@tauri-apps/api/core";
             bind:value={notes}
             placeholder="Additional information..."
             rows="3"
-            class="w-full border border-nx-border bg-nx-bg px-3 py-2 text-sm text-nx-text placeholder:text-nx-text-muted outline-none focus:border-nx-text-secondary"></textarea>
+            class="nx-input w-full"></textarea>
         </div>
       </div>
 
-      <div class="mt-6 flex justify-end gap-3">
+      <div class="nx-dialog-footer">
         <button
-          class="border border-nx-border bg-nx-bg px-4 py-2 text-sm font-medium text-nx-text-secondary"
+          class="nx-btn nx-btn-ghost"
           onclick={() => showAddModal = false}>
           {t('passwords.cancel')}
         </button>
         <button
-          class="bg-nx-text px-4 py-2 text-sm font-medium text-nx-deep"
+          class="nx-btn nx-btn-primary"
           onclick={addPassword}>
           {t('passwords.save')}
         </button>
@@ -486,26 +488,30 @@ import { invoke } from "@tauri-apps/api/core";
 
 <!-- View Password Modal -->
 {#if showPassword}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showPassword = null)} onclick={() => showPassword = null}>
-    <div class="w-full max-w-md border border-nx-border bg-nx-surface p-6" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
-      <h2 class="mb-4 text-lg font-semibold text-nx-text">{t('passwords.details')}</h2>
+  <div class="nx-dialog-overlay" role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showPassword = null)} onclick={() => showPassword = null}>
+    <div class="nx-dialog" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
+      <div class="nx-dialog-header">
+        <h2 class="text-lg font-semibold text-nx-text">{t('passwords.details')}</h2>
+      </div>
       
-      <div class="border border-nx-border bg-nx-bg p-4">
-        <div class="mb-2 text-xs text-nx-text-muted">{t('passwords.password')}</div>
-        <div class="flex items-center gap-2">
-          <code class="flex-1 break-all text-sm text-nx-text">{showPassword.password}</code>
-          <button
-            class="p-1.5 text-nx-text-secondary"
-            onclick={() => copyToClipboard(showPassword.password)}
-            title={t('passwords.title_copy')}>
-            <span class="material-symbols-outlined text-lg">content_copy</span>
-          </button>
+      <div class="nx-dialog-body">
+        <div class="nx-card p-4">
+          <div class="mb-2 text-xs text-nx-text-muted">{t('passwords.password')}</div>
+          <div class="flex items-center gap-2">
+            <code class="flex-1 break-all text-sm text-nx-text">{showPassword.password}</code>
+            <button
+              class="p-1.5 text-nx-text-secondary"
+              onclick={() => copyToClipboard(showPassword.password)}
+              title={t('passwords.title_copy')}>
+              <span class="material-symbols-outlined text-lg">content_copy</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <div class="mt-6 flex justify-end">
+      <div class="nx-dialog-footer">
         <button
-          class="bg-nx-text px-4 py-2 text-sm font-medium text-nx-deep"
+          class="nx-btn nx-btn-primary"
           onclick={() => showPassword = null}>
           {t('passwords.close')}
         </button>

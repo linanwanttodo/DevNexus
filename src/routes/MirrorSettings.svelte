@@ -65,7 +65,7 @@
       showToast(msg);
       await loadMirrors();
     } catch (err) {
-      showToast(`Failed: ${err.message || err}`);
+      showToast(t('common.error_msg').replace('{error}', err.message || err));
     }
   }
 
@@ -117,7 +117,7 @@
   onMount(() => { loadMirrors(); });
 </script>
 
-<div class="mx-auto max-w-5xl">
+<div class="mx-auto max-w-5xl p-5">
   <div class="mb-6 flex items-center justify-between">
     <div>
       <h1 class="text-xl font-semibold text-nx-text">{t("mirrors.title")}</h1>
@@ -126,13 +126,13 @@
     <div class="flex items-center gap-3">
       <select
         bind:value={selectedCountry}
-        class="border border-nx-border bg-nx-surface px-3 py-1.5 text-sm text-nx-text outline-none"
+        class="nx-input px-3 py-1.5 text-sm"
       >
         {#each countries as c}
           <option value={c.id}>{c.label}</option>
         {/each}
       </select>
-      <button class="border border-nx-border px-4 py-1.5 text-sm text-nx-text-secondary" onclick={loadMirrors}>
+      <button class="nx-btn nx-btn-ghost" onclick={loadMirrors}>
         {t("common.refresh")}
       </button>
     </div>
@@ -140,19 +140,19 @@
 
   {#if loading}
     <div class="flex items-center justify-center py-12">
-      <span class="material-symbols-outlined animate-spin text-nx-text-muted text-3xl">progress_activity</span>
+      <span class="material-symbols-outlined nx-animate-spin text-nx-text-muted text-3xl">progress_activity</span>
     </div>
   {:else if error}
-    <div class="p-6 text-center">
+    <div class="nx-empty">
       <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
       <div class="mt-2 text-sm text-nx-danger">{error}</div>
-      <button class="mt-4 bg-nx-accent px-4 py-2 text-sm font-medium text-white" onclick={loadMirrors}>{t("common.retry")}</button>
+      <button class="nx-btn nx-btn-primary mt-4" onclick={loadMirrors}>{t("common.retry")}</button>
     </div>
   {:else}
     <div class="space-y-4">
       {#each filteredGroups as group}
-        <div class="border border-nx-border bg-nx-surface">
-          <div class="flex items-center gap-3 border-b border-nx-border px-4 py-3">
+        <div class="nx-section">
+          <div class="nx-section-header flex items-center gap-3">
             <span class="text-nx-accent text-sm font-medium">{group.label}</span>
             {#if group.current_url}
               <span class="text-xs text-nx-text-muted">{t("mirrors.active_prefix")}: {group.current_url}</span>
@@ -160,7 +160,7 @@
           </div>
           <div class="p-3 grid grid-cols-1 gap-2">
             {#each group.mirrors as mirror}
-              <div class="flex items-center justify-between border border-nx-border bg-nx-bg px-3 py-2 {mirror.is_active ? 'border-nx-accent' : ''}">
+              <div class="nx-card px-3 py-2 flex items-center justify-between {mirror.is_active ? 'border-nx-accent' : ''}">
                 <div class="flex items-center gap-3 flex-1 min-w-0">
                   <span class="text-xs text-nx-text-muted w-10">{getCountryFlag(mirror.country)}</span>
                   <div class="min-w-0">
@@ -170,7 +170,7 @@
                 </div>
                 <div class="flex items-center gap-2 flex-shrink-0 ml-3">
                   <button
-                    class="px-2 py-1 text-xs text-nx-text-muted border border-nx-border"
+                    class="nx-btn nx-btn-ghost px-2 py-1 text-xs"
                     onclick={() => testMirror(group.id, mirror.url)}
                     disabled={testing !== null}
                   >
@@ -181,14 +181,14 @@
                   {:else if mirror.recommended}
                     <span class="text-xs text-nx-accent font-medium">{t("mirrors.recommended")}</span>
                     <button
-                      class="px-2 py-1 text-xs font-medium bg-nx-accent text-white"
+                      class="nx-btn nx-btn-primary px-2 py-1 text-xs"
                       onclick={() => switchMirror(group.id, mirror.url)}
                     >
                       {t("mirrors.use")}
                     </button>
                   {:else}
                     <button
-                      class="px-2 py-1 text-xs border border-nx-border text-nx-text-secondary"
+                      class="nx-btn nx-btn-ghost px-2 py-1 text-xs"
                       onclick={() => switchMirror(group.id, mirror.url)}
                     >
                       {t("mirrors.use")}
@@ -200,7 +200,7 @@
           </div>
           <div class="border-t border-nx-border px-3 py-2">
             <button
-              class="px-2 py-1 text-xs text-nx-text-muted border border-nx-border"
+              class="nx-btn nx-btn-ghost px-2 py-1 text-xs"
               onclick={() => testAllMirrors(group)}
               disabled={testingGroup !== null}
             >

@@ -109,6 +109,46 @@
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class={class_name} width={size} height={size}>
     <path fill="#019733" d="M20.245 3.078L16.57.027 1.475 10.629 0 12.269l8.112 10.412 3.891 2.924 6.714-7.667 5.299-3.6-3.771-11.26zm-2.446 1.476l2.89 8.627-3.802 2.584-4.223-6.743 5.135-4.468zM14.514 7.85l-5.002 4.347L5.28 7.596l7.386-5.132 1.848 5.386z"/>
   </svg>
+{:else if name === "homebrew"}
+  <!-- Homebrew 图标 -->
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class={class_name} width={size} height={size}>
+    <path fill="#FBB040" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm.5 4.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5S11 8.83 11 8s.67-1.5 1.5-1.5zm-4 5c.28 0 .5.22.5.5s-.22.5-.5.5-.5-.22-.5-.5.22-.5.5-.5zm7 2c.28 0 .5.22.5.5s-.22.5-.5.5-.5-.22-.5-.5.22-.5.5-.5zm-5.5 4c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5S8 18.33 8 17.5s.67-1.5 1.5-1.5z"/>
+  </svg>
+{:else if name === "intellij"}
+  <!-- IntelliJ IDEA 图标 -->
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class={class_name} width={size} height={size}>
+    <path fill="#087CFA" d="M2 2h20v20H2V2zm3 16h7v-2H7v-2h4v-2H7v-2h5V8H5v10zm11-2h-2v-6h4c0-1.1-.9-2-2-2h-4v10h4c1.1 0 2-.9 2-2s-.9-2-2-2zm-2-4h2v2h-2v-2z"/>
+  </svg>
+{:else if name === "sublime"}
+  <!-- Sublime Text 图标 -->
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class={class_name} width={size} height={size}>
+    <path fill="#FF9800" d="M12 2L2 7v10l10 5 10-5V7l-10-5zm0 2.3l6.2 3.1-6.2 3.1-6.2-3.1L12 4.3zM4.8 11.5L4 11v6l8 4v-6l-7.2-3.5zm14.4 0L12 15v6l8-4v-6l-.8.5z"/>
+  </svg>
+{:else if name === "zed"}
+  <!-- Zed Editor 图标 -->
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class={class_name} width={size} height={size}>
+    <path fill="#084CCF" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5l-4-4 4-4 1.5 1.5L9 12l2.5 2.5L10 16.5zm4 0l-1.5-1.5L15 12l-2.5-2.5L14 8l4 4-4 4.5z"/>
+  </svg>
+{:else if name === "postman"}
+  <!-- Postman 图标 -->
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class={class_name} width={size} height={size}>
+    <path fill="#FF6C37" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.24 7.76l-5.66 5.66-1.41-1.41 5.66-5.66-1.41-1.41-5.66 5.66c-.78.78-.78 2.05 0 2.83l1.41 1.41c.78.78 2.05.78 2.83 0l5.66-5.66-1.41-1.42z"/>
+  </svg>
+{:else if name === "mysql"}
+  <!-- MySQL 图标 -->
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class={class_name} width={size} height={size}>
+    <path fill="#4479A1" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm3.5 13.5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5zm-2 1c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5zm-3 1c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5zm-2-1c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5zm4-10c2.21 0 4 1.79 4 4s-1.79 4-4 4-4-1.79-4-4 1.79-4 4-4z"/>
+  </svg>
+{:else if name === "tableplus"}
+  <!-- TablePlus 图标 -->
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class={class_name} width={size} height={size}>
+    <path fill="#35B0AB" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
+  </svg>
+{:else if name === "gparted"}
+  <!-- GParted 图标 -->
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class={class_name} width={size} height={size}>
+    <path fill="#6E4C13" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15l-4-4 4-4 1.41 1.41L10.83 12l2.58 2.59L11 17zm2-10l4 4-4 4-1.41-1.41L13.17 12l-2.58-2.59L13 7z"/>
+  </svg>
 {:else}
   <!-- 未匹配的图标用 Material Symbols 风格占位 -->
   <span class="material-symbols-outlined text-lg" style="font-size: {size}px">{name}</span>
