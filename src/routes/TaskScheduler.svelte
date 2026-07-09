@@ -243,9 +243,9 @@
 
   function taskTypeLabel(type) {
     switch (type) {
-      case "python": return "Python";
+      case "python": return t('scheduler.python');
       case "shutdown": return t('scheduler.shutdown');
-      default: return "Shell";
+      default: return t('scheduler.shell');
     }
   }
 

@@ -37,7 +37,7 @@
       error = null;
       environments = await invoke("list_environments");
     } catch (err) {
-      error = err.message || "Failed to load environments";
+      error = err.message || t('common.error');
       console.error("Error loading environments:", err);
     } finally {
       loading = false;
@@ -55,7 +55,7 @@
       const msg = await invoke("save_export_file", { path: filePath });
       showToast(msg, "success");
     } catch (err) {
-      showToast(`Export failed: ${err.message || err}`, "error");
+      showToast(t('common.error_msg').replace('{error}', err.message || err), "error");
     }
   }
 
@@ -95,23 +95,27 @@
   // 强制刷新版本列表（跳过缓存）
   async function refreshVersions(env) {
     refreshing[env.name] = true;
-    await loadVersions(env, true);
-    refreshing[env.name] = false;
-    showToast(`Versions refreshed for ${env.name}`);
+    try {
+      await loadVersions(env, true);
+      showToast(t('common.all_refreshed'));
+    } finally {
+      refreshing[env.name] = false;
+    }
   }
 
   // 全局刷新：重新加载环境列表 + 清除所有版本缓存，重新扫描
   async function refreshAll() {
     refreshingAll = true;
-    // 先强制刷新环境列表
-    await loadEnvironments();
-    // 对所有已展开的环境强制刷新版本缓存
-    const promises = environments
-      .filter(env => versionManagedTypes.includes(env.lang_type) && expanded[env.name])
-      .map(env => loadVersions(env, true));
-    await Promise.all(promises);
-    refreshingAll = false;
-    showToast(t('common.all_refreshed'));
+    try {
+      await loadEnvironments();
+      const promises = environments
+        .filter(env => versionManagedTypes.includes(env.lang_type) && expanded[env.name])
+        .map(env => loadVersions(env, true));
+      await Promise.all(promises);
+      showToast(t('common.all_refreshed'));
+    } finally {
+      refreshingAll = false;
+    }
   }
 
   // 切换版本
@@ -343,7 +347,7 @@
                 {#if loadingVersions[env.name]}
                   <div class="flex items-center justify-center py-4">
                     <span class="material-symbols-outlined nx-animate-spin text-nx-text-muted text-xl">progress_activity</span>
-                    <span class="ml-2 text-xs text-nx-text-muted">Loading versions...</span>
+                    <span class="ml-2 text-xs text-nx-text-muted">{t('common.loading')}</span>
                   </div>
                 {:else if versionsMap[env.name] && versionsMap[env.name].length > 0}
                   <div class="space-y-1">

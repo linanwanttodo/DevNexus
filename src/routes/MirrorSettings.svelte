@@ -7,7 +7,7 @@
   let groups = $state([]);
   let loading = $state(true);
   let error = $state(null);
-  let testing = $state(null);
+  let testingUrls = $state({});
   let testingGroup = $state(null);
   let selectedCountry = $state("all");
 
@@ -33,14 +33,14 @@
         }
       }
     } catch (err) {
-      error = err.message || "Failed to load mirrors";
+      error = err.message || t('common.error');
     } finally {
       loading = false;
     }
   }
 
   async function testMirror(groupId, mirrorUrl) {
-    testing = mirrorUrl;
+    testingUrls[mirrorUrl] = true;
     try {
       const latency = await invoke("test_mirror_latency", { url: mirrorUrl });
       for (const g of groups) {
@@ -55,7 +55,8 @@
     } catch (err) {
       console.error("Latency test failed:", err);
     } finally {
-      testing = null;
+      delete testingUrls[mirrorUrl];
+      testingUrls = { ...testingUrls };
     }
   }
 
@@ -172,9 +173,9 @@
                   <button
                     class="nx-btn nx-btn-ghost px-2 py-1 text-xs"
                     onclick={() => testMirror(group.id, mirror.url)}
-                    disabled={testing !== null}
+                    disabled={testingUrls[mirror.url] || testingGroup !== null}
                   >
-                    {testing === mirror.url ? "..." : mirror.latency_ms > 0 ? `${mirror.latency_ms}ms` : mirror.latency_ms === 0 ? t('mirrors.timeout') : t('mirrors.test')}
+                    {testingUrls[mirror.url] ? "..." : mirror.latency_ms > 0 ? `${mirror.latency_ms}ms` : mirror.latency_ms === 0 ? t('mirrors.timeout') : t('mirrors.test')}
                   </button>
                   {#if mirror.is_active}
                     <span class="text-xs text-nx-success font-medium">{t("mirrors.active")}</span>
