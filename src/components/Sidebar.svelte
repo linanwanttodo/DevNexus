@@ -6,7 +6,7 @@
   import { t } from "../lib/i18n.svelte.js";
   import { getVersion } from "@tauri-apps/api/app";
 
-  let appVersion = $state("1.0.10");
+  let appVersion = $state("1.1.1");
   onMount(async () => {
     try {
       appVersion = await getVersion();

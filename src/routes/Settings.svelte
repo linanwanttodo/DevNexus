@@ -106,7 +106,7 @@
     const saved = localStorage.getItem("devnexus-theme") || "dark";
     theme = saved === "light" || saved === "dark" ? saved : "system";
     setTheme(theme);
-    invoke("get_app_version").then(v => appVersion = v).catch(() => appVersion = "1.0.10");
+    invoke("get_app_version").then(v => appVersion = v).catch(() => appVersion = "1.1.1");
   });
 </script>
 
