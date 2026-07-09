@@ -17,8 +17,11 @@
   let refreshInterval = $state(null);
   let killing = $state(null); // PID being killed
   let expanded = $state(new Set());
+  let loadInProgress = false;
 
   async function loadProcesses() {
+    if (loadInProgress) return;
+    loadInProgress = true;
     try {
       loading = true;
       error = null;
@@ -29,6 +32,7 @@
       error = err.message || "Failed to list processes";
     } finally {
       loading = false;
+      loadInProgress = false;
     }
   }
 

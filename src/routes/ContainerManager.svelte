@@ -96,10 +96,10 @@
     }
   }
 
-  function onTabChange(tab) {
+  async function onTabChange(tab) {
     activeTab = tab;
     setSearchQuery("");
-    if (dockerStatus.installed && dockerStatus.running) loadTabData(tab);
+    if (dockerStatus.installed && dockerStatus.running) await loadTabData(tab);
   }
 
   async function loadContainers() {

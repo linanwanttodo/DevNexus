@@ -30,6 +30,7 @@ import { invoke } from "@tauri-apps/api/core";
       hasMasterPassword = hasPwd;
     } catch (err) {
       console.error("Failed to check password manager state:", err);
+      showToast(t('common.error_msg').replace('{error}', err.message || err), "error");
     }
   }
 
@@ -178,17 +179,16 @@ import { invoke } from "@tauri-apps/api/core";
   }
 
   async function saveToFile() {
-    const masterPassword = prompt(t('passwords.master_pwd_save'));
-    if (!masterPassword) return;
+    const fileMasterPwd = prompt(t('passwords.master_pwd_save'));
+    if (!fileMasterPwd) return;
 
     try {
-      // 使用 Tauri dialog 选择文件路径（需要添加 tauri-plugin-dialog）
       const filePath = prompt(t('passwords.file_path_save'));
       if (!filePath) return;
 
       await invoke("save_to_file", {
         filePath,
-        masterPassword,
+        masterPassword: fileMasterPwd,
       });
       showToast(t('passwords.save_success'));
     } catch (err) {
@@ -197,8 +197,8 @@ import { invoke } from "@tauri-apps/api/core";
   }
 
   async function loadFromFile() {
-    const masterPassword = prompt(t('passwords.master_pwd_load'));
-    if (!masterPassword) return;
+    const fileMasterPwd = prompt(t('passwords.master_pwd_load'));
+    if (!fileMasterPwd) return;
 
     try {
       const filePath = prompt(t('passwords.file_path_load'));
@@ -206,7 +206,7 @@ import { invoke } from "@tauri-apps/api/core";
 
       const count = await invoke("load_from_file", {
         filePath,
-        masterPassword,
+        masterPassword: fileMasterPwd,
       });
       await loadPasswords();
       showToast(t('passwords.load_success').replace('{count}', count));
