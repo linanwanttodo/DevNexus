@@ -50,9 +50,8 @@ pub fn get_network_adapters() -> Result<Vec<String>, String> {
         let adapters: Vec<String> = stdout
             .lines()
             .filter_map(|line| {
-                let parts: Vec<&str> = line.splitn(2, ": ").collect();
-                if parts.len() >= 2 {
-                    let name = parts[1].splitn(2, '@').next().unwrap_or(parts[1]);
+                if let Some((_key, value)) = line.split_once(": ") {
+                    let name = value.split('@').next().unwrap_or(value);
                     if name != "lo" {
                         Some(name.to_string())
                     } else {
@@ -84,9 +83,9 @@ pub fn get_current_dns(adapter: String) -> Result<DnsConfig, String> {
 
     for line in stdout.lines() {
         if line.contains("DNS[1]:") {
-            primary = line.splitn(2, ':').nth(1).unwrap_or("").trim().to_string();
+            primary = line.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string();
         } else if line.contains("DNS[2]:") {
-            secondary = line.splitn(2, ':').nth(1).unwrap_or("").trim().to_string();
+            secondary = line.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string();
         }
     }
 
@@ -120,7 +119,15 @@ pub fn test_dns_latency(dns_server: String) -> Result<u64, String> {
 
     // Try dig first with timeout
     let output = Command::new("timeout")
-        .args(["5", "dig", &format!("@{}", dns_server), "github.com", "+short", "+time=3", "+tries=1"])
+        .args([
+            "5",
+            "dig",
+            &format!("@{}", dns_server),
+            "github.com",
+            "+short",
+            "+time=3",
+            "+tries=1",
+        ])
         .output();
 
     if let Ok(out) = output {
@@ -170,9 +177,7 @@ pub fn set_dns(adapter: String, primary: String, secondary: String) -> Result<St
 
     if output.status.success() {
         // Restart connection to apply
-        let _ = Command::new("nmcli")
-            .args(["con", "up", &adapter])
-            .output();
+        let _ = Command::new("nmcli").args(["con", "up", &adapter]).output();
         return Ok(format!("DNS 已更新为 {} / {}", primary, secondary));
     }
 
@@ -212,8 +217,7 @@ pub fn get_system_proxy() -> Result<ProxyConfig, String> {
         no_proxy: std::env::var("no_proxy")
             .or_else(|_| std::env::var("NO_PROXY"))
             .unwrap_or_default(),
-        enabled: std::env::var("http_proxy").is_ok()
-            || std::env::var("HTTP_PROXY").is_ok(),
+        enabled: std::env::var("http_proxy").is_ok() || std::env::var("HTTP_PROXY").is_ok(),
     })
 }
 
@@ -235,8 +239,7 @@ pub fn set_system_proxy(
          export HTTPS_PROXY=\"{}\"\n\
          export ALL_PROXY=\"{}\"\n\
          export NO_PROXY=\"{}\"\n",
-        http_proxy, https_proxy, all_proxy, no_proxy,
-        http_proxy, https_proxy, all_proxy, no_proxy,
+        http_proxy, https_proxy, all_proxy, no_proxy, http_proxy, https_proxy, all_proxy, no_proxy,
     );
 
     // Write to ~/.bashrc
@@ -408,11 +411,17 @@ pub fn test_url_latency(url: String) -> Result<LatencyResult, String> {
 
     let output = Command::new("timeout")
         .args([
-            "10", "curl",
-            "-o", "/dev/null",
-            "-s", "-w", "%{http_code}",
-            "--connect-timeout", "5",
-            "--max-time", "8",
+            "10",
+            "curl",
+            "-o",
+            "/dev/null",
+            "-s",
+            "-w",
+            "%{http_code}",
+            "--connect-timeout",
+            "5",
+            "--max-time",
+            "8",
             &url,
         ])
         .output()
@@ -442,19 +451,103 @@ pub fn test_url_latency(url: String) -> Result<LatencyResult, String> {
 #[tauri::command]
 pub fn get_dns_servers() -> Vec<DnsServer> {
     vec![
-        DnsServer { id: 1, name: "114DNS".into(), primary: "114.114.114.114".into(), secondary: "114.114.115.115".into(), latency: None },
-        DnsServer { id: 2, name: "DNSPod DNS+".into(), primary: "119.29.29.29".into(), secondary: "182.254.116.116".into(), latency: None },
-        DnsServer { id: 3, name: "DNS 派 电信/移动/铁通".into(), primary: "101.226.4.6".into(), secondary: "218.30.118.6".into(), latency: None },
-        DnsServer { id: 4, name: "DNS 派 联通".into(), primary: "123.125.81.6".into(), secondary: "140.207.198.6".into(), latency: None },
-        DnsServer { id: 5, name: "CNNIC DNS".into(), primary: "1.2.4.8".into(), secondary: "210.2.4.8".into(), latency: None },
-        DnsServer { id: 6, name: "Google DNS".into(), primary: "8.8.8.8".into(), secondary: "8.8.4.4".into(), latency: None },
-        DnsServer { id: 7, name: "Cloudflare DNS".into(), primary: "1.1.1.1".into(), secondary: "1.0.0.1".into(), latency: None },
-        DnsServer { id: 8, name: "IBM Quad9 DNS".into(), primary: "9.9.9.9".into(), secondary: "149.112.112.112".into(), latency: None },
-        DnsServer { id: 9, name: "DNS.SB".into(), primary: "185.222.222.222".into(), secondary: "185.184.222.222".into(), latency: None },
-        DnsServer { id: 10, name: "OpenDNS".into(), primary: "208.67.222.222".into(), secondary: "208.67.220.220".into(), latency: None },
-        DnsServer { id: 11, name: "阿里云 DNS".into(), primary: "223.5.5.5".into(), secondary: "223.6.6.6".into(), latency: None },
-        DnsServer { id: 12, name: "腾讯云 DNS".into(), primary: "183.60.83.19".into(), secondary: "183.60.82.98".into(), latency: None },
-        DnsServer { id: 13, name: "百度云 DNS".into(), primary: "180.76.76.76".into(), secondary: "1.1.1.1".into(), latency: None },
-        DnsServer { id: 14, name: "微软云 DNS".into(), primary: "4.2.2.1".into(), secondary: "4.2.2.2".into(), latency: None },
+        DnsServer {
+            id: 1,
+            name: "114DNS".into(),
+            primary: "114.114.114.114".into(),
+            secondary: "114.114.115.115".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 2,
+            name: "DNSPod DNS+".into(),
+            primary: "119.29.29.29".into(),
+            secondary: "182.254.116.116".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 3,
+            name: "DNS 派 电信/移动/铁通".into(),
+            primary: "101.226.4.6".into(),
+            secondary: "218.30.118.6".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 4,
+            name: "DNS 派 联通".into(),
+            primary: "123.125.81.6".into(),
+            secondary: "140.207.198.6".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 5,
+            name: "CNNIC DNS".into(),
+            primary: "1.2.4.8".into(),
+            secondary: "210.2.4.8".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 6,
+            name: "Google DNS".into(),
+            primary: "8.8.8.8".into(),
+            secondary: "8.8.4.4".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 7,
+            name: "Cloudflare DNS".into(),
+            primary: "1.1.1.1".into(),
+            secondary: "1.0.0.1".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 8,
+            name: "IBM Quad9 DNS".into(),
+            primary: "9.9.9.9".into(),
+            secondary: "149.112.112.112".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 9,
+            name: "DNS.SB".into(),
+            primary: "185.222.222.222".into(),
+            secondary: "185.184.222.222".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 10,
+            name: "OpenDNS".into(),
+            primary: "208.67.222.222".into(),
+            secondary: "208.67.220.220".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 11,
+            name: "阿里云 DNS".into(),
+            primary: "223.5.5.5".into(),
+            secondary: "223.6.6.6".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 12,
+            name: "腾讯云 DNS".into(),
+            primary: "183.60.83.19".into(),
+            secondary: "183.60.82.98".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 13,
+            name: "百度云 DNS".into(),
+            primary: "180.76.76.76".into(),
+            secondary: "1.1.1.1".into(),
+            latency: None,
+        },
+        DnsServer {
+            id: 14,
+            name: "微软云 DNS".into(),
+            primary: "4.2.2.1".into(),
+            secondary: "4.2.2.2".into(),
+            latency: None,
+        },
     ]
 }
