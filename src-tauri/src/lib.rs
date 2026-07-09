@@ -162,6 +162,17 @@ pub fn run() {
             commands::updater::get_download_url,
             commands::version_manager::list_versions,
             commands::version_manager::switch_version,
+            commands::network::get_network_adapters,
+            commands::network::get_current_dns,
+            commands::network::set_dns,
+            commands::network::test_dns_latency,
+            commands::network::get_dns_servers,
+            commands::network::get_system_proxy,
+            commands::network::set_system_proxy,
+            commands::network::remove_system_proxy,
+            commands::network::get_github_hosts,
+            commands::network::set_github_hosts,
+            commands::network::test_url_latency,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevNexus");

@@ -281,7 +281,7 @@
           <span class="material-symbols-outlined text-nx-text-muted text-3xl">error</span>
           <div class="mt-2 text-sm text-nx-text-secondary">{error}</div>
           <button class="nx-btn nx-btn-primary mt-4" onclick={loadSoftware}>
-            Retry
+            {t("common.retry")}
           </button>
         </div>
       {:else if filteredSoftware.length === 0}

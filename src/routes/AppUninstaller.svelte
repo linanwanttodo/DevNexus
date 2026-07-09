@@ -59,8 +59,17 @@
     try {
       const result = await invoke("force_uninstall_software", { packageName: app.name, appName: app.name });
       showToast(result);
-      delete residueScans[app.name];
-      delete selectedResidues[app.name];
+      const name = String(app.name);
+      const newScans = {};
+      for (const k of Object.keys(residueScans)) {
+        if (k !== name) newScans[k] = residueScans[k];
+      }
+      residueScans = newScans;
+      const newSel = {};
+      for (const k of Object.keys(selectedResidues)) {
+        if (k !== name) newSel[k] = selectedResidues[k];
+      }
+      selectedResidues = newSel;
       await loadApps();
     } catch (err) {
       showToast(`Force uninstall failed: ${err.message || err}`);
@@ -175,9 +184,17 @@
   function toggleScan(app) {
     if (residueScans[app.name]) {
       // Close scan panel
-      delete residueScans[app.name];
-      delete selectedResidues[app.name];
-      residueScans = { ...residueScans };
+      const name = String(app.name);
+      const newScans = {};
+      for (const k of Object.keys(residueScans)) {
+        if (k !== name) newScans[k] = residueScans[k];
+      }
+      residueScans = newScans;
+      const newSel = {};
+      for (const k of Object.keys(selectedResidues)) {
+        if (k !== name) newSel[k] = selectedResidues[k];
+      }
+      selectedResidues = newSel;
     } else {
       scanResidues(app);
     }

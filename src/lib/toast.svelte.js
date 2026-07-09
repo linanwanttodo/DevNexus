@@ -1,11 +1,12 @@
 let toasts = $state([]);
+let nextId = 0;
 
 export function getToasts() {
   return toasts;
 }
 
 export function showToast(message, type = "info", duration = 3000) {
-  const id = Date.now() + Math.random();
+  const id = `toast-${++nextId}-${Date.now()}`;
   toasts = [...toasts, { id, message, type, duration }];
   if (duration > 0) {
     setTimeout(() => removeToast(id), duration);

@@ -188,6 +188,7 @@
   }
 
   function switchToEdit(task) {
+    editingTask = task;
     activeTab = 'edit';
     taskName = task.name;
     cronExpression = task.cron_expression;

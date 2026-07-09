@@ -15,7 +15,8 @@
     "settings": "设置",
     "uninstall": "应用卸载",
     "processes": "进程/端口",
-    "containers": "容器管理"
+    "containers": "容器管理",
+    "network": "网络加速"
   },
   "settings": {
     "title": "设置",

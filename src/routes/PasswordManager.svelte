@@ -226,6 +226,8 @@ import { invoke } from "@tauri-apps/api/core";
   function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
       showToast(t('passwords.copied'));
+    }).catch(() => {
+      showToast(t('common.copy_failed'), "error");
     });
   }
 
