@@ -1,4 +1,5 @@
 let confirmations = $state([]);
+let nextId = 0;
 
 export function getConfirmations() {
   return confirmations;
@@ -6,7 +7,7 @@ export function getConfirmations() {
 
 export function showConfirm(message, title = "Confirm") {
   return new Promise((resolve) => {
-    const id = Date.now() + Math.random();
+    const id = `confirm-${++nextId}-${Date.now()}`;
     confirmations = [...confirmations, { id, message, title, resolve }];
   });
 }

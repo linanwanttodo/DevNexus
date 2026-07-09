@@ -16,6 +16,7 @@
   import AppUninstaller from "./routes/AppUninstaller.svelte";
   import Settings from "./routes/Settings.svelte";
   import ContainerManager from "./routes/ContainerManager.svelte";
+  import NetworkAcceleration from "./routes/NetworkAcceleration.svelte";
 
   let page = $derived(getRoute());
 </script>
@@ -50,6 +51,8 @@
           <ContainerManager />
         {:else if page === "/settings"}
           <Settings />
+        {:else if page === "/network"}
+          <NetworkAcceleration />
         {/if}
       </main>
     </div>

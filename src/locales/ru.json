@@ -15,7 +15,8 @@
     "settings": "Настройки",
     "uninstall": "Удаление приложений",
     "processes": "Процессы и порты",
-    "containers": "Контейнеры"
+    "containers": "Контейнеры",
+    "network": "Сеть"
   },
   "settings": {
     "title": "Настройки",

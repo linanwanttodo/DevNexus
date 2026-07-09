@@ -21,6 +21,7 @@
       { route: "/environments", label: t("nav.environments"), icon: "code" },
       { route: "/software", label: t("nav.software"), icon: "apps" },
       { route: "/containers", label: t("nav.containers"), icon: "container" },
+      { route: "/network", label: t("nav.network"), icon: "network_check" },
       { route: "/mirrors", label: t("nav.mirrors"), icon: "sync" },
       { route: "/processes", label: t("nav.processes"), icon: "lan" },
       { route: "/scheduler", label: t("nav.scheduler"), icon: "schedule" },
@@ -38,7 +39,7 @@
   }
 </script>
 
-<aside class="flex h-full w-48 flex-shrink-0 flex-col bg-nx-deep border-r border-nx-border" aria-label="Main navigation">
+<aside class="flex h-full w-52 flex-shrink-0 flex-col border-r border-nx-border" aria-label="Main navigation" style="background: var(--nx-bg);">
   <!-- Logo area -->
   <div class="flex h-11 items-center gap-2.5 border-b border-nx-border px-4">
     <span class="material-symbols-outlined text-nx-accent text-xl">terminal</span>
@@ -47,25 +48,25 @@
 
   <!-- Navigation -->
   <nav class="flex-1 overflow-y-auto py-3 px-3">
-    <ul class="flex flex-col gap-px">
-      {#each navItems as item}
+    <ul class="flex flex-col gap-0.5">
+      {#each navItems as item (item.route)}
         <li>
           <button
             type="button"
             role="tab"
             aria-current={currentRoute === item.route ? "page" : undefined}
-            class="flex w-full items-center gap-3 px-3 py-2 text-[13px] cursor-pointer rounded-lg transition-all
+            class="flex w-full items-center gap-3 px-3 py-2 text-[13px] cursor-pointer rounded-lg transition-all duration-150
               {currentRoute === item.route
-                ? 'bg-white/[0.08] text-nx-text font-medium'
+                ? 'bg-white/[0.07] text-nx-text font-medium'
                 : 'text-nx-text-secondary hover:text-nx-text hover:bg-white/[0.04]'}"
             onclick={() => handleClick(item.route)}
           >
             {#if item.route === '/cookies'}
-              <BrandIcons name="cookie" size={18} class="flex-shrink-0" />
+              <BrandIcons name="cookie" size={18} class="flex-shrink-0 opacity-80" />
             {:else if item.route === '/containers'}
-              <ContainerIcons name="docker-logo" size={18} class="flex-shrink-0" />
+              <ContainerIcons name="docker-logo" size={18} class="flex-shrink-0 opacity-80" />
             {:else}
-              <span class="material-symbols-outlined text-xl flex-shrink-0">{item.icon}</span>
+              <span class="material-symbols-outlined text-xl flex-shrink-0 opacity-80">{item.icon}</span>
             {/if}
             <span class="truncate">{item.label}</span>
           </button>

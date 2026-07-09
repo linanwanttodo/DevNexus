@@ -101,6 +101,8 @@
     const cookieString = `${cookie.name}=${cookie.value}`;
     navigator.clipboard.writeText(cookieString).then(() => {
       showToast(t('cookies.copy_single_ok'));
+    }).catch(() => {
+      showToast(t('common.copy_failed'), "error");
     });
   }
 
@@ -108,6 +110,8 @@
     const cookieStrings = cookies.map(c => `${c.name}=${c.value}`).join('; ');
     navigator.clipboard.writeText(cookieStrings).then(() => {
       showToast(t('cookies.copy_all_ok'));
+    }).catch(() => {
+      showToast(t('common.copy_failed'), "error");
     });
   }
 

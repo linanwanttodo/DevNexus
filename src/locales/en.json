@@ -15,7 +15,8 @@
     "settings": "Settings",
     "uninstall": "App Uninstaller",
     "processes": "Processes & Ports",
-    "containers": "Containers"
+    "containers": "Containers",
+    "network": "Network"
   },
   "settings": {
     "title": "Settings",
