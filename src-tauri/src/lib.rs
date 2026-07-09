@@ -11,7 +11,6 @@ use tauri::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let task_scheduler = commands::scheduler::TaskScheduler::new();
     let password_manager = commands::password_manager::PasswordManager::new();
     let version_cache = commands::version_manager::VersionCache::new();
 
@@ -20,13 +19,9 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
-        .manage(task_scheduler)
         .manage(password_manager)
         .manage(version_cache)
         .setup(|app| {
-            // 启动定时调度器后台循环
-            let scheduler = app.state::<commands::scheduler::TaskScheduler>();
-            scheduler.start_background();
             let show = MenuItemBuilder::with_id("show", "Show DevNexus").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
@@ -108,14 +103,6 @@ pub fn run() {
             commands::mirror::switch_mirror,
             commands::migration::export_migration,
             commands::migration::save_export_file,
-            commands::scheduler::add_task,
-            commands::scheduler::list_tasks,
-            commands::scheduler::delete_task,
-            commands::scheduler::toggle_task,
-            commands::scheduler::execute_task,
-            commands::scheduler::get_task_logs,
-            commands::scheduler::clear_task_logs,
-            commands::scheduler::update_task,
             commands::password_manager::add_password,
             commands::password_manager::list_passwords,
             commands::password_manager::get_password,

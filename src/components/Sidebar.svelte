@@ -24,7 +24,6 @@
       { route: "/network", label: t("nav.network"), icon: "network_check" },
       { route: "/mirrors", label: t("nav.mirrors"), icon: "sync" },
       { route: "/processes", label: t("nav.processes"), icon: "lan" },
-      { route: "/scheduler", label: t("nav.scheduler"), icon: "schedule" },
       { route: "/passwords", label: t("nav.passwords"), icon: "key" },
       { route: "/cookies", label: t("nav.cookies"), icon: "cookie" },
       { route: "/uninstall", label: t("nav.uninstall"), icon: "delete" },
