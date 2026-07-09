@@ -10,7 +10,6 @@
   import SoftwareCenter from "./routes/SoftwareCenter.svelte";
   import MirrorSettings from "./routes/MirrorSettings.svelte";
   import ProcessManager from "./routes/ProcessManager.svelte";
-  import TaskScheduler from "./routes/TaskScheduler.svelte";
   import PasswordManager from "./routes/PasswordManager.svelte";
   import CookieExtractor from "./routes/CookieExtractor.svelte";
   import AppUninstaller from "./routes/AppUninstaller.svelte";
@@ -39,8 +38,6 @@
           <MirrorSettings />
         {:else if page === "/processes" || page === "/ports"}
           <ProcessManager />
-        {:else if page === "/scheduler"}
-          <TaskScheduler />
         {:else if page === "/passwords"}
           <PasswordManager />
         {:else if page === "/cookies"}

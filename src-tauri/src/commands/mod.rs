@@ -6,7 +6,6 @@ pub mod mirror;
 pub mod network;
 pub mod password_manager;
 pub mod process_ports;
-pub mod scheduler;
 pub mod software;
 pub mod system;
 pub mod updater;
