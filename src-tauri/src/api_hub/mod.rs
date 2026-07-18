@@ -65,3 +65,6 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
 pub async fn start(state: Arc<AppState>) {
     server::start_server(state).await;
 }
+
+#[cfg(test)]
+mod e2e_tests;

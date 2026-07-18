@@ -21,6 +21,11 @@ enum ClientFormat {
 
 /// 启动 API Hub HTTP 服务（绑定 localhost:3456）
 pub async fn start_server(state: Arc<AppState>) {
+    start_server_on(state, "127.0.0.1:3456").await;
+}
+
+/// 启动 API Hub HTTP 服务到指定地址（测试可绑定 `127.0.0.1:0`）
+pub async fn start_server_on(state: Arc<AppState>, addr: &str) {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
@@ -35,13 +40,15 @@ pub async fn start_server(state: Arc<AppState>) {
         .layer(cors)
         .with_state(state);
 
-    let listener = match tokio::net::TcpListener::bind("127.0.0.1:3456").await {
+    let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => {
-            println!("[API Hub] Server started on http://127.0.0.1:3456");
+            if let Ok(local) = l.local_addr() {
+                println!("[API Hub] Server started on http://{}", local);
+            }
             l
         }
         Err(e) => {
-            eprintln!("[API Hub] Failed to bind port 3456: {}", e);
+            eprintln!("[API Hub] Failed to bind {}: {}", addr, e);
             return;
         }
     };
@@ -49,6 +56,23 @@ pub async fn start_server(state: Arc<AppState>) {
     if let Err(e) = axum::serve(listener, app).await {
         eprintln!("[API Hub] Server error: {}", e);
     }
+}
+
+/// 构建 Router（供集成测试 / 冒烟示例使用）
+pub fn build_router(state: Arc<AppState>) -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers(Any);
+
+    Router::new()
+        .route("/health", get(health_handler))
+        .route("/v1/chat/completions", post(chat_completions_handler))
+        .route("/v1/responses", post(responses_handler))
+        .route("/v1/messages", post(anthropic_messages_handler))
+        .route("/v1/models", get(list_models_handler))
+        .layer(cors)
+        .with_state(state)
 }
 
 // ── Health ────────────────────────────────────────────────────
