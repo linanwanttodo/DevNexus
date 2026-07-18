@@ -601,129 +601,103 @@ fn map_package_name<'a>(generic: &'a str, pm_name: &str) -> &'a str {
         ("code", "winget") => "Microsoft.VisualStudioCode",
         ("code", "chocolatey") => "vscode",
         ("code", "brew") => "visual-studio-code",
-        ("code", "apt") => "code",
-        ("code", "dnf") => "code",
+        ("code", "apt" | "dnf" | "zypper") => "code",
         // Neovim
         ("neovim", "brew") => "neovim",
         ("neovim", "winget") => "Neovim.Neovim",
-        ("neovim", "apt") => "neovim",
-        ("neovim", "pacman") => "neovim",
+        ("neovim", "apt" | "pacman" | "zypper") => "neovim",
         // Node.js
-        ("nodejs", "apt") => "nodejs",
+        ("nodejs", "apt" | "pacman" | "dnf") => "nodejs",
+        ("nodejs", "zypper") => "nodejs20",
         ("nodejs", "brew") => "node",
         ("nodejs", "winget") => "OpenJS.NodeJS.LTS",
-        ("nodejs", "pacman") => "nodejs",
-        ("nodejs", "dnf") => "nodejs",
         // Python
-        ("python3", "apt") => "python3",
+        ("python3", "apt" | "pacman" | "zypper") => "python3",
         ("python3", "brew") => "python",
         ("python3", "winget") => "Python.Python.3.12",
-        ("python3", "pacman") => "python",
         // Go
-        ("golang", "apt") => "golang",
+        ("golang", "apt" | "dnf" | "zypper") => "golang",
         ("golang", "brew") => "go",
         ("golang", "winget") => "GoLang.Go",
         ("golang", "pacman") => "go",
-        ("golang", "dnf") => "golang",
         // Rust
         ("rust", "brew") => "rustup",
         ("rust", "winget") => "Rustlang.Rustup",
-        ("rust", "pacman") => "rust",
+        ("rust", "pacman" | "zypper") => "rust",
         ("rust", "apt") => "rustc",
         // Ruby
         ("ruby", "apt") => "ruby-full",
-        ("ruby", "brew") => "ruby",
+        ("ruby", "brew" | "zypper") => "ruby",
         // Java
         ("openjdk-17-jdk", "apt") => "openjdk-17-jdk",
         ("openjdk-17-jdk", "brew") => "openjdk@17",
         ("openjdk-17-jdk", "winget") => "Microsoft.OpenJDK.17",
+        ("openjdk-17-jdk", "zypper") => "java-17-openjdk",
         // Docker
-        ("docker-ce", "apt") => "docker-ce",
-        ("docker-ce", "dnf") => "docker-ce",
-        ("docker-ce", "pacman") => "docker",
+        ("docker-ce", "apt" | "dnf") => "docker-ce",
+        ("docker-ce", "pacman" | "zypper") => "docker",
         // Git
-        ("git", "apt") => "git",
-        ("git", "brew") => "git",
+        ("git", "apt" | "brew" | "pacman" | "zypper") => "git",
         ("git", "winget") => "Git.Git",
-        ("git", "pacman") => "git",
         // curl
-        ("curl", "apt") => "curl",
-        ("curl", "brew") => "curl",
+        ("curl", "apt" | "brew" | "zypper") => "curl",
         ("curl", "winget") => "cURL.cURL",
         // wget
-        ("wget", "apt") => "wget",
-        ("wget", "brew") => "wget",
+        ("wget", "apt" | "brew" | "zypper") => "wget",
         ("wget", "winget") => "GNU.Wget",
         // OpenSSH
         ("openssh-client", "apt") => "openssh-client",
-        ("openssh-client", "brew") => "openssh",
+        ("openssh-client", "brew" | "zypper") => "openssh",
         // GCC
-        ("gcc", "apt") => "gcc",
-        ("gcc", "brew") => "gcc",
-        ("gcc", "pacman") => "gcc",
+        ("gcc", "apt" | "brew" | "pacman" | "zypper") => "gcc",
         // Clang
-        ("clang", "apt") => "clang",
+        ("clang", "apt" | "pacman" | "zypper") => "clang",
         ("clang", "brew") => "llvm",
-        ("clang", "pacman") => "clang",
         // CMake
-        ("cmake", "apt") => "cmake",
-        ("cmake", "brew") => "cmake",
+        ("cmake", "apt" | "brew" | "pacman" | "zypper") => "cmake",
         ("cmake", "winget") => "Kitware.CMake",
-        ("cmake", "pacman") => "cmake",
         // ripgrep
-        ("ripgrep", "apt") => "ripgrep",
-        ("ripgrep", "brew") => "ripgrep",
+        ("ripgrep", "apt" | "brew" | "pacman" | "zypper") => "ripgrep",
         ("ripgrep", "winget") => "BurntSushi.ripgrep.MSVC",
-        ("ripgrep", "pacman") => "ripgrep",
         // fd
         ("fd-find", "apt") => "fd-find",
-        ("fd-find", "brew") => "fd",
+        ("fd-find", "brew" | "pacman" | "zypper") => "fd",
         ("fd-find", "winget") => "sharkdp.fd",
-        ("fd-find", "pacman") => "fd",
         // jq
-        ("jq", "apt") => "jq",
-        ("jq", "brew") => "jq",
+        ("jq", "apt" | "brew" | "pacman" | "zypper") => "jq",
         ("jq", "winget") => "jqlang.jq",
-        ("jq", "pacman") => "jq",
         // fzf
-        ("fzf", "apt") => "fzf",
-        ("fzf", "brew") => "fzf",
+        ("fzf", "apt" | "brew" | "pacman" | "zypper") => "fzf",
         ("fzf", "winget") => "junegunn.fzf",
-        ("fzf", "pacman") => "fzf",
         // htop
-        ("htop", "apt") => "htop",
-        ("htop", "brew") => "htop",
-        ("htop", "pacman") => "htop",
+        ("htop", "apt" | "brew" | "pacman" | "zypper") => "htop",
         // tmux
-        ("tmux", "apt") => "tmux",
-        ("tmux", "brew") => "tmux",
-        ("tmux", "pacman") => "tmux",
+        ("tmux", "apt" | "brew" | "pacman" | "zypper") => "tmux",
         // Redis
         ("redis", "apt") => "redis-server",
-        ("redis", "brew") => "redis",
-        ("redis", "pacman") => "redis",
+        ("redis", "brew" | "pacman" | "zypper") => "redis",
         // SQLite
-        ("sqlite", "apt") => "sqlite3",
+        ("sqlite", "apt" | "zypper") => "sqlite3",
         ("sqlite", "brew") => "sqlite",
         ("sqlite", "winget") => "SQLite.SQLite",
         // PostgreSQL
         ("postgresql-client", "apt") => "postgresql-client",
         ("postgresql-client", "brew") => "libpq",
         ("postgresql-client", "pacman") => "postgresql-libs",
+        ("postgresql-client", "zypper") => "postgresql16",
         // Sublime Text
         ("sublime-text", "brew") => "sublime-text",
-        ("sublime-text", "apt") => "sublime-text",
+        ("sublime-text", "apt" | "zypper") => "sublime-text",
         ("sublime-text", "winget") => "SublimeHQ.SublimeText.4",
         // Zed
         ("zed", "brew") => "zed",
         ("zed", "winget") => "Zed.Zed",
         // GParted
-        ("gparted", "apt") => "gparted",
-        ("gparted", "pacman") => "gparted",
+        ("gparted", "apt" | "pacman" | "zypper") => "gparted",
         // DBeaver
         ("dbeaver-ce", "brew") => "dbeaver-community",
         ("dbeaver-ce", "winget") => "dbeaver.dbeaver",
-        ("dbeaver-ce", "apt") => "dbeaver-ce",
+        ("dbeaver-ce", "apt" | "zypper") => "dbeaver-ce",
         // Postman (brew cask)
         ("postman", "brew") => "postman",
         ("postman", "winget") => "Postman.Postman",
@@ -1777,7 +1751,27 @@ pub async fn install_software_from_url(
                 let mut entry = archive
                     .by_index(i)
                     .map_err(|e| format!("Failed to read zip entry: {}", e))?;
-                let outpath = install_dir.join(entry.name());
+                // 防止 zip-slip 路径穿越
+                let entry_name = entry.name().replace('\\', "/");
+                let sanitized = entry_name
+                    .split('/')
+                    .fold(String::new(), |acc, part| {
+                        if part == ".." {
+                            // 忽略向上的路径遍历
+                            acc
+                        } else if part == "." || part.is_empty() {
+                            acc
+                        } else if acc.is_empty() {
+                            part.to_string()
+                        } else {
+                            format!("{}/{}", acc, part)
+                        }
+                    });
+                let outpath = install_dir.join(&sanitized);
+                // 确保路径没有逃逸出 install_dir
+                if !outpath.starts_with(&install_dir) {
+                    continue;
+                }
                 if entry.is_dir() {
                     std::fs::create_dir_all(&outpath).ok();
                 } else {
@@ -1823,12 +1817,8 @@ pub async fn install_software_from_url(
     std::fs::remove_file(&filepath).ok();
 
     // 创建符号链接到 bin 目录
-    // 安全获取 bin 目录，避免 parent() 返回 None 时的 panic
     let install_base = get_install_base_dir();
-    let bin_dir = install_base
-        .parent()
-        .map(|p| p.join("bin"))
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join("bin"));
+    let bin_dir = install_base.join("bin");
     std::fs::create_dir_all(&bin_dir).map_err(|e| format!("Failed to create bin dir: {}", e))?;
 
     let binary_name = match def.name {

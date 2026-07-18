@@ -18,6 +18,9 @@
   let packageManagers = $state([]);
   let pmChecking = $state(true);
   let copiedCommand = $state("");
+  let versionsCache = $state({});
+  let loadingVersions = $state("");
+  let selectedVersion = $state({});
 
   const categories = [
     { id: "all", label: t("software.all") },
@@ -89,6 +92,22 @@
     }
   }
 
+  async function loadVersions(item) {
+    if (versionsCache[item.package_name]) return;
+    loadingVersions = item.package_name;
+    try {
+      const vers = await invoke("fetch_software_versions", { packageName: item.package_name });
+      versionsCache[item.package_name] = vers || [];
+      if ((vers || []).length && !selectedVersion[item.package_name]) {
+        selectedVersion[item.package_name] = vers[0];
+      }
+    } catch {
+      versionsCache[item.package_name] = [];
+    } finally {
+      if (loadingVersions === item.package_name) loadingVersions = "";
+    }
+  }
+
   async function loadSoftware() {
     try {
       loading = true;
@@ -132,7 +151,13 @@
       currentItem = item;
       
       try {
-        const result = await invoke("install_software", { packageName: item.package_name });
+        const ver = selectedVersion[item.package_name];
+        let result;
+        if (ver) {
+          result = await invoke("install_software_from_url", { packageName: item.package_name, version: ver });
+        } else {
+          result = await invoke("install_software", { packageName: item.package_name });
+        }
         showToast(result);
         await loadSoftware();
       } catch (err) {
@@ -304,6 +329,22 @@
               </div>
               <h3 class="mb-1 text-sm font-medium text-nx-text">{item.name}</h3>
               <p class="mb-4 font-mono text-xs text-nx-text-muted">{item.version}</p>
+              {#if item.action === 'Install'}
+                <select class="nx-input text-xs h-7 w-full mb-3"
+                  onfocus={() => loadVersions(item)}
+                  onchange={(e) => selectedVersion[item.package_name] = e.currentTarget.value}
+                  disabled={loadingVersions === item.package_name}>
+                  {#if loadingVersions === item.package_name}
+                    <option>{t('software.loading_versions')}</option>
+                  {:else if versionsCache[item.package_name]?.length}
+                    {#each versionsCache[item.package_name] as v}
+                      <option value={v}>{v}</option>
+                    {/each}
+                  {:else}
+                    <option>{t('software.latest_version')}</option>
+                  {/if}
+                </select>
+              {/if}
               <button
                 class="nx-btn w-full text-xs disabled:opacity-50 disabled:cursor-not-allowed
                   {item.action === 'Install'

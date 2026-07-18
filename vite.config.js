@@ -10,15 +10,13 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     host: host || false,
-    hmr: host
-      ? {
-          protocol: "ws",
-          host,
-          port: 1421,
-        }
-      : undefined,
+    // 当前系统 inotify 文件监视数上限过低（ENOSPC），无法用 sudo 提升时，
+    // 改用轮询（usePolling）替代 inotify 监听，彻底避免 "file watchers reached" 错误。
+    // 根因修复：sudo sysctl -w fs.inotify.max_user_watches=524288（并写入 /etc/sysctl.d）。
     watch: {
-      ignored: ["**/src-tauri/**"],
+      usePolling: true,
+      interval: 1000,
+      ignored: ["**/src-tauri/**", "**/target/**", "**/node_modules/**"],
     },
   },
 });

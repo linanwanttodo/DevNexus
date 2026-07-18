@@ -22,6 +22,15 @@ import { invoke } from "@tauri-apps/api/core";
   let url = $state("");
   let notes = $state("");
 
+  // 编辑表单
+  let showEditModal = $state(false);
+  let editId = $state(null);
+  let editName = $state("");
+  let editUsername = $state("");
+  let editPassword = $state("");
+  let editUrl = $state("");
+  let editNotes = $state("");
+
   async function checkState() {
     try {
       const lockedState = await invoke("is_locked");
@@ -130,6 +139,38 @@ import { invoke } from "@tauri-apps/api/core";
       await loadPasswords();
     } catch (err) {
       showToast(t('passwords.delete_failed').replace('{error}', err.message || err));
+    }
+  }
+
+  function beginEdit(entry) {
+    editId = entry.id;
+    editName = entry.name;
+    editUsername = entry.username;
+    editPassword = "";
+    editUrl = entry.url || "";
+    editNotes = entry.notes || "";
+    showEditModal = true;
+  }
+
+  async function saveEdit() {
+    if (!editName || !editUsername) {
+      showToast(t('passwords.fill_fields'));
+      return;
+    }
+    try {
+      await invoke("update_password", {
+        id: editId,
+        name: editName,
+        username: editUsername,
+        password: editPassword.trim() ? editPassword.trim() : null,
+        url: editUrl.trim() ? editUrl.trim() : null,
+        notes: editNotes.trim() ? editNotes.trim() : null,
+      });
+      showEditModal = false;
+      await loadPasswords();
+      showToast(t('passwords.edit_success'));
+    } catch (err) {
+      showToast(t('passwords.edit_failed').replace('{error}', err.message || err));
     }
   }
 
@@ -388,6 +429,12 @@ import { invoke } from "@tauri-apps/api/core";
                   </button>
                   <button 
                     class="p-1.5 text-nx-text-secondary"
+                    title={t('passwords.title_edit')}
+                    onclick={() => beginEdit(entry)}>
+                    <span class="material-symbols-outlined text-lg">edit</span>
+                  </button>
+                  <button 
+                    class="p-1.5 text-nx-text-secondary"
                     title={t('passwords.title_copy')}
                     onclick={() => copyToClipboard(entry.username)}>
                     <span class="material-symbols-outlined text-lg">content_copy</span>
@@ -481,6 +528,82 @@ import { invoke } from "@tauri-apps/api/core";
         <button
           class="nx-btn nx-btn-primary"
           onclick={addPassword}>
+          {t('passwords.save')}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Edit Password Modal -->
+{#if showEditModal}
+  <div class="nx-dialog-overlay" role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showEditModal = false)} onclick={() => showEditModal = false}>
+    <div class="nx-dialog" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
+      <div class="nx-dialog-header">
+        <h2 class="text-lg font-semibold text-nx-text">{t('passwords.edit_title')}</h2>
+      </div>
+
+      <div class="nx-dialog-body space-y-4">
+        <div>
+          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-name-edit">{t('passwords.name')} *</label>
+          <input
+            id="pm-name-edit"
+            type="text"
+            bind:value={editName}
+            class="nx-input w-full"
+          />
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-username-edit">{t('passwords.username')} *</label>
+          <input
+            id="pm-username-edit"
+            type="text"
+            bind:value={editUsername}
+            class="nx-input w-full"
+          />
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-password-edit">{t('passwords.password')}</label>
+          <input
+            id="pm-password-edit"
+            type="password"
+            bind:value={editPassword}
+            placeholder={t('passwords.keep_password')}
+            class="nx-input w-full"
+          />
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-url-edit">URL</label>
+          <input
+            id="pm-url-edit"
+            type="url"
+            bind:value={editUrl}
+            class="nx-input w-full"
+          />
+        </div>
+
+        <div>
+          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-notes-edit">{t('passwords.notes')}</label>
+          <textarea
+            id="pm-notes-edit"
+            bind:value={editNotes}
+            rows="3"
+            class="nx-input w-full"></textarea>
+        </div>
+      </div>
+
+      <div class="nx-dialog-footer">
+        <button
+          class="nx-btn nx-btn-ghost"
+          onclick={() => showEditModal = false}>
+          {t('passwords.cancel')}
+        </button>
+        <button
+          class="nx-btn nx-btn-primary"
+          onclick={saveEdit}>
           {t('passwords.save')}
         </button>
       </div>

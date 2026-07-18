@@ -218,6 +218,19 @@ pub fn remove_from_path(env_name: String, path: String) -> Result<String, String
 
 // ==================== Unix (macOS / Linux) ====================
 
+/// Detect user's default shell to choose the right rc file
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn detect_shell_rc() -> &'static str {
+    let shell = std::env::var("SHELL").unwrap_or_default();
+    if shell.ends_with("zsh") {
+        ".zshrc"
+    } else if shell.ends_with("bash") {
+        ".bashrc"
+    } else {
+        ".profile"
+    }
+}
+
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn add_to_path_impl(env_name: &str, path: &str) -> Result<String, String> {
     let home = std::env::var("HOME").map_err(|e| e.to_string())?;
@@ -226,60 +239,42 @@ fn add_to_path_impl(env_name: &str, path: &str) -> Result<String, String> {
         env_name, path
     );
 
-    let rc_files: &[&str] = if cfg!(target_os = "macos") {
-        &[".zshrc", ".bash_profile", ".bashrc", ".profile"]
-    } else {
-        &[".bashrc", ".profile", ".zshrc"]
-    };
+    let rc_file = detect_shell_rc();
+    let rc_path = format!("{}/{}", home, rc_file);
 
-    let mut written_to = Vec::new();
-    for rc_file in rc_files {
-        let rc_path = format!("{}/{}", home, rc_file);
-        if std::path::Path::new(&rc_path).exists() {
-            let existing = std::fs::read_to_string(&rc_path).unwrap_or_default();
-            if existing.contains(path) {
-                written_to.push(rc_path);
-                continue; // 已存在，跳过
+    // Check all common rc files for existing entry (avoid duplicates across files)
+    let all_rcs = &[".zshrc", ".bashrc", ".bash_profile", ".profile"];
+    for file in all_rcs {
+        let rc_path = format!("{}/{}", home, file);
+        if let Ok(content) = std::fs::read_to_string(&rc_path) {
+            if content.contains(path) {
+                return Ok(format!("{} is already in PATH ({})", env_name, file));
             }
-            std::fs::write(&rc_path, format!("{}{}", existing, export_line))
-                .map_err(|e| e.to_string())?;
-            written_to.push(rc_path);
         }
     }
 
-    if written_to.is_empty() {
-        // 默认写入 .profile
-        let profile = format!("{}/.profile", home);
-        let existing = std::fs::read_to_string(&profile).unwrap_or_default();
-        std::fs::write(&profile, format!("{}{}", existing, export_line))
-            .map_err(|e| e.to_string())?;
-        Ok(format!("Added {} to PATH in {}", env_name, profile))
-    } else {
-        Ok(format!(
-            "Added {} to PATH in {}",
-            env_name,
-            written_to.join(", ")
-        ))
-    }
+    let existing = std::fs::read_to_string(&rc_path).unwrap_or_default();
+    std::fs::write(&rc_path, format!("{}{}", existing, export_line))
+        .map_err(|e| e.to_string())?;
+
+    Ok(format!("Added {} to PATH in {}", env_name, rc_file))
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn remove_from_path_impl(env_name: &str, path: &str) -> Result<String, String> {
     let home = std::env::var("HOME").map_err(|e| e.to_string())?;
-    let rc_files = &[".zshrc", ".bash_profile", ".bashrc", ".profile"];
+    let rc_file = detect_shell_rc();
+    let rc_path = format!("{}/{}", home, rc_file);
 
-    for rc_file in rc_files {
-        let rc_path = format!("{}/{}", home, rc_file);
-        if std::path::Path::new(&rc_path).exists() {
-            let content = std::fs::read_to_string(&rc_path).map_err(|e| e.to_string())?;
-            let new_content: Vec<&str> = content
-                .lines()
-                .filter(|line| {
-                    !line.contains(path) && !line.contains(&format!("DevNexus: {}", env_name))
-                })
-                .collect();
-            std::fs::write(&rc_path, new_content.join("\n")).map_err(|e| e.to_string())?;
-        }
+    if std::path::Path::new(&rc_path).exists() {
+        let content = std::fs::read_to_string(&rc_path).map_err(|e| e.to_string())?;
+        let new_content: Vec<&str> = content
+            .lines()
+            .filter(|line| {
+                !line.contains(path) && !line.contains(&format!("DevNexus: {}", env_name))
+            })
+            .collect();
+        std::fs::write(&rc_path, new_content.join("\n")).map_err(|e| e.to_string())?;
     }
 
     Ok(format!("Removed {} from PATH", env_name))

@@ -25,8 +25,9 @@
 <div class="fixed top-3 right-3 z-50 flex flex-col gap-2 pointer-events-none">
   {#each toasts as toast (toast.id)}
     <div
-      class="pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg nx-animate-slide-up"
-      style="background: var(--nx-raised); min-width: 280px; max-width: 400px;"
+      class="pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg"
+      style="background: var(--nx-raised); min-width: 280px; max-width: 400px; border: 1px solid var(--nx-border);"
+      class:nx-animate-slide-up={true}
     >
       <span class="material-symbols-outlined text-sm flex-shrink-0" style="color: {typeColor(toast.type)}">
         {typeIcon(toast.type)}

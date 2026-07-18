@@ -34,7 +34,7 @@ impl PasswordManager {
         let next_id = Arc::new(Mutex::new(1));
 
         // 不自动加载条目，等待 unlock
-        let mut pm = Self {
+        let pm = Self {
             entries: entries.clone(),
             next_id,
             encryption_key: key,
@@ -282,7 +282,7 @@ impl PasswordManager {
     }
 
     /// 加载主密码验证器
-    fn load_verifier(&mut self) -> Result<(), String> {
+    fn load_verifier(&self) -> Result<(), String> {
         let path = Self::verifier_path();
         if !path.exists() {
             return Ok(());
