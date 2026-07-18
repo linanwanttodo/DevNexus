@@ -3,7 +3,6 @@ pub mod cookie_extractor;
 pub mod environment;
 pub mod migration;
 pub mod mirror;
-pub mod network;
 pub mod password_manager;
 pub mod process_ports;
 pub mod software;

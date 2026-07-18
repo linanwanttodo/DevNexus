@@ -1,5 +1,10 @@
 {
   "app_name": "DevNexus",
+  "error": {
+    "title": "Error",
+    "reload": "Reload",
+    "dismiss": "Dismiss"
+  },
   "version": "Version",
   "search": "Search...",
   "search_ports": "Search ports, processes...",
@@ -15,7 +20,8 @@
     "uninstall": "App Uninstaller",
     "processes": "Processes & Ports",
     "containers": "Containers",
-    "network": "Network"
+    "api_hub": "API Hub",
+    "migration": "Migration"
   },
   "settings": {
     "title": "Settings",
@@ -150,6 +156,8 @@
     "available": "Available",
     "system": "System",
     "processing": "Processing...",
+    "loading_versions": "Loading versions...",
+    "latest_version": "Latest version",
     "install": "Install",
     "open": "Open",
     "install_confirm": "Install {name}?",
@@ -233,7 +241,13 @@
     "incorrect": "Incorrect master password",
     "unlock_failed": "Failed to unlock: {error}",
     "locked": "Password manager locked",
-    "no_match": "Passwords do not match"
+    "no_match": "Passwords do not match",
+    "edit": "Edit",
+    "edit_title": "Edit Password",
+    "edit_success": "Password updated",
+    "edit_failed": "Failed to update password: {error}",
+    "keep_password": "Leave blank to keep current password",
+    "title_edit": "Edit password"
   },
   "cookies": {
     "title": "Cookie Extractor",
@@ -390,6 +404,17 @@
     "build_image": "Build Image",
     "build_tag": "Image tag",
     "build_path": "Build path (Dockerfile directory)",
+    "push": "Push",
+    "push_image": "Push Image",
+    "push_target": "Push target",
+    "pushing": "Pushing",
+    "push_done": "Image pushed",
+    "push_failed": "Failed to push image",
+    "tag_image": "Tag Image",
+    "tag_value": "New tag (e.g. registry/user/repo:tag)",
+    "tagging": "Tagging",
+    "tag_done": "Tag added",
+    "tag_failed": "Failed to tag image",
     "create_volume": "Create Volume",
     "volume_name": "Volume name",
     "create_network": "Create Network",
@@ -476,5 +501,31 @@
     "groups": "groups",
     "total_processes": "processes",
     "memory_total": "Total:"
+  },
+  "migration": {
+    "title": "Migration",
+    "desc": "Export/import environment manifests to move configs between machines",
+    "export": "Export",
+    "import": "Import",
+    "tab_export": "Export",
+    "tab_import": "Import",
+    "select_env": "Select at least one environment",
+    "exported": "Export succeeded",
+    "export_failed": "Export failed: {error}",
+    "import_success": "Import done: switched {switched}, skipped {skipped}, failed {failed}",
+    "import_failed": "Import failed: {error}",
+    "import_pick": "Choose migration file",
+    "import_preview": "Import preview",
+    "no_envs": "No environments detected",
+    "no_versions": "No extra versions",
+    "versions_failed": "Failed to load versions: {error}",
+    "summary": "{envs} envs, {versions} versions selected",
+    "source": "Source",
+    "exported_at": "Exported at",
+    "apply_versions": "Apply version switches",
+    "import_note": "Import tries to switch installed versions via pyenv/fnm/jenv etc. It will not install missing runtimes.",
+    "empty_file": "Empty or invalid file",
+    "meta_os": "OS",
+    "meta_host": "Host"
   }
 }
