@@ -3,7 +3,8 @@
   "error": {
     "title": "Error",
     "reload": "Reload",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "details": "Error details"
   },
   "version": "Version",
   "search": "Search...",
@@ -141,7 +142,9 @@
     "docker": "Docker Hub",
     "cargo": "Cargo (Rust)",
     "brew": "Homebrew",
-    "composer": "Composer (PHP)"
+    "composer": "Composer (PHP)",
+    "description": "Select a mirror to speed up package downloads",
+    "recommended": "Recommended"
   },
   "software": {
     "title": "Software Center",
@@ -174,7 +177,9 @@
     "uninstall_data_confirm": "Also remove configuration and data files for {name}?",
     "deep_uninstall_success": "Uninstalled and cleaned up data files",
     "cli_code": "CLI Code",
-    "cli_code_desc": "AI coding assistants — click to copy npm install command"
+    "cli_code_desc": "AI coding assistants — click to copy npm install command",
+    "none": "No software available",
+    "none_hint": "No software matches the current filter or search"
   },
   "passwords": {
     "title": "Password Manager",
@@ -335,7 +340,12 @@
     "type_data": "Data",
     "type_shortcut": "Shortcut",
     "type_service": "Service",
-    "type_registry": "Registry"
+    "type_registry": "Registry",
+    "category_cache": "Cache",
+    "category_config": "Configuration",
+    "category_log": "Logs",
+    "category_temp": "Temporary files",
+    "category_other": "Other"
   },
   "docker": {
     "tab_containers": "Containers",
