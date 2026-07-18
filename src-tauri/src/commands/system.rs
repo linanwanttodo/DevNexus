@@ -1,6 +1,16 @@
 use serde::Serialize;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use sysinfo::System;
+
+/// 获取系统信息单例（避免每 5 秒重新分配 sysinfo 内部结构）
+fn system() -> &'static Mutex<System> {
+    static SYS: OnceLock<Mutex<System>> = OnceLock::new();
+    SYS.get_or_init(|| {
+        let mut sys = System::new_all();
+        sys.refresh_all();
+        Mutex::new(sys)
+    })
+}
 
 /// 获取当前应用版本号（编译时从 Cargo.toml 读取）
 #[tauri::command]
@@ -113,7 +123,7 @@ pub struct ResourceUsage {
 
 #[tauri::command]
 pub fn get_system_info() -> SystemInfo {
-    let mut sys = System::new_all();
+    let mut sys = system().lock().unwrap();
     sys.refresh_all();
 
     let total_memory_gb = sys.total_memory() as f64 / 1073741824.0;
@@ -138,7 +148,7 @@ pub fn get_system_info() -> SystemInfo {
 
 #[tauri::command]
 pub fn get_resource_usage() -> ResourceUsage {
-    let mut sys = System::new_all();
+    let mut sys = system().lock().unwrap();
     sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::everything());
     sys.refresh_memory();
 
