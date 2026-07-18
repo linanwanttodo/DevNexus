@@ -11,12 +11,29 @@ use axum::{
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-async fn mock_openai_chat(Json(body): Json<serde_json::Value>) -> impl IntoResponse {
+async fn mock_openai_chat(Json(body): Json<serde_json::Value>) -> axum::response::Response {
     let model = body
         .get("model")
         .and_then(|m| m.as_str())
         .unwrap_or("mock-gpt")
         .to_string();
+
+    // 如果是流式请求，返回 SSE 格式
+    if body.get("stream").and_then(|s| s.as_bool()).unwrap_or(false) {
+        let sse = format!(
+            "data: {}\ndata: {}\ndata: {}\ndata: {}\ndata: [DONE]\n",
+            serde_json::json!({"id":"chatcmpl-sse","object":"chat.completion.chunk","created":1,"model":model,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}),
+            serde_json::json!({"id":"chatcmpl-sse","object":"chat.completion.chunk","created":1,"model":model,"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}),
+            serde_json::json!({"id":"chatcmpl-sse","object":"chat.completion.chunk","created":1,"model":model,"choices":[{"index":0,"delta":{"content":" world"},"finish_reason":null}]}),
+            serde_json::json!({"id":"chatcmpl-sse","object":"chat.completion.chunk","created":1,"model":model,"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}),
+        );
+        let body = axum::body::Body::from(sse);
+        return axum::response::Response::builder()
+            .header("content-type", "text/event-stream")
+            .body(body)
+            .unwrap();
+    }
+
     Json(serde_json::json!({
         "id": "chatcmpl-mock",
         "object": "chat.completion",
@@ -29,6 +46,7 @@ async fn mock_openai_chat(Json(body): Json<serde_json::Value>) -> impl IntoRespo
         }],
         "usage": {"prompt_tokens": 3, "completion_tokens": 5, "total_tokens": 8}
     }))
+    .into_response()
 }
 
 async fn mock_anthropic_messages(Json(body): Json<serde_json::Value>) -> impl IntoResponse {
@@ -37,7 +55,6 @@ async fn mock_anthropic_messages(Json(body): Json<serde_json::Value>) -> impl In
         .and_then(|m| m.as_str())
         .unwrap_or("mock-claude")
         .to_string();
-    // 验证 OpenAI→Anthropic 转换后至少有 messages
     assert!(
         body.get("messages").and_then(|m| m.as_array()).is_some(),
         "anthropic mock expected messages field, got {}",
@@ -102,7 +119,6 @@ async fn spawn_mock_upstream() -> (SocketAddr, tokio::task::JoinHandle<()>) {
     let app = Router::new()
         .route("/v1/chat/completions", post(mock_openai_chat))
         .route("/v1/messages", post(mock_anthropic_messages))
-        // 路径段为 `gemini-mock:generateContent`（冒号在段内）
         .route("/v1/models/:model_action", post(mock_gemini))
         .route("/v1/responses", post(mock_openai_responses))
         .route("/health", get(|| async { "ok" }));
@@ -123,7 +139,6 @@ fn test_state(upstream: &str) -> AppState {
         db,
     };
 
-    // 不走 SQLite，直接内存注入 provider
     let providers = vec![
         Provider {
             id: "p-openai".into(),
@@ -131,7 +146,7 @@ fn test_state(upstream: &str) -> AppState {
             protocol: ApiProtocol::OpenAIChat,
             base_url: format!("http://{}", upstream),
             api_key: "sk-test".into(),
-            models: vec!["mock-gpt".into()],
+            models: vec!["mock-gpt".into(), "mock-sse".into()],
             model_aliases: Default::default(),
             enabled: true,
             created_at: 0,
@@ -172,7 +187,6 @@ fn test_state(upstream: &str) -> AppState {
     ];
 
     *state.providers.write().unwrap() = providers;
-    // 绕过 init_db；usage log 可能写 db，forwarder 在 db 为 None 时应安全
     let _ = provider::init_db(&state);
     state
 }
@@ -184,7 +198,6 @@ async fn spawn_hub(state: AppState) -> (SocketAddr, tokio::task::JoinHandle<()>)
     let handle = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
-    // 给一点时间监听就绪
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     (addr, handle)
 }
@@ -352,4 +365,29 @@ async fn e2e_missing_model_returns_400() {
     )
     .await;
     assert_eq!(status, 400, "{:?}", body);
+}
+
+#[tokio::test]
+async fn e2e_streaming_chat() {
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://{}/v1/chat/completions", hub))
+        .json(&serde_json::json!({
+            "model": "mock-sse",
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status().as_u16(), 200);
+    let body = resp.text().await.unwrap_or_default();
+    assert!(!body.is_empty(), "SSE body should not be empty");
+    assert!(body.contains("data: [DONE]"), "SSE should end with [DONE], got: {}", &body[..body.len().min(200)]);
+    assert!(body.contains("Hello"), "SSE should contain Hello");
 }
