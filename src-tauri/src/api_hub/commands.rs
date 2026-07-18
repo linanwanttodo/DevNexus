@@ -13,12 +13,12 @@ pub fn api_hub_list_providers(state: State<'_, AppState>) -> Result<Vec<Provider
 
 #[tauri::command]
 pub fn api_hub_add_provider(state: State<'_, AppState>, provider: Provider) -> Result<(), String> {
-    super::provider::add_provider(&state.inner(), provider)
+    super::provider::add_provider(state.inner(), provider)
 }
 
 #[tauri::command]
 pub fn api_hub_delete_provider(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    super::provider::delete_provider(&state.inner(), &id)
+    super::provider::delete_provider(state.inner(), &id)
 }
 
 #[tauri::command]
@@ -27,7 +27,7 @@ pub fn api_hub_update_provider(
     id: String,
     provider: Provider,
 ) -> Result<(), String> {
-    super::provider::update_provider(&state.inner(), &id, provider)
+    super::provider::update_provider(state.inner(), &id, provider)
 }
 
 // ── Usage & Logs ──────────────────────────────────────────────
@@ -38,14 +38,14 @@ pub fn api_hub_get_logs(
     limit: Option<usize>,
     offset: Option<usize>,
 ) -> Vec<super::types::RequestLog> {
-    super::usage::get_logs(&state.inner(), limit.unwrap_or(50), offset.unwrap_or(0))
+    super::usage::get_logs(state.inner(), limit.unwrap_or(50), offset.unwrap_or(0))
 }
 
 #[tauri::command]
 pub fn api_hub_get_usage_stats(
     state: State<'_, AppState>,
 ) -> super::usage::UsageStats {
-    super::usage::get_usage_stats(&state.inner())
+    super::usage::get_usage_stats(state.inner())
 }
 
 // ── Server Status ─────────────────────────────────────────────
@@ -67,7 +67,7 @@ pub async fn api_hub_fetch_models(
     api_key: String,
     protocol: String,
 ) -> Result<Vec<FetchedModel>, String> {
-    let pt = super::types::ApiProtocol::from_str(&protocol)
+    let pt = super::types::ApiProtocol::from_protocol_str(&protocol)
         .ok_or_else(|| format!("Unknown protocol: {}", protocol))?;
     super::fetch_models::fetch_models_from_provider(&base_url, &api_key, &pt).await
 }

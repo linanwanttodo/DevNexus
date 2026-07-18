@@ -220,7 +220,7 @@ fn list_node_versions() -> Vec<VersionInfo> {
         let current_ver = current
             .rsplit('/')
             .next()
-            .and_then(|s| if s.starts_with('v') { Some(s) } else { None })
+            .filter(|&s| s.starts_with('v'))
             .or_else(|| {
                 if current.starts_with('v') {
                     Some(current)

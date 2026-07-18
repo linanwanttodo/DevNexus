@@ -85,11 +85,10 @@ pub fn get_usage_stats(state: &AppState) -> UsageStats {
         }
     }
 
-    stats.avg_latency_ms = if stats.total_requests > 0 {
-        stats.total_latency_ms / stats.total_requests as u64
-    } else {
-        0
-    };
+    stats.avg_latency_ms = stats
+        .total_latency_ms
+        .checked_div(stats.total_requests.max(1))
+        .unwrap_or(0);
 
     stats
 }

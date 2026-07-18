@@ -101,7 +101,7 @@ pub fn load_providers_from_db(state: &AppState) {
             let rows: Vec<Provider> = stmt
                 .query_map([], |row| {
                     let protocol_str: String = row.get(2)?;
-                    let protocol = ApiProtocol::from_str(&protocol_str)
+                    let protocol = ApiProtocol::from_protocol_str(&protocol_str)
                         .unwrap_or(ApiProtocol::OpenAIChat);
                     let models_str: String = row.get(5)?;
                     let models: Vec<String> =
