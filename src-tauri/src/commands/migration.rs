@@ -189,3 +189,37 @@ pub fn import_migration(
 
     Ok(result)
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_manifest_roundtrip() {
+        let json = r#"{
+            "meta": {
+                "exported_at": "2026-01-01T00:00:00Z",
+                "devnexus_version": "1.1.1",
+                "source_os": "linux",
+                "hostname": "test"
+            },
+            "environments": [{
+                "name": "Python",
+                "lang_type": "python",
+                "version": "3.12",
+                "path": "/usr/bin/python",
+                "shell_config": null
+            }],
+            "versions": [{"lang_type": "python", "version": "3.12.0"}]
+        }"#;
+        let m = parse_migration_manifest(json.to_string()).unwrap();
+        assert_eq!(m.environments.len(), 1);
+        assert_eq!(m.versions[0].version, "3.12.0");
+    }
+
+    #[test]
+    fn test_parse_empty_fails() {
+        assert!(parse_migration_manifest("".into()).is_err());
+    }
+}

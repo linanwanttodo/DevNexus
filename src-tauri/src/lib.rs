@@ -1,4 +1,4 @@
-mod api_hub;
+pub mod api_hub;
 mod commands;
 mod residue_scanner;
 mod utils;
