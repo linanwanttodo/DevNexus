@@ -13,9 +13,18 @@ use types::AppState;
 
 /// 初始化 API Hub：创建共享状态
 pub fn init(data_dir: &std::path::Path) -> AppState {
-    // 初始化 SQLite
+    // 初始化 SQLite（目录由 data_dir() 保证存在）
     let db_path = data_dir.join("api_hub.db");
-    let conn = rusqlite::Connection::open(&db_path).ok();
+    let conn = match rusqlite::Connection::open(&db_path) {
+        Ok(c) => Some(c),
+        Err(e) => {
+            eprintln!(
+                "[API Hub] Failed to open database {:?}: {} (providers will not persist)",
+                db_path, e
+            );
+            None
+        }
+    };
     let db = Arc::new(std::sync::Mutex::new(conn));
 
     let state = AppState {

@@ -1,5 +1,5 @@
 pub fn data_dir() -> std::path::PathBuf {
-    if cfg!(target_os = "macos") {
+    let dir = if cfg!(target_os = "macos") {
         std::env::var("HOME")
             .map(|h| std::path::PathBuf::from(h).join("Library/Application Support/devnexus"))
             .unwrap_or_else(|_| std::path::PathBuf::from("."))
@@ -15,7 +15,14 @@ pub fn data_dir() -> std::path::PathBuf {
                     .map(|h| std::path::PathBuf::from(h).join(".local/share/devnexus"))
             })
             .unwrap_or_else(|_| std::path::PathBuf::from("."))
+    };
+
+    // SQLite / 配置写入前确保目录存在；失败时回退到当前目录
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("[DevNexus] Warning: cannot create data dir {:?}: {}", dir, e);
+        return std::path::PathBuf::from(".");
     }
+    dir
 }
 
 pub fn user_home() -> String {
