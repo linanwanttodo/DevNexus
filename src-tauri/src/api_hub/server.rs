@@ -111,7 +111,11 @@ async fn anthropic_messages_handler(
 
 /// 统一的请求处理流程：
 /// 客户端格式 → 内部 OpenAIChat → Provider 协议 → 转发 → Provider 响应 → 内部 → 客户端格式
-async fn handle_unified(state: Arc<AppState>, body: serde_json::Value, client: ClientFormat) -> Response {
+async fn handle_unified(
+    state: Arc<AppState>,
+    body: serde_json::Value,
+    client: ClientFormat,
+) -> Response {
     let model = body
         .get("model")
         .and_then(|m| m.as_str())
@@ -129,7 +133,10 @@ async fn handle_unified(state: Arc<AppState>, body: serde_json::Value, client: C
         }
     };
 
-    let is_streaming = body.get("stream").and_then(|s| s.as_bool()).unwrap_or(false);
+    let is_streaming = body
+        .get("stream")
+        .and_then(|s| s.as_bool())
+        .unwrap_or(false);
 
     // 1. 客户端格式 → 内部 OpenAIChat 格式
     let internal_req = match client_request_to_internal(client, &body) {
@@ -152,7 +159,12 @@ async fn handle_unified(state: Arc<AppState>, body: serde_json::Value, client: C
 
     // Gemini 请求体无 model 字段，注入以便 forwarder 构建 URL / 记日志
     let mut upstream_body = upstream_body;
-    if !upstream_body.get("model").and_then(|m| m.as_str()).map(|s| !s.is_empty()).unwrap_or(false) {
+    if !upstream_body
+        .get("model")
+        .and_then(|m| m.as_str())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false)
+    {
         upstream_body["model"] = serde_json::Value::String(route.model.clone());
     }
 
@@ -161,17 +173,13 @@ async fn handle_unified(state: Arc<AppState>, body: serde_json::Value, client: C
     }
 
     // 3. 转发到上游
-    let (resp_body, _status) = match super::forwarder::forward_request(
-        &state,
-        &route.provider,
-        &endpoint,
-        upstream_body,
-    )
-    .await
-    {
-        Ok(r) => r,
-        Err(e) => return error_response(502, &e),
-    };
+    let (resp_body, _status) =
+        match super::forwarder::forward_request(&state, &route.provider, &endpoint, upstream_body)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => return error_response(502, &e),
+        };
 
     // 4. Provider 响应 → 内部 OpenAIChat
     let internal_resp = match provider_response_to_internal(&resp_body, &route) {
@@ -212,7 +220,10 @@ async fn list_models_handler(State(state): State<Arc<AppState>>) -> Json<serde_j
 // ── Format conversion ─────────────────────────────────────────
 
 /// 客户端请求 → 内部 OpenAIChat 格式
-fn client_request_to_internal(client: ClientFormat, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+fn client_request_to_internal(
+    client: ClientFormat,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
     match client {
         ClientFormat::OpenAIChat => Ok(body.clone()),
         ClientFormat::OpenAIResponses => Ok(super::transform::responses::responses_to_chat(body)),
@@ -226,12 +237,17 @@ fn client_request_to_internal(client: ClientFormat, body: &serde_json::Value) ->
 }
 
 /// 内部 OpenAIChat 请求 → Provider 协议格式
-fn internal_request_to_provider(internal: &serde_json::Value, route: &RouteResult) -> Result<serde_json::Value, String> {
+fn internal_request_to_provider(
+    internal: &serde_json::Value,
+    route: &RouteResult,
+) -> Result<serde_json::Value, String> {
     match route.provider.protocol {
         ApiProtocol::OpenAIChat | ApiProtocol::Ollama => Ok(internal.clone()),
         ApiProtocol::OpenAIResponses => {
             // 请求方向：chat → responses request（不是响应转换）
-            Ok(super::transform::responses::chat_request_to_responses(internal))
+            Ok(super::transform::responses::chat_request_to_responses(
+                internal,
+            ))
         }
         ApiProtocol::Anthropic => {
             let oai: super::types::OpenAIChatRequest = serde_json::from_value(internal.clone())
@@ -244,19 +260,26 @@ fn internal_request_to_provider(internal: &serde_json::Value, route: &RouteResul
 }
 
 /// Provider 响应 → 内部 OpenAIChat 格式
-fn provider_response_to_internal(resp: &serde_json::Value, route: &RouteResult) -> Result<serde_json::Value, String> {
+fn provider_response_to_internal(
+    resp: &serde_json::Value,
+    route: &RouteResult,
+) -> Result<serde_json::Value, String> {
     match route.provider.protocol {
         ApiProtocol::OpenAIChat | ApiProtocol::Ollama => Ok(resp.clone()),
-        ApiProtocol::OpenAIResponses => {
-            Ok(super::transform::responses::responses_to_chat_response(resp, &route.model))
-        }
+        ApiProtocol::OpenAIResponses => Ok(
+            super::transform::responses::responses_to_chat_response(resp, &route.model),
+        ),
         ApiProtocol::Anthropic => {
             let anth: super::types::AnthropicResponse = serde_json::from_value(resp.clone())
                 .map_err(|e| format!("Invalid Anthropic response: {}", e))?;
-            let oai = super::transform::anthropic::anthropic_to_openai(&anth.id, &route.model, &anth);
+            let oai =
+                super::transform::anthropic::anthropic_to_openai(&anth.id, &route.model, &anth);
             serde_json::to_value(oai).map_err(|e| format!("Serialization error: {}", e))
         }
-        ApiProtocol::Gemini => Ok(super::transform::gemini::gemini_to_openai(resp, &route.model)),
+        ApiProtocol::Gemini => Ok(super::transform::gemini::gemini_to_openai(
+            resp,
+            &route.model,
+        )),
     }
 }
 
@@ -268,9 +291,9 @@ fn internal_response_to_client(
 ) -> Result<serde_json::Value, String> {
     match client {
         ClientFormat::OpenAIChat => Ok(internal.clone()),
-        ClientFormat::OpenAIResponses => {
-            Ok(super::transform::responses::chat_to_responses(internal, model))
-        }
+        ClientFormat::OpenAIResponses => Ok(super::transform::responses::chat_to_responses(
+            internal, model,
+        )),
         ClientFormat::Anthropic => Ok(super::transform::anthropic::openai_response_to_anthropic(
             internal, model,
         )),
@@ -288,7 +311,8 @@ fn error_response(status: u16, message: &str) -> Response {
         }
     });
     (
-        axum::http::StatusCode::from_u16(status).unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
+        axum::http::StatusCode::from_u16(status)
+            .unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
         Json(body),
     )
         .into_response()
@@ -301,12 +325,16 @@ async fn handle_streaming(
     endpoint: &str,
     upstream_body: serde_json::Value,
 ) -> Response {
-    let resp = match super::forwarder::forward_streaming(state, &route.provider, endpoint, upstream_body).await {
-        Ok(r) => r,
-        Err(e) => return error_response(502, &e),
-    };
+    let resp =
+        match super::forwarder::forward_streaming(state, &route.provider, endpoint, upstream_body)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => return error_response(502, &e),
+        };
 
-    let status = axum::http::StatusCode::from_u16(resp.status().as_u16()).unwrap_or(axum::http::StatusCode::OK);
+    let status = axum::http::StatusCode::from_u16(resp.status().as_u16())
+        .unwrap_or(axum::http::StatusCode::OK);
     let headers = resp.headers().clone();
 
     let stream = resp.bytes_stream().map_err(|e| {
@@ -325,5 +353,7 @@ async fn handle_streaming(
         response_builder = response_builder.header("Content-Type", content_type);
     }
 
-    response_builder.body(body).unwrap_or_else(|_| error_response(500, "Stream build error"))
+    response_builder
+        .body(body)
+        .unwrap_or_else(|_| error_response(500, "Stream build error"))
 }

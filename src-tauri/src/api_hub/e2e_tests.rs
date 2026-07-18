@@ -218,7 +218,11 @@ async fn e2e_health_and_models() {
         .await
         .unwrap();
     let data = models["data"].as_array().unwrap();
-    assert!(data.len() >= 4, "expected registered models, got {:?}", data);
+    assert!(
+        data.len() >= 4,
+        "expected registered models, got {:?}",
+        data
+    );
 }
 
 #[tokio::test]

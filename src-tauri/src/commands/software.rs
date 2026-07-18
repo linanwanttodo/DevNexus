@@ -1753,20 +1753,18 @@ pub async fn install_software_from_url(
                     .map_err(|e| format!("Failed to read zip entry: {}", e))?;
                 // 防止 zip-slip 路径穿越
                 let entry_name = entry.name().replace('\\', "/");
-                let sanitized = entry_name
-                    .split('/')
-                    .fold(String::new(), |acc, part| {
-                        if part == ".." {
-                            // 忽略向上的路径遍历
-                            acc
-                        } else if part == "." || part.is_empty() {
-                            acc
-                        } else if acc.is_empty() {
-                            part.to_string()
-                        } else {
-                            format!("{}/{}", acc, part)
-                        }
-                    });
+                let sanitized = entry_name.split('/').fold(String::new(), |acc, part| {
+                    if part == ".." {
+                        // 忽略向上的路径遍历
+                        acc
+                    } else if part == "." || part.is_empty() {
+                        acc
+                    } else if acc.is_empty() {
+                        part.to_string()
+                    } else {
+                        format!("{}/{}", acc, part)
+                    }
+                });
                 let outpath = install_dir.join(&sanitized);
                 // 确保路径没有逃逸出 install_dir
                 if !outpath.starts_with(&install_dir) {

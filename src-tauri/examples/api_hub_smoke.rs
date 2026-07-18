@@ -4,7 +4,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 async fn mock_chat(Json(body): Json<serde_json::Value>) -> impl IntoResponse {
-    let model = body.get("model").and_then(|m| m.as_str()).unwrap_or("smoke");
+    let model = body
+        .get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or("smoke");
     Json(serde_json::json!({
         "id": "chatcmpl-smoke",
         "object": "chat.completion",

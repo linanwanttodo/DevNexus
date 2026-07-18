@@ -19,7 +19,10 @@ pub async fn fetch_models_from_provider(
 }
 
 /// OpenAI 风格的 /v1/models 端点（OpenAI / Anthropic 兼容）
-async fn fetch_openai_style_models(base_url: &str, api_key: &str) -> Result<Vec<FetchedModel>, String> {
+async fn fetch_openai_style_models(
+    base_url: &str,
+    api_key: &str,
+) -> Result<Vec<FetchedModel>, String> {
     let url = format!("{}/v1/models", base_url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
@@ -37,7 +40,10 @@ async fn fetch_openai_style_models(base_url: &str, api_key: &str) -> Result<Vec<
             .header("anthropic-version", "2023-06-01");
     }
 
-    let resp = req.send().await.map_err(|e| format!("Request failed: {}", e))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
     let status = resp.status();
 
     if status.is_success() {
@@ -127,10 +133,35 @@ fn parse_models_response(body: &serde_json::Value) -> Vec<FetchedModel> {
 /// 预设的 Gemini 模型列表
 fn predefined_gemini_models() -> Vec<FetchedModel> {
     vec![
-        FetchedModel { id: "gemini-2.0-flash".to_string(), name: "Gemini 2.0 Flash".to_string(), owned_by: Some("Google".to_string()), enabled: true },
-        FetchedModel { id: "gemini-2.0-flash-lite".to_string(), name: "Gemini 2.0 Flash Lite".to_string(), owned_by: Some("Google".to_string()), enabled: true },
-        FetchedModel { id: "gemini-1.5-pro".to_string(), name: "Gemini 1.5 Pro".to_string(), owned_by: Some("Google".to_string()), enabled: true },
-        FetchedModel { id: "gemini-1.5-flash".to_string(), name: "Gemini 1.5 Flash".to_string(), owned_by: Some("Google".to_string()), enabled: true },
-        FetchedModel { id: "gemini-2.5-pro-preview-06-05".to_string(), name: "Gemini 2.5 Pro Preview".to_string(), owned_by: Some("Google".to_string()), enabled: true },
+        FetchedModel {
+            id: "gemini-2.0-flash".to_string(),
+            name: "Gemini 2.0 Flash".to_string(),
+            owned_by: Some("Google".to_string()),
+            enabled: true,
+        },
+        FetchedModel {
+            id: "gemini-2.0-flash-lite".to_string(),
+            name: "Gemini 2.0 Flash Lite".to_string(),
+            owned_by: Some("Google".to_string()),
+            enabled: true,
+        },
+        FetchedModel {
+            id: "gemini-1.5-pro".to_string(),
+            name: "Gemini 1.5 Pro".to_string(),
+            owned_by: Some("Google".to_string()),
+            enabled: true,
+        },
+        FetchedModel {
+            id: "gemini-1.5-flash".to_string(),
+            name: "Gemini 1.5 Flash".to_string(),
+            owned_by: Some("Google".to_string()),
+            enabled: true,
+        },
+        FetchedModel {
+            id: "gemini-2.5-pro-preview-06-05".to_string(),
+            name: "Gemini 2.5 Pro Preview".to_string(),
+            owned_by: Some("Google".to_string()),
+            enabled: true,
+        },
     ]
 }

@@ -38,7 +38,10 @@ pub fn route_by_model(state: &AppState, model: &str) -> Option<RouteResult> {
             ApiProtocol::Ollama => &[],
         };
 
-        if known_prefixes.iter().any(|prefix| model_lower.starts_with(prefix)) {
+        if known_prefixes
+            .iter()
+            .any(|prefix| model_lower.starts_with(prefix))
+        {
             return Some(RouteResult {
                 provider: p.clone(),
                 model: model.to_string(),
@@ -67,7 +70,8 @@ fn join_path(base: &str, endpoint: &str) -> String {
     // 如果 endpoint 以 base 最后一段开头，说明重复了：取 base + endpoint - overlap
     // 例: base=/api/v1, endpoint=v1/chat → /api/v1/chat
     let base_last = base.rsplit('/').next().unwrap_or("");
-    if !base_last.is_empty() && endpoint.starts_with(base_last) && base != "http" && base != "https" {
+    if !base_last.is_empty() && endpoint.starts_with(base_last) && base != "http" && base != "https"
+    {
         // 跳过 endpoint 中的重叠前缀
         let rest = &endpoint[base_last.len()..]; // "v1/chat" → "/chat"
         let rest = rest.trim_start_matches('/');

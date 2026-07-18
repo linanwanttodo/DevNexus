@@ -24,9 +24,9 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
-    .manage(password_manager)
-    .manage(version_cache)
-    .manage(api_hub_state)
+        .manage(password_manager)
+        .manage(version_cache)
+        .manage(api_hub_state)
         .setup(move |app| {
             // 启动 API Hub 后台服务
             let state = app.state::<api_hub::types::AppState>();

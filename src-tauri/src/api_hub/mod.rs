@@ -40,7 +40,13 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
     provider::load_providers_from_db(&state);
 
     // 如果没有 Provider，添加默认的 Ollama（自动检测）
-    if state.providers.read().ok().map(|p| p.is_empty()).unwrap_or(true) {
+    if state
+        .providers
+        .read()
+        .ok()
+        .map(|p| p.is_empty())
+        .unwrap_or(true)
+    {
         let ollama_running = std::net::TcpStream::connect_timeout(
             &"127.0.0.1:11434".parse().unwrap(),
             std::time::Duration::from_millis(500),
@@ -48,21 +54,24 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
         .is_ok();
 
         if ollama_running {
-            let _ = provider::add_provider(&state, types::Provider {
-                id: uuid::Uuid::new_v4().to_string(),
-                name: "Ollama (Local)".to_string(),
-                protocol: types::ApiProtocol::Ollama,
-                base_url: "http://localhost:11434".to_string(),
-                api_key: String::new(),
-                models: vec![
-                    "llama3.2".to_string(),
-                    "qwen2.5".to_string(),
-                    "nomic-embed-text".to_string(),
-                ],
-                model_aliases: std::collections::HashMap::new(),
-                enabled: true,
-                created_at: chrono::Utc::now().timestamp(),
-            });
+            let _ = provider::add_provider(
+                &state,
+                types::Provider {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    name: "Ollama (Local)".to_string(),
+                    protocol: types::ApiProtocol::Ollama,
+                    base_url: "http://localhost:11434".to_string(),
+                    api_key: String::new(),
+                    models: vec![
+                        "llama3.2".to_string(),
+                        "qwen2.5".to_string(),
+                        "nomic-embed-text".to_string(),
+                    ],
+                    model_aliases: std::collections::HashMap::new(),
+                    enabled: true,
+                    created_at: chrono::Utc::now().timestamp(),
+                },
+            );
             println!("[API Hub] Auto-detected Ollama running at localhost:11434");
         }
     }

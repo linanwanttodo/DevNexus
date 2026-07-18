@@ -9,10 +9,7 @@ pub async fn forward_request(
     endpoint: &str,
     body: serde_json::Value,
 ) -> Result<(serde_json::Value, u16), String> {
-    let model = body
-        .get("model")
-        .and_then(|m| m.as_str())
-        .unwrap_or("");
+    let model = body.get("model").and_then(|m| m.as_str()).unwrap_or("");
     let url = build_upstream_url(provider, endpoint, model);
     let start = Instant::now();
 
@@ -49,8 +46,8 @@ pub async fn forward_request(
         }
         ApiProtocol::OpenAIChat | ApiProtocol::OpenAIResponses => {
             if !provider.api_key.is_empty() {
-                req_builder = req_builder
-                    .header("Authorization", format!("Bearer {}", provider.api_key));
+                req_builder =
+                    req_builder.header("Authorization", format!("Bearer {}", provider.api_key));
             }
         }
         ApiProtocol::Gemini | ApiProtocol::Ollama => {
@@ -80,7 +77,14 @@ pub async fn forward_request(
     let json: serde_json::Value = match resp.json().await {
         Ok(j) => j,
         Err(e) => {
-            log_error(state, provider, &body, elapsed, status, Some(&e.to_string()));
+            log_error(
+                state,
+                provider,
+                &body,
+                elapsed,
+                status,
+                Some(&e.to_string()),
+            );
             return Err(format!("Failed to parse response: {}", e));
         }
     };
@@ -119,7 +123,10 @@ fn log_success(
         status_code,
         error_message: None,
         timestamp: chrono::Utc::now().timestamp(),
-        is_streaming: req_body.get("stream").and_then(|s| s.as_bool()).unwrap_or(false),
+        is_streaming: req_body
+            .get("stream")
+            .and_then(|s| s.as_bool())
+            .unwrap_or(false),
     };
 
     super::usage::log_request(state, log);
@@ -196,10 +203,7 @@ pub async fn forward_streaming(
     body: serde_json::Value,
 ) -> Result<reqwest::Response, String> {
     // Gemini body 无 model 字段，优先用调用方 endpoint 模板中的模型
-    let model = body
-        .get("model")
-        .and_then(|m| m.as_str())
-        .unwrap_or("");
+    let model = body.get("model").and_then(|m| m.as_str()).unwrap_or("");
     let url = build_upstream_url(provider, endpoint, model);
     let start = Instant::now();
 
@@ -232,8 +236,8 @@ pub async fn forward_streaming(
         }
         ApiProtocol::OpenAIChat | ApiProtocol::OpenAIResponses => {
             if !provider.api_key.is_empty() {
-                req_builder = req_builder
-                    .header("Authorization", format!("Bearer {}", provider.api_key));
+                req_builder =
+                    req_builder.header("Authorization", format!("Bearer {}", provider.api_key));
             }
         }
         ApiProtocol::Gemini | ApiProtocol::Ollama => {}
@@ -247,7 +251,14 @@ pub async fn forward_streaming(
 
     let elapsed = start.elapsed().as_millis() as u64;
     if resp.status().as_u16() >= 400 {
-        log_error(state, provider, &body, elapsed, resp.status().as_u16(), None);
+        log_error(
+            state,
+            provider,
+            &body,
+            elapsed,
+            resp.status().as_u16(),
+            None,
+        );
         return Err(format!("Upstream error: {}", resp.status()));
     }
 
