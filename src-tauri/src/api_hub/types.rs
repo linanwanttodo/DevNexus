@@ -89,7 +89,6 @@ impl ApiProtocol {
             ApiProtocol::Gemini => TokenScheme::None,
         }
     }
-
 }
 
 // ── API Request/Response formats ──────────────────────────────

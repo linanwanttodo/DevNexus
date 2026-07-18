@@ -104,8 +104,7 @@ pub fn load_providers_from_db(state: &AppState) {
                     let protocol = ApiProtocol::from_protocol_str(&protocol_str)
                         .unwrap_or(ApiProtocol::OpenAIChat);
                     let models_str: String = row.get(5)?;
-                    let models: Vec<String> =
-                        serde_json::from_str(&models_str).unwrap_or_default();
+                    let models: Vec<String> = serde_json::from_str(&models_str).unwrap_or_default();
                     let aliases_str: String = row.get(6).unwrap_or_else(|_| "{}".to_string());
                     let model_aliases: std::collections::HashMap<String, String> =
                         serde_json::from_str(&aliases_str).unwrap_or_default();

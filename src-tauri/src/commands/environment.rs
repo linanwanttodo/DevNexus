@@ -254,8 +254,7 @@ fn add_to_path_impl(env_name: &str, path: &str) -> Result<String, String> {
     }
 
     let existing = std::fs::read_to_string(&rc_path).unwrap_or_default();
-    std::fs::write(&rc_path, format!("{}{}", existing, export_line))
-        .map_err(|e| e.to_string())?;
+    std::fs::write(&rc_path, format!("{}{}", existing, export_line)).map_err(|e| e.to_string())?;
 
     Ok(format!("Added {} to PATH in {}", env_name, rc_file))
 }

@@ -1,6 +1,6 @@
 use super::types::AppState;
-use super::types::Provider;
 use super::types::FetchedModel;
+use super::types::Provider;
 use tauri::State;
 
 // ── Provider Management ───────────────────────────────────────
@@ -42,9 +42,7 @@ pub fn api_hub_get_logs(
 }
 
 #[tauri::command]
-pub fn api_hub_get_usage_stats(
-    state: State<'_, AppState>,
-) -> super::usage::UsageStats {
+pub fn api_hub_get_usage_stats(state: State<'_, AppState>) -> super::usage::UsageStats {
     super::usage::get_usage_stats(state.inner())
 }
 

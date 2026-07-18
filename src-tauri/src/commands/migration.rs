@@ -190,7 +190,6 @@ pub fn import_migration(
     Ok(result)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

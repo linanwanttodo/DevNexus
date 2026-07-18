@@ -176,7 +176,11 @@ pub fn openai_to_anthropic_response(resp: &OpenAIChatResponse) -> AnthropicRespo
         .map(|c| extract_text_content(&c.message.content))
         .unwrap_or_default();
     let input_tokens = resp.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0);
-    let output_tokens = resp.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0);
+    let output_tokens = resp
+        .usage
+        .as_ref()
+        .map(|u| u.completion_tokens)
+        .unwrap_or(0);
     let stop_reason = resp
         .choices
         .first()

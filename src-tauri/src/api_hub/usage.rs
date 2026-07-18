@@ -69,7 +69,10 @@ pub fn get_usage_stats(state: &AppState) -> UsageStats {
         }
 
         // 按模型聚合
-        let entry = stats.by_model.entry(log.model.clone()).or_insert(ModelStats::default());
+        let entry = stats
+            .by_model
+            .entry(log.model.clone())
+            .or_insert(ModelStats::default());
         entry.requests += 1;
         entry.input_tokens += log.input_tokens;
         entry.output_tokens += log.output_tokens;
@@ -78,7 +81,10 @@ pub fn get_usage_stats(state: &AppState) -> UsageStats {
         let secs_ago = now - log.timestamp;
         if secs_ago < 86400 {
             let hour_key = (log.timestamp / 3600) * 3600;
-            let h_entry = stats.by_hour.entry(hour_key).or_insert(HourlyStats::default());
+            let h_entry = stats
+                .by_hour
+                .entry(hour_key)
+                .or_insert(HourlyStats::default());
             h_entry.requests += 1;
             h_entry.input_tokens += log.input_tokens;
             h_entry.output_tokens += log.output_tokens;
