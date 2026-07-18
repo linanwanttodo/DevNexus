@@ -3,7 +3,8 @@
   "error": {
     "title": "错误",
     "reload": "重新加载",
-    "dismiss": "关闭"
+    "dismiss": "关闭",
+    "details": "错误详情"
   },
   "version": "版本",
   "search": "搜索...",
@@ -117,7 +118,9 @@
     "docker": "Docker Hub",
     "cargo": "Cargo (Rust)",
     "brew": "Homebrew",
-    "composer": "Composer (PHP)"
+    "composer": "Composer (PHP)",
+    "description": "选择镜像源以加速软件包下载",
+    "recommended": "推荐"
   },
   "environments": {
     "title": "环境管理",
@@ -174,7 +177,9 @@
     "uninstall_data_confirm": "是否同时删除 {name} 的配置和缓存数据？",
     "deep_uninstall_success": "已卸载并清理相关数据",
     "cli_code": "CLI Code",
-    "cli_code_desc": "AI 编码助手 — 点击复制 npm 命令手动安装"
+    "cli_code_desc": "AI 编码助手 — 点击复制 npm 命令手动安装",
+    "none": "暂无软件",
+    "none_hint": "没有匹配的分类或搜索条件的软件"
   },
   "passwords": {
     "title": "密码管理",
@@ -335,7 +340,12 @@
     "type_data": "数据",
     "type_shortcut": "快捷方式",
     "type_service": "系统服务",
-    "type_registry": "注册表"
+    "type_registry": "注册表",
+    "category_cache": "缓存",
+    "category_config": "配置",
+    "category_log": "日志",
+    "category_temp": "临时文件",
+    "category_other": "其他"
   },
   "docker": {
     "tab_containers": "容器",

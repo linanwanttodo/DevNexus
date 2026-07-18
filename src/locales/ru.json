@@ -3,7 +3,8 @@
   "error": {
     "title": "Ошибка",
     "reload": "Перезагрузить",
-    "dismiss": "Закрыть"
+    "dismiss": "Закрыть",
+    "details": "Детали ошибки"
   },
   "version": "Версия",
   "search": "Поиск...",
@@ -117,7 +118,9 @@
     "docker": "Docker Hub",
     "cargo": "Cargo (Rust)",
     "brew": "Homebrew",
-    "composer": "Composer (PHP)"
+    "composer": "Composer (PHP)",
+    "description": "Выберите зеркало для ускорения загрузки пакетов",
+    "recommended": "Рекомендуемый"
   },
   "environments": {
     "title": "Управление окружениями",
@@ -174,7 +177,9 @@
     "uninstall_confirm": "Uninstall {name}?",
     "deep_uninstall": "Deep Uninstall",
     "uninstall_data_confirm": "Also remove configuration and data files for {name}?",
-    "deep_uninstall_success": "Uninstalled and cleaned up data files"
+    "deep_uninstall_success": "Uninstalled and cleaned up data files",
+    "none": "Нет доступного ПО",
+    "none_hint": "Нет ПО, соответствующего фильтру или поиску"
   },
   "passwords": {
     "title": "Менеджер паролей",
@@ -470,7 +475,12 @@
     "type_data": "Данные",
     "type_shortcut": "Ярлык",
     "type_service": "Служба",
-    "type_registry": "Реестр"
+    "type_registry": "Реестр",
+    "category_cache": "Кеш",
+    "category_config": "Конфиг",
+    "category_log": "Логи",
+    "category_temp": "Временные файлы",
+    "category_other": "Другое"
   },
   "process": {
     "title": "Процессы и порты",
