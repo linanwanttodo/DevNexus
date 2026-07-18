@@ -19,7 +19,11 @@ async fn mock_openai_chat(Json(body): Json<serde_json::Value>) -> axum::response
         .to_string();
 
     // 如果是流式请求，返回 SSE 格式
-    if body.get("stream").and_then(|s| s.as_bool()).unwrap_or(false) {
+    if body
+        .get("stream")
+        .and_then(|s| s.as_bool())
+        .unwrap_or(false)
+    {
         let sse = format!(
             "data: {}\ndata: {}\ndata: {}\ndata: {}\ndata: [DONE]\n",
             serde_json::json!({"id":"chatcmpl-sse","object":"chat.completion.chunk","created":1,"model":model,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}),
@@ -388,6 +392,10 @@ async fn e2e_streaming_chat() {
     assert_eq!(resp.status().as_u16(), 200);
     let body = resp.text().await.unwrap_or_default();
     assert!(!body.is_empty(), "SSE body should not be empty");
-    assert!(body.contains("data: [DONE]"), "SSE should end with [DONE], got: {}", &body[..body.len().min(200)]);
+    assert!(
+        body.contains("data: [DONE]"),
+        "SSE should end with [DONE], got: {}",
+        &body[..body.len().min(200)]
+    );
     assert!(body.contains("Hello"), "SSE should contain Hello");
 }
