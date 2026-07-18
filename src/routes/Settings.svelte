@@ -110,7 +110,7 @@
   });
 </script>
 
-<div class="flex h-full flex-col">
+<div class="nx-page flex h-full flex-col">
   <!-- Header with back button -->
   <div class="flex items-center gap-2 border-b border-nx-border px-5 py-2.5">
     <button class="nx-back-btn" onclick={() => navigate("/dashboard")}>
@@ -136,20 +136,20 @@
               <div class="text-sm text-nx-text">{t("settings.theme")}</div>
               <div class="text-xs text-nx-text-muted">{t("settings.theme_desc")}</div>
             </div>
-            <div class="flex rounded-lg border border-nx-border overflow-hidden">
+            <div class="flex rounded-md border border-nx-border overflow-hidden bg-nx-raised">
               <button
-                class="px-3 py-1.5 text-xs font-medium transition-colors {theme === 'light' ? 'bg-nx-raised text-nx-text' : 'text-nx-text-secondary hover:text-nx-text'}"
+                class="px-3 py-1.5 text-xs font-medium transition-colors {theme === 'light' ? 'bg-nx-overlay text-nx-text shadow-sm' : 'text-nx-text-secondary hover:text-nx-text'}"
                 onclick={() => setTheme("light")}>{t("settings.light")}</button>
               <button
-                class="border-x border-nx-border px-3 py-1.5 text-xs font-medium transition-colors {theme === 'dark' ? 'bg-nx-raised text-nx-text' : 'text-nx-text-secondary hover:text-nx-text'}"
+                class="border-x border-nx-border px-3 py-1.5 text-xs font-medium transition-colors {theme === 'dark' ? 'bg-nx-overlay text-nx-text shadow-sm' : 'text-nx-text-secondary hover:text-nx-text'}"
                 onclick={() => setTheme("dark")}>{t("settings.dark")}</button>
               <button
-                class="px-3 py-1.5 text-xs font-medium transition-colors {theme === 'system' ? 'bg-nx-raised text-nx-text' : 'text-nx-text-secondary hover:text-nx-text'}"
+                class="px-3 py-1.5 text-xs font-medium transition-colors {theme === 'system' ? 'bg-nx-overlay text-nx-text shadow-sm' : 'text-nx-text-secondary hover:text-nx-text'}"
                 onclick={() => setTheme("system")}>{t("settings.system")}</button>
             </div>
           </div>
 
-          <div class="h-px bg-nx-border"></div>
+          <div class="nx-divider"></div>
 
           <!-- Compact Mode -->
           <div class="flex items-center justify-between">
@@ -160,6 +160,7 @@
             <button
               class="nx-toggle"
               role="switch"
+              aria-label={t("settings.compact_mode")}
               aria-checked={compactMode}
               onclick={() => compactMode = !compactMode}>
             </button>
@@ -201,15 +202,15 @@
               <div class="text-sm text-nx-text">{t("settings.build_alerts")}</div>
               <div class="text-xs text-nx-text-muted">{t("settings.build_alerts_desc")}</div>
             </div>
-            <button class="nx-toggle" role="switch" aria-checked={buildAlerts} onclick={() => buildAlerts = !buildAlerts}></button>
+            <button class="nx-toggle" role="switch" aria-label={t("settings.build_alerts")} aria-checked={buildAlerts} onclick={() => buildAlerts = !buildAlerts}></button>
           </div>
-          <div class="h-px bg-nx-border"></div>
+          <div class="nx-divider"></div>
           <div class="flex items-center justify-between">
             <div>
               <div class="text-sm text-nx-text">{t("settings.security_notices")}</div>
               <div class="text-xs text-nx-text-muted">{t("settings.security_notices_desc")}</div>
             </div>
-            <button class="nx-toggle" role="switch" aria-checked={securityNotices} onclick={() => securityNotices = !securityNotices}></button>
+            <button class="nx-toggle" role="switch" aria-label={t("settings.security_notices")} aria-checked={securityNotices} onclick={() => securityNotices = !securityNotices}></button>
           </div>
         </div>
       </div>
@@ -225,7 +226,7 @@
               <div class="text-sm text-nx-text">{t("settings.enable_proxy")}</div>
               <div class="text-xs text-nx-text-muted">{t("settings.enable_proxy_desc")}</div>
             </div>
-            <button class="nx-toggle" role="switch" aria-checked={proxyEnabled} onclick={() => proxyEnabled = !proxyEnabled}></button>
+            <button class="nx-toggle" role="switch" aria-label={t("settings.enable_proxy")} aria-checked={proxyEnabled} onclick={() => proxyEnabled = !proxyEnabled}></button>
           </div>
 
           {#if proxyEnabled}
@@ -260,7 +261,7 @@
               onclick={checkForUpdates}
               disabled={isState('checking') || isState('downloading')}>
               {#if isState('checking')}
-                <span class="material-symbols-outlined text-sm animate-spin">refresh</span>
+                <span class="material-symbols-outlined text-sm nx-animate-spin">refresh</span>
                 {t("settings.checking")}
               {:else}
                 {t("settings.check_updates")}
@@ -270,7 +271,7 @@
 
           <div class="mt-3">
             {#if isState('checking')}
-              <div class="flex items-center gap-2"><span class="material-symbols-outlined text-nx-text-secondary text-sm animate-spin">refresh</span><span class="text-xs text-nx-text-secondary">{t("settings.checking")}...</span></div>
+              <div class="flex items-center gap-2"><span class="material-symbols-outlined text-nx-text-secondary text-sm nx-animate-spin">refresh</span><span class="text-xs text-nx-text-secondary">{t("settings.checking")}...</span></div>
             {:else if isState('up_to_date')}
               <div class="flex items-center gap-2"><span class="material-symbols-outlined text-nx-success text-sm">check_circle</span><span class="text-xs text-nx-text-secondary">{t("settings.up_to_date")}</span></div>
             {:else if isState('available')}
@@ -290,12 +291,12 @@
             {:else if isState('downloading')}
               <div class="flex flex-col gap-2">
                 <div class="flex items-center gap-2">
-                  <span class="material-symbols-outlined text-nx-accent text-sm animate-spin">progress_activity</span>
+                  <span class="material-symbols-outlined text-nx-accent text-sm nx-animate-spin">progress_activity</span>
                   <span class="text-xs text-nx-text-secondary">{t("settings.downloading")}...</span>
-                  {#if downloadProgress > 0}<span class="text-[10px] text-nx-text-muted">{downloadProgress}%</span>{/if}
+                  {#if downloadProgress > 0}<span class="text-[10px] text-nx-text-muted tabular-nums">{downloadProgress}%</span>{/if}
                 </div>
-                <div class="w-full bg-nx-border rounded-full h-1.5 overflow-hidden">
-                  <div class="bg-nx-accent h-1.5 rounded-full transition-all duration-300 ease-out" style="width: {downloadProgress}%"></div>
+                <div class="nx-progress">
+                  <div class="nx-progress-bar accent transition-all" style="width: {downloadProgress}%"></div>
                 </div>
               </div>
             {:else if isState('installed')}

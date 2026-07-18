@@ -10,15 +10,16 @@
 
 <header
   data-tauri-drag-region
-  class="flex h-9 flex-shrink-0 items-center justify-between border-b border-nx-border bg-nx-deep select-none"
+  class="flex h-9 flex-shrink-0 items-center justify-between border-b border-[var(--nx-border)] bg-[var(--nx-deep)] select-none"
 >
-  <!-- Left: drag region spacer (logo is in Sidebar) -->
+  <!-- Left: drag region spacer -->
   <div class="flex-1" data-tauri-drag-region></div>
 
   <!-- Right: window controls -->
   <div class="flex h-full">
     <button
       class="flex h-full w-11 items-center justify-center text-nx-text-muted transition-colors hover:bg-white/[0.08] hover:text-nx-text cursor-pointer"
+      aria-label="最小化"
       onclick={minimize}
     >
       <svg width="11" height="1" viewBox="0 0 11 1" fill="currentColor">
@@ -27,6 +28,7 @@
     </button>
     <button
       class="flex h-full w-11 items-center justify-center text-nx-text-muted transition-colors hover:bg-white/[0.08] hover:text-nx-text cursor-pointer"
+      aria-label="最大化"
       onclick={toggleMaximize}
     >
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1">
@@ -35,6 +37,7 @@
     </button>
     <button
       class="flex h-full w-11 items-center justify-center text-nx-text-muted transition-colors hover:bg-[#e81123] hover:text-white cursor-pointer"
+      aria-label="关闭"
       onclick={close}
     >
       <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">

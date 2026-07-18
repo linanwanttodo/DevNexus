@@ -50,6 +50,20 @@
     }
   }
 
+  async function terminateProcess(pid) {
+    if (!(await showConfirm(t("process.kill_confirm").replace("{name}", `PID ${pid}`).replace("{count}", "1")))) return;
+    killing = pid;
+    try {
+      const msg = await invoke("kill_process", { pid });
+      showToast(msg, "success");
+      await loadProcesses();
+    } catch (err) {
+      showToast(`${t("process.kill_failed")}: ${err.message || err}`, "error");
+    } finally {
+      killing = null;
+    }
+  }
+
   async function killGroup(name, count) {
     if (!(await showConfirm(t("process.kill_confirm").replace("{name}", name).replace("{count}", count)))) return;
     try {
@@ -360,6 +374,13 @@
                     <span class="text-xs text-nx-text-muted">{formatTime(entry.start_time_secs)}</span>
                   </td>
                   <td class="text-right">
+                    <button
+                      class="nx-btn text-xs text-nx-warning hover:bg-nx-warning/10 px-2 py-1 disabled:opacity-30"
+                      onclick={(e) => { e.stopPropagation(); terminateProcess(entry.pid); }}
+                      disabled={killing === entry.pid}
+                    >
+                      {killing === entry.pid ? '...' : t("process.kill")}
+                    </button>
                     <button
                       class="nx-btn text-xs text-nx-danger hover:bg-nx-danger/10 px-2 py-1 disabled:opacity-30"
                       onclick={(e) => { e.stopPropagation(); killProcess(entry.pid); }}

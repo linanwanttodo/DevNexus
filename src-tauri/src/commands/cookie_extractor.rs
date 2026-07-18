@@ -540,18 +540,36 @@ fn read_cookies(
     let _ = std::fs::remove_file(&tmp_path);
     let _ = std::fs::remove_file(tmp_path.with_extension("sqlite-wal"));
     let _ = std::fs::remove_file(tmp_path.with_extension("sqlite-shm"));
+    let _ = std::fs::remove_file(tmp_path.with_extension("sqlite-journal"));
 
     std::fs::copy(path, &tmp_path)
         .map_err(|e| format!("Failed to copy cookie database: {} (path: {:?})", e, path))?;
 
-    // WAL 文件也复制（如果存在），保证一致性
-    let wal_src = path.with_extension("db-wal");
-    if wal_src.exists() {
-        let _ = std::fs::copy(&wal_src, tmp_path.with_extension("sqlite-wal"));
+    // 复制 SQLite 辅助文件（WAL 或 journal 模式），保证数据一致性
+    // Chrome 实际辅助文件格式: Cookies-wal, Cookies-shm, Cookies-journal（拼接后缀，非替换扩展名）
+    if let (Some(parent), Some(filename)) = (path.parent(), path.file_name()) {
+        let fname = filename.to_string_lossy();
+
+        // WAL 模式: Cookies-wal, Cookies-shm
+        let wal_path = parent.join(format!("{}-wal", fname));
+        if wal_path.exists() {
+            let _ = std::fs::copy(&wal_path, tmp_path.with_extension("sqlite-wal"));
+            let shm_path = parent.join(format!("{}-shm", fname));
+            if shm_path.exists() {
+                let _ = std::fs::copy(&shm_path, tmp_path.with_extension("sqlite-shm"));
+            }
+        }
+
+        // Journal 模式: Cookies-journal
+        let journal_path = parent.join(format!("{}-journal", fname));
+        if journal_path.exists() {
+            let _ = std::fs::copy(&journal_path, tmp_path.with_extension("sqlite-journal"));
+        }
     }
 
     // 判断是否需要完整性检查（数据库版本 >= 24 表示有 v11 格式的完整性检查）
-    let has_integrity_check = get_cookie_db_version(path) >= 24;
+    // 从临时副本读取版本，避免浏览器锁定原库
+    let has_integrity_check = get_cookie_db_version(&tmp_path) >= 24;
 
     let conn =
         Connection::open(&tmp_path).map_err(|e| format!("Failed to open database: {}", e))?;
@@ -932,6 +950,8 @@ fn try_dbus_rust() -> Option<[u8; 16]> {
     );
     search_attrs.insert("application".to_string(), "chrome".to_string());
 
+    let timeout = Duration::from_secs(3);
+
     let r = conn
         .send_with_reply_and_block(
             Message::new_method_call(
@@ -942,7 +962,7 @@ fn try_dbus_rust() -> Option<[u8; 16]> {
             )
             .ok()?
             .append1(search_attrs),
-            Duration::from_secs(5),
+            timeout,
         )
         .ok()?;
     let (items, _prompt): (Vec<dbus::Path<'static>>, dbus::Path<'static>) = r.read2().ok()?;
@@ -957,7 +977,7 @@ fn try_dbus_rust() -> Option<[u8; 16]> {
         )
         .ok()?
         .append1(vec![item_path.clone()]),
-        Duration::from_secs(5),
+        timeout,
     );
 
     let session_path = {
@@ -971,7 +991,7 @@ fn try_dbus_rust() -> Option<[u8; 16]> {
                 )
                 .ok()?
                 .append2("plain", dbus::arg::Variant(Box::new(String::new()))),
-                Duration::from_secs(5),
+                timeout,
             )
             .ok()?;
         let (result, session): (
@@ -993,7 +1013,7 @@ fn try_dbus_rust() -> Option<[u8; 16]> {
                 )
                 .ok()?
                 .append2(vec![item_path], session_path),
-                Duration::from_secs(5),
+                timeout,
             )
             .ok()?;
 
