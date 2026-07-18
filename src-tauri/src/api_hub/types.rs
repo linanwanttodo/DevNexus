@@ -60,7 +60,7 @@ impl ApiProtocol {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn from_protocol_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "openai_chat" => Some(ApiProtocol::OpenAIChat),
             "openai_responses" | "responses" => Some(ApiProtocol::OpenAIResponses),

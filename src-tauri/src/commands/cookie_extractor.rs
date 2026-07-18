@@ -1019,7 +1019,8 @@ fn try_dbus_rust() -> Option<[u8; 16]> {
 
         use dbus::arg::ArgType;
         let mut iter = r.iter_init();
-        if let Some(mut array_iter) = iter.recurse(ArgType::Array) {
+        {
+            let mut array_iter = iter.recurse(ArgType::Array)?;
             let mut found_value: Option<Vec<u8>> = None;
             while let Some(mut entry_iter) = array_iter.recurse(ArgType::DictEntry) {
                 let _key: dbus::Path<'static> = entry_iter.read().ok()?;
@@ -1032,8 +1033,6 @@ fn try_dbus_rust() -> Option<[u8; 16]> {
                 }
             }
             found_value?
-        } else {
-            return None;
         }
     };
 

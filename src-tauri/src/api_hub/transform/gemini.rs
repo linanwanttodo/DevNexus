@@ -166,7 +166,8 @@ fn map_gemini_finish_reason(reason: Option<&str>) -> &'static str {
     match reason {
         Some("MAX_TOKENS") => "length",
         Some("SAFETY") | Some("RECITATION") | Some("BLOCKLIST") => "content_filter",
-        Some("STOP") | Some("END_TURN") | _ => "stop",
+        Some("STOP") | Some("END_TURN") => "stop",
+        _ => "stop",
     }
 }
 

@@ -311,7 +311,7 @@ async fn handle_streaming(
 
     let stream = resp.bytes_stream().map_err(|e| {
         eprintln!("[API Hub] Stream error: {}", e);
-        std::io::Error::new(std::io::ErrorKind::Other, e)
+        std::io::Error::other(e)
     });
 
     let body = axum::body::Body::from_stream(stream);
