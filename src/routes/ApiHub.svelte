@@ -69,7 +69,7 @@
         id: editingId || crypto.randomUUID(),
         name: form.name, protocol: form.protocol,
         base_url: form.base_url, api_key: form.api_key,
-        models, model_aliases, enabled: true, created_at: Date.now() / 1000,
+        models, model_aliases, enabled: true, created_at: Math.floor(Date.now() / 1000),
       };
       if (editingId) { await invoke("api_hub_update_provider", { id: editingId, provider: data }); showToast("已更新"); }
       else { await invoke("api_hub_add_provider", { provider: data }); showToast("已添加"); }
