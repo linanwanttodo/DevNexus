@@ -5,48 +5,74 @@
   import { getRoute, navigate } from "../lib/stores.svelte.js";
   import { t } from "../lib/i18n.svelte.js";
   import { getVersion } from "@tauri-apps/api/app";
+  import { invoke } from "@tauri-apps/api/core";
 
   let appVersion = $state("1.1.1");
-  onMount(async () => {
-    try {
-      appVersion = await getVersion();
-    } catch {
-      // non-Tauri env fallback
-    }
+  let resourceUsage = $state(null);
+
+  onMount(() => {
+    (async () => {
+      try {
+        appVersion = await getVersion();
+      } catch {
+        // non-Tauri env fallback
+      }
+      loadResourceUsage();
+    })();
+    const interval = setInterval(loadResourceUsage, 10000);
+    return () => clearInterval(interval);
   });
+
+  async function loadResourceUsage() {
+    try {
+      resourceUsage = await invoke("get_resource_usage");
+    } catch {
+      // silently fail
+    }
+  }
 
   let navItems = $derived.by(() => {
     return [
       { route: "/dashboard", label: t("nav.dashboard"), icon: "dashboard" },
       { route: "/environments", label: t("nav.environments"), icon: "code" },
+      { route: "/migration", label: t("nav.migration"), icon: "swap_horiz" },
       { route: "/software", label: t("nav.software"), icon: "apps" },
       { route: "/containers", label: t("nav.containers"), icon: "container" },
-      { route: "/network", label: t("nav.network"), icon: "network_check" },
       { route: "/mirrors", label: t("nav.mirrors"), icon: "sync" },
       { route: "/processes", label: t("nav.processes"), icon: "lan" },
       { route: "/passwords", label: t("nav.passwords"), icon: "key" },
       { route: "/cookies", label: t("nav.cookies"), icon: "cookie" },
       { route: "/uninstall", label: t("nav.uninstall"), icon: "delete" },
+      { route: "/api-hub", label: t("nav.api_hub"), icon: "hub" },
       { route: "/settings", label: t("nav.settings"), icon: "settings" },
     ];
   });
 
   let currentRoute = $derived(getRoute());
 
+  let cpuPercent = $derived(resourceUsage ? resourceUsage.cpu_usage.toFixed(0) : null);
+  let memPercent = $derived(resourceUsage ? resourceUsage.memory_percent.toFixed(0) : null);
+  let memBar = $derived(resourceUsage ? Math.min(resourceUsage.memory_percent, 100) : 0);
+  let cpuBar = $derived(resourceUsage ? Math.min(resourceUsage.cpu_usage, 100) : 0);
+
   function handleClick(route) {
     navigate(route);
   }
 </script>
 
-<aside class="flex h-full w-52 flex-shrink-0 flex-col border-r border-nx-border" aria-label="Main navigation" style="background: var(--nx-bg);">
+<aside
+  class="flex h-full w-60 flex-shrink-0 flex-col border-r border-nx-border"
+  aria-label="Main navigation"
+  style="background: var(--color-sidebar);"
+>
   <!-- Logo area -->
   <div class="flex h-11 items-center gap-2.5 border-b border-nx-border px-4">
     <span class="material-symbols-outlined text-nx-accent text-xl">terminal</span>
-    <span class="text-sm font-semibold text-nx-text">DevNexus</span>
+    <span class="text-sm font-semibold tracking-tight text-nx-text">DevNexus</span>
   </div>
 
   <!-- Navigation -->
-  <nav class="flex-1 overflow-y-auto py-3 px-3">
+  <nav class="flex-1 overflow-y-auto py-2 px-2">
     <ul class="flex flex-col gap-0.5">
       {#each navItems as item (item.route)}
         <li>
@@ -54,18 +80,23 @@
             type="button"
             role="tab"
             aria-current={currentRoute === item.route ? "page" : undefined}
-            class="flex w-full items-center gap-3 px-3 py-2 text-[13px] cursor-pointer rounded-lg transition-all duration-150
+            class="group relative flex w-full items-center gap-2.5 px-3 py-2 text-sm cursor-pointer rounded-md transition-all duration-150
               {currentRoute === item.route
-                ? 'bg-white/[0.07] text-nx-text font-medium'
-                : 'text-nx-text-secondary hover:text-nx-text hover:bg-white/[0.04]'}"
+                ? 'bg-nx-selected text-nx-text font-medium'
+                : 'text-nx-text-secondary hover:text-nx-text hover:bg-nx-hover'}"
             onclick={() => handleClick(item.route)}
           >
+            <!-- Active indicator bar -->
+            {#if currentRoute === item.route}
+              <div class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-r-full" style="background: var(--color-brand);"></div>
+            {/if}
+            <!-- Icon -->
             {#if item.route === '/cookies'}
-              <BrandIcons name="cookie" size={18} class="flex-shrink-0 opacity-80" />
+              <BrandIcons name="cookie" size={18} class="flex-shrink-0 opacity-60 group-hover:opacity-90 transition-opacity" />
             {:else if item.route === '/containers'}
-              <ContainerIcons name="docker-logo" size={18} class="flex-shrink-0 opacity-80" />
+              <ContainerIcons name="docker-logo" size={18} class="flex-shrink-0 opacity-60 group-hover:opacity-90 transition-opacity" />
             {:else}
-              <span class="material-symbols-outlined text-xl flex-shrink-0 opacity-80">{item.icon}</span>
+              <span class="material-symbols-outlined text-lg flex-shrink-0 opacity-50 group-hover:opacity-80 transition-all duration-150">{item.icon}</span>
             {/if}
             <span class="truncate">{item.label}</span>
           </button>
@@ -74,8 +105,28 @@
     </ul>
   </nav>
 
+  <!-- Status Bar -->
+  {#if resourceUsage}
+    <div class="border-t border-nx-border px-3 py-2.5 space-y-1.5">
+      <div class="flex items-center gap-2 text-[10px] text-nx-text-muted">
+        <span class="w-6">CPU</span>
+        <div class="flex-1 h-1 bg-nx-border rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-1000 ease-out" style="width: {cpuBar}%; background: var(--nx-accent); opacity: 0.7;"></div>
+        </div>
+        <span class="w-7 text-right font-mono">{cpuPercent}%</span>
+      </div>
+      <div class="flex items-center gap-2 text-[10px] text-nx-text-muted">
+        <span class="w-6">MEM</span>
+        <div class="flex-1 h-1 bg-nx-border rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-1000 ease-out" style="width: {memBar}%; background: var(--nx-success); opacity: 0.7;"></div>
+        </div>
+        <span class="w-7 text-right font-mono">{memPercent}%</span>
+      </div>
+    </div>
+  {/if}
+
   <!-- Version + GitHub -->
-  <div class="border-t border-nx-border px-4 py-3">
+  <div class="border-t border-nx-border px-4 py-2.5">
     <div class="flex items-center gap-2">
       <a
         href="https://github.com/linanwanttodo/DevNexus"

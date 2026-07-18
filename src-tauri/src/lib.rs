@@ -1,7 +1,9 @@
+mod api_hub;
 mod commands;
 mod residue_scanner;
 mod utils;
 
+use std::sync::Arc;
 use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItemBuilder},
@@ -14,14 +16,24 @@ pub fn run() {
     let password_manager = commands::password_manager::PasswordManager::new();
     let version_cache = commands::version_manager::VersionCache::new();
 
+    // 初始化 API Hub
+    let api_hub_state = api_hub::init(&crate::utils::data_dir());
+
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
-        .manage(password_manager)
-        .manage(version_cache)
-        .setup(|app| {
+    .manage(password_manager)
+    .manage(version_cache)
+    .manage(api_hub_state)
+        .setup(move |app| {
+            // 启动 API Hub 后台服务
+            let state = app.state::<api_hub::types::AppState>();
+            let hub = Arc::new(state.inner().clone());
+            tauri::async_runtime::spawn(async move {
+                api_hub::start(hub).await;
+            });
             let show = MenuItemBuilder::with_id("show", "Show DevNexus").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
@@ -103,6 +115,9 @@ pub fn run() {
             commands::mirror::switch_mirror,
             commands::migration::export_migration,
             commands::migration::save_export_file,
+            commands::migration::parse_migration_manifest,
+            commands::migration::load_migration_file,
+            commands::migration::import_migration,
             commands::password_manager::add_password,
             commands::password_manager::list_passwords,
             commands::password_manager::get_password,
@@ -149,17 +164,14 @@ pub fn run() {
             commands::updater::get_download_url,
             commands::version_manager::list_versions,
             commands::version_manager::switch_version,
-            commands::network::get_network_adapters,
-            commands::network::get_current_dns,
-            commands::network::set_dns,
-            commands::network::test_dns_latency,
-            commands::network::get_dns_servers,
-            commands::network::get_system_proxy,
-            commands::network::set_system_proxy,
-            commands::network::remove_system_proxy,
-            commands::network::get_github_hosts,
-            commands::network::set_github_hosts,
-            commands::network::test_url_latency,
+            api_hub::commands::api_hub_list_providers,
+            api_hub::commands::api_hub_add_provider,
+            api_hub::commands::api_hub_delete_provider,
+            api_hub::commands::api_hub_update_provider,
+            api_hub::commands::api_hub_get_logs,
+            api_hub::commands::api_hub_get_usage_stats,
+            api_hub::commands::api_hub_status,
+            api_hub::commands::api_hub_fetch_models,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevNexus");

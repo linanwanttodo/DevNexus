@@ -15,9 +15,25 @@
   import AppUninstaller from "./routes/AppUninstaller.svelte";
   import Settings from "./routes/Settings.svelte";
   import ContainerManager from "./routes/ContainerManager.svelte";
-  import NetworkAcceleration from "./routes/NetworkAcceleration.svelte";
+  import ApiHub from "./routes/ApiHub.svelte";
+  import Migration from "./routes/Migration.svelte";
 
   let page = $derived(getRoute());
+  let prevPage = $state(getRoute());
+  let transitioning = $state(false);
+
+  // Trigger a subtle page transition on route change
+  $effect(() => {
+    if (page !== prevPage) {
+      transitioning = true;
+      // Use setTimeout to allow CSS animation to trigger on re-render
+      const id = setTimeout(() => {
+        transitioning = false;
+        prevPage = page;
+      }, 20);
+      return () => clearTimeout(id);
+    }
+  });
 </script>
 
 <div class="flex h-screen w-screen flex-col bg-nx-bg overflow-hidden">
@@ -27,7 +43,7 @@
   <div class="flex flex-1 overflow-hidden">
     <Sidebar />
     <div class="flex flex-1 flex-col overflow-hidden min-w-0">
-      <main class="flex-1 overflow-y-auto">
+      <main class="flex-1 overflow-y-auto" class:nx-page={!transitioning}>
         {#if page === "/" || page === "/dashboard"}
           <Dashboard />
         {:else if page === "/environments"}
@@ -48,8 +64,10 @@
           <ContainerManager />
         {:else if page === "/settings"}
           <Settings />
-        {:else if page === "/network"}
-          <NetworkAcceleration />
+        {:else if page === "/api-hub"}
+          <ApiHub />
+        {:else if page === "/migration"}
+          <Migration />
         {/if}
       </main>
     </div>
