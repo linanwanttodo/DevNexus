@@ -28,6 +28,7 @@ pub struct FetchedModel {
 
 /// API 协议：一个选项同时锁定品牌预设、线协议、认证方式、上游端点与 token 字段
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum ApiProtocol {
     /// OpenAI Chat Completions（/v1/chat/completions）
     OpenAIChat,
