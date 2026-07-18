@@ -112,10 +112,9 @@
         filters: [{ name: "JSON", extensions: ["json"] }],
       });
       if (!selected) return;
-      const path = typeof selected === "string" ? selected : selected.path || selected;
-      importPath = path;
+      importPath = selected;
       importResult = null;
-      importManifest = await invoke("load_migration_file", { path });
+      importManifest = await invoke("load_migration_file", { path: importPath });
     } catch (err) {
       importManifest = null;
       showToast(t("migration.import_failed").replace("{error}", err.message || err), "error");
