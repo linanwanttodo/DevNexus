@@ -23,10 +23,9 @@ pub fn run() {
     // 初始化下载管理器
     let data_dir = crate::utils::data_dir();
     let db_path = format!("{}/downloads.db", data_dir.display());
-    let download_manager = download::DownloadManager::new(
-        download::DownloadConfig::default(),
-        &db_path,
-    ).expect("Failed to create download manager");
+    let download_manager =
+        download::DownloadManager::new(download::DownloadConfig::default(), &db_path)
+            .expect("Failed to create download manager");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())

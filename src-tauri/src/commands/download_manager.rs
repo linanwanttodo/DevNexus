@@ -23,7 +23,9 @@ pub async fn get_github_mirrors(
 }
 
 #[tauri::command]
-pub fn get_changelog(version: Option<String>) -> Result<Option<crate::download::changelog::ChangelogEntry>, String> {
+pub fn get_changelog(
+    version: Option<String>,
+) -> Result<Option<crate::download::changelog::ChangelogEntry>, String> {
     Ok(match version {
         Some(v) => crate::download::changelog::get_changelog(&v),
         None => crate::download::changelog::get_latest_changelog(),

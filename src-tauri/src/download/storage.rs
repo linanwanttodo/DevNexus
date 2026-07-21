@@ -21,10 +21,11 @@ impl From<serde_json::Error> for StorageError {
     }
 }
 
-fn parse_chunks_json(chunks_json: &str) -> Result<Vec<crate::download::task::ChunkInfo>, rusqlite::Error> {
-    serde_json::from_str(chunks_json).map_err(|e| {
-        rusqlite::Error::ToSqlConversionFailure(Box::new(e))
-    })
+fn parse_chunks_json(
+    chunks_json: &str,
+) -> Result<Vec<crate::download::task::ChunkInfo>, rusqlite::Error> {
+    serde_json::from_str(chunks_json)
+        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
 }
 
 fn parse_status(status_str: &str) -> crate::download::task::DownloadStatus {
@@ -234,7 +235,9 @@ mod tests {
     fn test_new_storage_creates_tables() {
         let storage = make_storage();
         let conn = storage.conn().lock().unwrap();
-        let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='downloads'").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='downloads'")
+            .unwrap();
         let exists: bool = stmt.exists(params![]).unwrap();
         assert!(exists);
     }
@@ -302,8 +305,20 @@ mod tests {
         let storage = make_storage();
         let mut task = make_task("chunked");
         task.chunks = vec![
-            ChunkInfo { id: 0, start: 0, end: 499, downloaded: 500, status: ChunkStatus::Completed },
-            ChunkInfo { id: 1, start: 500, end: 999, downloaded: 0, status: ChunkStatus::Pending },
+            ChunkInfo {
+                id: 0,
+                start: 0,
+                end: 499,
+                downloaded: 500,
+                status: ChunkStatus::Completed,
+            },
+            ChunkInfo {
+                id: 1,
+                start: 500,
+                end: 999,
+                downloaded: 0,
+                status: ChunkStatus::Pending,
+            },
         ];
         task.status = DownloadStatus::Paused;
         task.downloaded_size = 500;
@@ -367,7 +382,14 @@ mod tests {
 
     #[test]
     fn test_parse_status_roundtrip() {
-        for status in &["Pending", "Downloading", "Paused", "Completed", "Failed", "Cancelled"] {
+        for status in &[
+            "Pending",
+            "Downloading",
+            "Paused",
+            "Completed",
+            "Failed",
+            "Cancelled",
+        ] {
             let parsed = parse_status(status);
             let formatted = format!("{:?}", parsed);
             assert!(formatted == *status || format!("{:?}", parsed) == *status);

@@ -41,7 +41,9 @@ pub struct DownloadConfig {
 impl Default for DownloadConfig {
     fn default() -> Self {
         let downloads_dir = dirs::download_dir().unwrap_or_else(|| {
-            dirs::home_dir().map(|h| h.join("Downloads")).unwrap_or_else(|| PathBuf::from("."))
+            dirs::home_dir()
+                .map(|h| h.join("Downloads"))
+                .unwrap_or_else(|| PathBuf::from("."))
         });
 
         Self {

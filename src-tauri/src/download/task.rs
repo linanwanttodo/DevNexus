@@ -147,8 +147,20 @@ mod tests {
     #[test]
     fn test_task_serde_roundtrip() {
         let chunks = vec![
-            ChunkInfo { id: 0, start: 0, end: 499, downloaded: 500, status: ChunkStatus::Completed },
-            ChunkInfo { id: 1, start: 500, end: 999, downloaded: 0, status: ChunkStatus::Pending },
+            ChunkInfo {
+                id: 0,
+                start: 0,
+                end: 499,
+                downloaded: 500,
+                status: ChunkStatus::Completed,
+            },
+            ChunkInfo {
+                id: 1,
+                start: 500,
+                end: 999,
+                downloaded: 0,
+                status: ChunkStatus::Pending,
+            },
         ];
         let task = DownloadTask {
             id: "serde-test".into(),

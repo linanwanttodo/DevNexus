@@ -52,17 +52,17 @@ impl DownloadManager {
         Self::with_storage(config, storage)
     }
 
-    pub fn with_storage(config: DownloadConfig, storage: DownloadStorage) -> Result<Self, DownloadManagerError> {
+    pub fn with_storage(
+        config: DownloadConfig,
+        storage: DownloadStorage,
+    ) -> Result<Self, DownloadManagerError> {
         let (progress_tx, _) = broadcast::channel(100);
         let config_mutex = Arc::new(Mutex::new(config.clone()));
 
         Ok(Self {
             tasks: Arc::new(Mutex::new(HashMap::new())),
             config: config_mutex,
-            chunk_engine: ChunkEngine::new(
-                config.max_chunks_per_task,
-                config.min_chunk_size,
-            ),
+            chunk_engine: ChunkEngine::new(config.max_chunks_per_task, config.min_chunk_size),
             storage: Arc::new(storage),
             progress_tx,
             active_handles: Arc::new(Mutex::new(HashMap::new())),
@@ -74,14 +74,20 @@ impl DownloadManager {
     }
 
     /// 创建下载任务
-    pub async fn create_task(&self, url: String, save_path: Option<String>) -> Result<String, DownloadManagerError> {
-        let parsed_url = Url::parse(&url)
-            .map_err(|e| DownloadManagerError::InvalidUrl(e.to_string()))?;
+    pub async fn create_task(
+        &self,
+        url: String,
+        save_path: Option<String>,
+    ) -> Result<String, DownloadManagerError> {
+        let parsed_url =
+            Url::parse(&url).map_err(|e| DownloadManagerError::InvalidUrl(e.to_string()))?;
 
         let download_url = if self.is_github_url(&url) {
             let config = self.config.lock().await;
             if config.auto_mirror_github {
-                config.github_mirrors.iter()
+                config
+                    .github_mirrors
+                    .iter()
                     .find(|m| m.enabled)
                     .map(|mirror| {
                         if mirror.strip_host {
@@ -117,7 +123,10 @@ impl DownloadManager {
         };
 
         // 初始化分块
-        let chunks = self.chunk_engine.initialize_chunks(&download_url, total_size).await
+        let chunks = self
+            .chunk_engine
+            .initialize_chunks(&download_url, total_size)
+            .await
             .map_err(|e| DownloadManagerError::DownloadError(e.to_string()))?;
 
         let task_id = Uuid::new_v4().to_string();
@@ -137,7 +146,8 @@ impl DownloadManager {
             error: None,
         };
 
-        self.storage.save_task(&task)
+        self.storage
+            .save_task(&task)
             .map_err(|e| DownloadManagerError::Storage(e.to_string()))?;
 
         let mut tasks = self.tasks.lock().await;
@@ -155,12 +165,13 @@ impl DownloadManager {
     /// 开始下载任务
     pub async fn start_task(&self, task_id: &str) -> Result<(), DownloadManagerError> {
         let mut tasks = self.tasks.lock().await;
-        let task = tasks.get_mut(task_id)
+        let task = tasks
+            .get_mut(task_id)
             .ok_or_else(|| DownloadManagerError::TaskNotFound(task_id.to_string()))?;
 
         if task.status != DownloadStatus::Pending && task.status != DownloadStatus::Paused {
             return Err(DownloadManagerError::DownloadError(
-                "Task is not in pending or paused state".to_string()
+                "Task is not in pending or paused state".to_string(),
             ));
         }
 
@@ -169,7 +180,8 @@ impl DownloadManager {
         task.error = None;
 
         // 保存到数据库
-        self.storage.save_task(task)
+        self.storage
+            .save_task(task)
             .map_err(|e| DownloadManagerError::Storage(e.to_string()))?;
 
         drop(tasks);
@@ -179,7 +191,8 @@ impl DownloadManager {
         let task_clone = {
             let tasks = self.tasks.lock().await;
             tasks.get(task_id).cloned()
-        }.ok_or_else(|| DownloadManagerError::TaskNotFound(task_id.to_string()))?;
+        }
+        .ok_or_else(|| DownloadManagerError::TaskNotFound(task_id.to_string()))?;
 
         let handle = tokio::spawn(async move {
             let clone_id = task_clone.id.clone();
@@ -208,18 +221,20 @@ impl DownloadManager {
     /// 暂停下载任务
     pub async fn pause_task(&self, task_id: &str) -> Result<(), DownloadManagerError> {
         let mut tasks = self.tasks.lock().await;
-        let task = tasks.get_mut(task_id)
+        let task = tasks
+            .get_mut(task_id)
             .ok_or_else(|| DownloadManagerError::TaskNotFound(task_id.to_string()))?;
 
         if task.status != DownloadStatus::Downloading {
             return Err(DownloadManagerError::DownloadError(
-                "Task is not downloading".to_string()
+                "Task is not downloading".to_string(),
             ));
         }
 
         task.status = DownloadStatus::Paused;
 
-        self.storage.save_task(task)
+        self.storage
+            .save_task(task)
             .map_err(|e| DownloadManagerError::Storage(e.to_string()))?;
 
         // 中止后台任务
@@ -237,12 +252,14 @@ impl DownloadManager {
         drop(handles);
 
         let mut tasks = self.tasks.lock().await;
-        let task = tasks.get_mut(task_id)
+        let task = tasks
+            .get_mut(task_id)
             .ok_or_else(|| DownloadManagerError::TaskNotFound(task_id.to_string()))?;
 
         task.status = DownloadStatus::Cancelled;
 
-        self.storage.save_task(task)
+        self.storage
+            .save_task(task)
             .map_err(|e| DownloadManagerError::Storage(e.to_string()))?;
 
         // 删除临时文件
@@ -252,9 +269,14 @@ impl DownloadManager {
     }
 
     /// 删除下载任务
-    pub async fn delete_task(&self, task_id: &str, delete_file: bool) -> Result<(), DownloadManagerError> {
+    pub async fn delete_task(
+        &self,
+        task_id: &str,
+        delete_file: bool,
+    ) -> Result<(), DownloadManagerError> {
         let tasks = self.tasks.lock().await;
-        let task = tasks.get(task_id)
+        let task = tasks
+            .get(task_id)
             .ok_or_else(|| DownloadManagerError::TaskNotFound(task_id.to_string()))?;
 
         if delete_file {
@@ -268,7 +290,8 @@ impl DownloadManager {
         Self::cleanup_temp_files(&task.save_path, task.chunks.len()).await;
 
         // 从数据库删除
-        self.storage.delete_task(task_id)
+        self.storage
+            .delete_task(task_id)
             .map_err(|e| DownloadManagerError::Storage(e.to_string()))?;
 
         // 从内存删除
@@ -313,16 +336,37 @@ impl DownloadManager {
 
     async fn get_file_size(&self, url: &str) -> Result<u64, DownloadManagerError> {
         let mut headers = header::HeaderMap::new();
-        headers.insert(header::ACCEPT, header::HeaderValue::from_static(
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-        ));
-        headers.insert(header::ACCEPT_LANGUAGE, header::HeaderValue::from_static("en-US,en;q=0.9,zh-CN;q=0.8"));
-        headers.insert(header::CACHE_CONTROL, header::HeaderValue::from_static("no-cache"));
-        headers.insert(header::UPGRADE_INSECURE_REQUESTS, header::HeaderValue::from_static("1"));
-        headers.insert("Sec-Fetch-Dest", header::HeaderValue::from_static("document"));
-        headers.insert("Sec-Fetch-Mode", header::HeaderValue::from_static("navigate"));
+        headers.insert(
+            header::ACCEPT,
+            header::HeaderValue::from_static(
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            ),
+        );
+        headers.insert(
+            header::ACCEPT_LANGUAGE,
+            header::HeaderValue::from_static("en-US,en;q=0.9,zh-CN;q=0.8"),
+        );
+        headers.insert(
+            header::CACHE_CONTROL,
+            header::HeaderValue::from_static("no-cache"),
+        );
+        headers.insert(
+            header::UPGRADE_INSECURE_REQUESTS,
+            header::HeaderValue::from_static("1"),
+        );
+        headers.insert(
+            "Sec-Fetch-Dest",
+            header::HeaderValue::from_static("document"),
+        );
+        headers.insert(
+            "Sec-Fetch-Mode",
+            header::HeaderValue::from_static("navigate"),
+        );
         headers.insert("Sec-Fetch-Site", header::HeaderValue::from_static("none"));
-        headers.insert(header::CONNECTION, header::HeaderValue::from_static("keep-alive"));
+        headers.insert(
+            header::CONNECTION,
+            header::HeaderValue::from_static("keep-alive"),
+        );
 
         let client = reqwest::Client::builder()
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
@@ -443,18 +487,30 @@ impl DownloadManager {
 
                     let temp_path = PathBuf::from(format!("{}.part{}", save_path, chunk.id));
                     let mut last_error = None;
-                    let cookie_ref = if cookie.is_empty() { None } else { Some(cookie.as_str()) };
+                    let cookie_ref = if cookie.is_empty() {
+                        None
+                    } else {
+                        Some(cookie.as_str())
+                    };
 
                     for attempt in 0..=retry_count {
                         match chunk_engine
-                            .download_chunk(&url, &chunk, &temp_path, global_progress.clone(), cookie_ref)
+                            .download_chunk(
+                                &url,
+                                &chunk,
+                                &temp_path,
+                                global_progress.clone(),
+                                cookie_ref,
+                            )
                             .await
                         {
                             Ok(downloaded) => {
                                 {
                                     let mut tasks = mgr.tasks.lock().await;
                                     if let Some(t) = tasks.get_mut(&task_id) {
-                                        if let Some(c) = t.chunks.iter_mut().find(|c| c.id == chunk.id) {
+                                        if let Some(c) =
+                                            t.chunks.iter_mut().find(|c| c.id == chunk.id)
+                                        {
                                             c.status = ChunkStatus::Completed;
                                             c.downloaded = downloaded;
                                         }
@@ -466,8 +522,13 @@ impl DownloadManager {
                                 last_error = Some(e);
                                 if attempt < retry_count {
                                     let wait = std::time::Duration::from_secs(1 << attempt);
-                                    eprintln!("Chunk {} failed (attempt {}/{}), retrying in {:?}",
-                                        chunk.id, attempt + 1, retry_count, wait);
+                                    eprintln!(
+                                        "Chunk {} failed (attempt {}/{}), retrying in {:?}",
+                                        chunk.id,
+                                        attempt + 1,
+                                        retry_count,
+                                        wait
+                                    );
                                     tokio::time::sleep(wait).await;
                                 }
                             }
@@ -475,7 +536,10 @@ impl DownloadManager {
                     }
 
                     if let Some(e) = last_error {
-                        eprintln!("Chunk {} failed after {} attempts: {}", chunk.id, retry_count, e);
+                        eprintln!(
+                            "Chunk {} failed after {} attempts: {}",
+                            chunk.id, retry_count, e
+                        );
                         let mut err = shared_errors.lock().await;
                         *err = Some(format!("Chunk {}: {}", chunk.id, e));
                         return;
@@ -503,11 +567,10 @@ impl DownloadManager {
         }
 
         // 合并分块
-        self.chunk_engine.merge_chunks(
-            &task.save_path,
-            task.chunks.len()
-        ).await
-        .map_err(|e| DownloadManagerError::DownloadError(e.to_string()))?;
+        self.chunk_engine
+            .merge_chunks(&task.save_path, task.chunks.len())
+            .await
+            .map_err(|e| DownloadManagerError::DownloadError(e.to_string()))?;
 
         {
             let mut tasks = self.tasks.lock().await;
@@ -515,7 +578,8 @@ impl DownloadManager {
                 t.status = DownloadStatus::Completed;
                 t.completed_at = Some(Utc::now());
                 t.downloaded_size = t.total_size;
-                self.storage.save_task(t)
+                self.storage
+                    .save_task(t)
                     .map_err(|e| DownloadManagerError::Storage(e.to_string()))?;
             }
         }
@@ -545,13 +609,17 @@ impl DownloadManager {
             None
         };
 
-        let chunks: Vec<ChunkProgress> = task.chunks.iter().map(|c| ChunkProgress {
-            id: c.id,
-            start: c.start,
-            end: c.end,
-            downloaded: c.downloaded,
-            status: format!("{}", c.status),
-        }).collect();
+        let chunks: Vec<ChunkProgress> = task
+            .chunks
+            .iter()
+            .map(|c| ChunkProgress {
+                id: c.id,
+                start: c.start,
+                end: c.end,
+                downloaded: c.downloaded,
+                status: format!("{}", c.status),
+            })
+            .collect();
 
         let progress = DownloadProgress {
             task_id: task.id.clone(),
@@ -560,7 +628,9 @@ impl DownloadManager {
             speed: task.speed,
             eta_seconds: eta,
             percentage,
-            active_chunks: task.chunks.iter()
+            active_chunks: task
+                .chunks
+                .iter()
                 .filter(|c| c.status == ChunkStatus::Downloading)
                 .count(),
             chunks,
@@ -624,7 +694,11 @@ mod tests {
             downloaded_size: 0,
             status: DownloadStatus::Pending,
             chunks: vec![ChunkInfo {
-                id: 0, start: 0, end: 999, downloaded: 0, status: ChunkStatus::Pending,
+                id: 0,
+                start: 0,
+                end: 999,
+                downloaded: 0,
+                status: ChunkStatus::Pending,
             }],
             created_at: Utc::now(),
             started_at: None,
@@ -640,7 +714,7 @@ mod tests {
         let result = manager.create_task("not-a-url".into(), None).await;
         assert!(result.is_err());
         match result {
-            Err(DownloadManagerError::InvalidUrl(_)) => {},
+            Err(DownloadManagerError::InvalidUrl(_)) => {}
             _ => panic!("Expected InvalidUrl error"),
         }
     }
@@ -678,7 +752,7 @@ mod tests {
         let manager = make_manager();
         let result = manager.start_task("ghost").await;
         match result {
-            Err(DownloadManagerError::TaskNotFound(_)) => {},
+            Err(DownloadManagerError::TaskNotFound(_)) => {}
             other => panic!("Expected TaskNotFound, got {:?}", other),
         }
     }
@@ -688,7 +762,7 @@ mod tests {
         let manager = make_manager();
         let result = manager.pause_task("ghost").await;
         match result {
-            Err(DownloadManagerError::TaskNotFound(_)) => {},
+            Err(DownloadManagerError::TaskNotFound(_)) => {}
             other => panic!("Expected TaskNotFound, got {:?}", other),
         }
     }
@@ -702,7 +776,7 @@ mod tests {
 
         let result = manager.pause_task("idle").await;
         match result {
-            Err(DownloadManagerError::DownloadError(_)) => {},
+            Err(DownloadManagerError::DownloadError(_)) => {}
             other => panic!("Expected DownloadError, got {:?}", other),
         }
     }
@@ -712,7 +786,7 @@ mod tests {
         let manager = make_manager();
         let result = manager.cancel_task("ghost").await;
         match result {
-            Err(DownloadManagerError::TaskNotFound(_)) => {},
+            Err(DownloadManagerError::TaskNotFound(_)) => {}
             other => panic!("Expected TaskNotFound, got {:?}", other),
         }
     }
@@ -722,7 +796,7 @@ mod tests {
         let manager = make_manager();
         let result = manager.delete_task("ghost", false).await;
         match result {
-            Err(DownloadManagerError::TaskNotFound(_)) => {},
+            Err(DownloadManagerError::TaskNotFound(_)) => {}
             other => panic!("Expected TaskNotFound, got {:?}", other),
         }
     }

@@ -4,8 +4,8 @@ use reqwest::header;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tokio::io::AsyncWriteExt;
 use thiserror::Error;
+use tokio::io::AsyncWriteExt;
 
 #[derive(Debug, Error)]
 pub enum ChunkError {
@@ -29,17 +29,38 @@ pub struct ChunkEngine {
 impl ChunkEngine {
     pub fn new(max_chunks: usize, min_chunk_size: u64) -> Self {
         let mut headers = header::HeaderMap::new();
-        headers.insert(header::ACCEPT, header::HeaderValue::from_static(
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-        ));
-        headers.insert(header::ACCEPT_LANGUAGE, header::HeaderValue::from_static("en-US,en;q=0.9,zh-CN;q=0.8"));
-        headers.insert(header::CACHE_CONTROL, header::HeaderValue::from_static("no-cache"));
-        headers.insert(header::UPGRADE_INSECURE_REQUESTS, header::HeaderValue::from_static("1"));
-        headers.insert("Sec-Fetch-Dest", header::HeaderValue::from_static("document"));
-        headers.insert("Sec-Fetch-Mode", header::HeaderValue::from_static("navigate"));
+        headers.insert(
+            header::ACCEPT,
+            header::HeaderValue::from_static(
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            ),
+        );
+        headers.insert(
+            header::ACCEPT_LANGUAGE,
+            header::HeaderValue::from_static("en-US,en;q=0.9,zh-CN;q=0.8"),
+        );
+        headers.insert(
+            header::CACHE_CONTROL,
+            header::HeaderValue::from_static("no-cache"),
+        );
+        headers.insert(
+            header::UPGRADE_INSECURE_REQUESTS,
+            header::HeaderValue::from_static("1"),
+        );
+        headers.insert(
+            "Sec-Fetch-Dest",
+            header::HeaderValue::from_static("document"),
+        );
+        headers.insert(
+            "Sec-Fetch-Mode",
+            header::HeaderValue::from_static("navigate"),
+        );
         headers.insert("Sec-Fetch-Site", header::HeaderValue::from_static("none"));
         headers.insert("Sec-Fetch-User", header::HeaderValue::from_static("?1"));
-        headers.insert(header::CONNECTION, header::HeaderValue::from_static("keep-alive"));
+        headers.insert(
+            header::CONNECTION,
+            header::HeaderValue::from_static("keep-alive"),
+        );
 
         Self {
             client: reqwest::Client::builder()
@@ -76,7 +97,11 @@ impl ChunkEngine {
     }
 
     /// 初始化分块策略
-    pub async fn initialize_chunks(&self, url: &str, total_size: u64) -> Result<Vec<ChunkInfo>, ChunkError> {
+    pub async fn initialize_chunks(
+        &self,
+        url: &str,
+        total_size: u64,
+    ) -> Result<Vec<ChunkInfo>, ChunkError> {
         let supports_range = self.check_range_support(url).await.unwrap_or(false);
 
         if !supports_range || total_size < self.min_chunk_size {
@@ -125,19 +150,21 @@ impl ChunkEngine {
         let range_header = format!("bytes={}-{}", chunk.start, chunk.end);
 
         let mut request = self.client.get(url).header("Range", range_header);
-        
+
         if let Some(c) = cookie {
             request = request.header(header::COOKIE, c);
         }
-        
+
         if chunk.downloaded > 0 {
             let resume_range = format!("bytes={}-{}", chunk.start + chunk.downloaded, chunk.end);
             request = request.header("Range", resume_range);
         }
 
         let response = request.send().await?;
-        
-        if !response.status().is_success() && response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+
+        if !response.status().is_success()
+            && response.status() != reqwest::StatusCode::PARTIAL_CONTENT
+        {
             return Err(ChunkError::DownloadFailed(format!(
                 "HTTP error: {}",
                 response.status()
@@ -167,13 +194,17 @@ impl ChunkEngine {
     }
 
     /// 合并所有分块文件
-    pub async fn merge_chunks(&self, save_path: &str, chunk_count: usize) -> Result<(), ChunkError> {
+    pub async fn merge_chunks(
+        &self,
+        save_path: &str,
+        chunk_count: usize,
+    ) -> Result<(), ChunkError> {
         let mut final_file = tokio::fs::File::create(save_path).await?;
 
         for i in 0..chunk_count {
             let part_path = format!("{}.part{}", save_path, i);
             let part_path = PathBuf::from(&part_path);
-            
+
             if tokio::fs::try_exists(&part_path).await.unwrap_or(false) {
                 let mut part_file = tokio::fs::File::open(&part_path).await?;
                 let bytes_copied = tokio::io::copy(&mut part_file, &mut final_file).await?;
@@ -239,7 +270,10 @@ mod tests {
         tokio::fs::write(&part0, b"hello world").await.unwrap();
 
         let engine = ChunkEngine::new(8, 1_000_000);
-        engine.merge_chunks(save_path.to_str().unwrap(), 1).await.unwrap();
+        engine
+            .merge_chunks(save_path.to_str().unwrap(), 1)
+            .await
+            .unwrap();
 
         let content = tokio::fs::read_to_string(&save_path).await.unwrap();
         assert_eq!(content, "hello world");
@@ -249,12 +283,21 @@ mod tests {
     async fn test_merge_chunks_multiple_parts() {
         let dir = tempfile::tempdir().unwrap();
         let save_path = dir.path().join("test_multi.bin");
-        tokio::fs::write(format!("{}.part0", save_path.display()), b"AAA").await.unwrap();
-        tokio::fs::write(format!("{}.part1", save_path.display()), b"BBB").await.unwrap();
-        tokio::fs::write(format!("{}.part2", save_path.display()), b"CCC").await.unwrap();
+        tokio::fs::write(format!("{}.part0", save_path.display()), b"AAA")
+            .await
+            .unwrap();
+        tokio::fs::write(format!("{}.part1", save_path.display()), b"BBB")
+            .await
+            .unwrap();
+        tokio::fs::write(format!("{}.part2", save_path.display()), b"CCC")
+            .await
+            .unwrap();
 
         let engine = ChunkEngine::new(8, 1_000_000);
-        engine.merge_chunks(save_path.to_str().unwrap(), 3).await.unwrap();
+        engine
+            .merge_chunks(save_path.to_str().unwrap(), 3)
+            .await
+            .unwrap();
 
         let content = tokio::fs::read_to_string(&save_path).await.unwrap();
         assert_eq!(content, "AAABBBCCC");

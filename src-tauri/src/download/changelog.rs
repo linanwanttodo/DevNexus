@@ -16,10 +16,9 @@ pub fn get_latest_changelog() -> Option<ChangelogEntry> {
 }
 
 fn all_changelogs() -> Vec<ChangelogEntry> {
-    vec![
-        ChangelogEntry {
-            version: "1.2.1".to_string(),
-            en: "IDM-style segmented progress bar with per-chunk status colors\n\
+    vec![ChangelogEntry {
+        version: "1.2.1".to_string(),
+        en: "IDM-style segmented progress bar with per-chunk status colors\n\
                  Real-time speed/progress reporting via streaming download\n\
                  Work queue download engine with fixed worker threads\n\
                  GitHub URL auto-detection with configurable mirror support\n\
@@ -34,8 +33,8 @@ fn all_changelogs() -> Vec<ChangelogEntry> {
                  Fixed: HTTP 403 due to missing browser headers\n\
                  Fixed: Content-Encoding decoding failures\n\
                  Fixed: confirm dialog excessive width"
-                .to_string(),
-            zh: "IDM 风格分段进度条，按分块状态显示不同颜色\n\
+            .to_string(),
+        zh: "IDM 风格分段进度条，按分块状态显示不同颜色\n\
                  基于流式下载的实时速度与进度推送\n\
                  工作队列下载引擎，固定线程数并发\n\
                  GitHub 链接自动检测与可配置镜像加速\n\
@@ -50,7 +49,6 @@ fn all_changelogs() -> Vec<ChangelogEntry> {
                  修复：缺少浏览器头导致的 HTTP 403\n\
                  修复：Content-Encoding 解码失败\n\
                  修复：确认弹窗过宽"
-                .to_string(),
-        },
-    ]
+            .to_string(),
+    }]
 }

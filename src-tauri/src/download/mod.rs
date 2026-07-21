@@ -1,12 +1,12 @@
-pub mod manager;
-pub mod task;
-pub mod chunk;
-pub mod progress;
-pub mod config;
-pub mod storage;
 pub mod changelog;
+pub mod chunk;
+pub mod config;
+pub mod manager;
+pub mod progress;
+pub mod storage;
+pub mod task;
 
-pub use manager::DownloadManager;
-pub use task::{DownloadTask, DownloadStatus, ChunkInfo, ChunkStatus};
-pub use progress::DownloadProgress;
 pub use config::DownloadConfig;
+pub use manager::DownloadManager;
+pub use progress::DownloadProgress;
+pub use task::{ChunkInfo, ChunkStatus, DownloadStatus, DownloadTask};

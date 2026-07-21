@@ -157,8 +157,20 @@ mod tests {
             percentage: 50.0,
             active_chunks: 3,
             chunks: vec![
-                ChunkProgress { id: 0, start: 0, end: 499, downloaded: 500, status: "Completed".into() },
-                ChunkProgress { id: 1, start: 500, end: 999, downloaded: 0, status: "Pending".into() },
+                ChunkProgress {
+                    id: 0,
+                    start: 0,
+                    end: 499,
+                    downloaded: 500,
+                    status: "Completed".into(),
+                },
+                ChunkProgress {
+                    id: 1,
+                    start: 500,
+                    end: 999,
+                    downloaded: 0,
+                    status: "Pending".into(),
+                },
             ],
             timestamp: Utc::now(),
         };
