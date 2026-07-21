@@ -300,9 +300,7 @@ Build artifacts:
 
 ### Planned
 
-- [ ] Cloud service configuration (AWS / GCP CLI credential management)
-- [ ] Download scheduler (timed downloads)
-- [ ] Browser extension integration
+- [ ] Cloud service credential management (AWS / GCP CLI)
 
 ---
 
