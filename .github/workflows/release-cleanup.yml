@@ -1,0 +1,24 @@
+name: Release Cleanup
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete previous releases (keep only latest)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST=$(gh release view --json tagName --jq .tagName)
+          echo "Latest release: $LATEST"
+          gh release list --limit 100 --json tagName,publishedAt \
+            --jq '.[] | select(.tagName != "'"$LATEST"'") | .tagName' \
+            | while read tag; do
+              echo "Deleting old release: $tag"
+              gh release delete "$tag" --yes --cleanup-tag || true
+            done
