@@ -21,8 +21,11 @@
 
 DevNexus is a **cross-platform desktop application** that integrates everyday developer environment management tasks into a lightweight GUI:
 
+- **Download Manager** — IDM-style multi-threaded engine, resume support, real-time speed, segmented progress bar, GitHub mirror acceleration, browser cookies
 - **Software Center** — Visual management of system packages (brew / apt / winget / choco / pip / npm)
 - **Environment Manager** — Edit PATH, environment variables, dotfile configurations
+- **Container Manager** — Docker/Podman containers, images, volumes, networks management
+- **API Hub** — Local AI unified gateway, multi-protocol format conversion
 - **Mirror Settings** — One-click configuration for pip / npm / apt mirror sources
 - **System Dashboard** — Real-time CPU, memory, disk, and runtime version monitoring
 - **Global Settings** — App preferences and theme management
@@ -39,9 +42,12 @@ Detailed module design, cross-platform implementation, and development guide are
 |----------|-------------|
 | [Architecture Overview](docs/architecture.md) | Module dependencies, data flow, security boundaries |
 | [Development Guide](docs/dev-guide.md) | Setup, coding standards, build, debugging |
+| [Download Manager](docs/modules/12-download.md) | IDM-style engine, work queue, real-time progress, mirror |
 | [System Dashboard](docs/modules/01-system.md) | sysinfo + OnceLock disk caching |
 | [Software Center](docs/modules/02-software.md) | 37 tools, 9 package managers, cross-platform mapping |
 | [Environment Manager](docs/modules/03-environment.md) | Runtime detection, Unix/Windows PATH editing |
+| [Container Manager](docs/modules/13-containers.md) | Docker/Podman containers, images, volumes, networks |
+| [API Hub](docs/modules/11-api-hub.md) | Local AI gateway, multi-protocol format conversion |
 | [Mirror Settings](docs/modules/04-mirror.md) | 12 package source switches, latency testing |
 | [Port Manager](docs/modules/05-port.md) | lsof / procfs / netstat three-platform solution |
 | [Task Scheduler](docs/modules/06-scheduler.md) | Cron engine, Shell/Python execution, system actions |
@@ -159,55 +165,77 @@ Developers face these fragmented tools every day:
 devnexus/
 ├── src/                          # Svelte Frontend
 │   ├── lib/
-│   │   ├── stores.js             # Router & search state
-│   │   └── i18n.js               # i18n (zh/en/ru)
+│   │   ├── stores.svelte.js      # Router & search state
+│   │   ├── i18n.svelte.js        # i18n (zh/en/ru)
+│   │   ├── downloads.svelte.js   # Download manager frontend logic
+│   │   ├── toast.svelte.js
+│   │   └── confirm.svelte.js
 │   ├── locales/                  # Translation files
 │   │   ├── zh.json
 │   │   ├── en.json
 │   │   └── ru.json
 │   ├── routes/                   # Page routes
 │   │   ├── Dashboard.svelte      # System dashboard
+│   │   ├── DownloadManager.svelte # Download manager
 │   │   ├── EnvironmentManager.svelte
 │   │   ├── SoftwareCenter.svelte
+│   │   ├── ContainerManager.svelte # Container management
+│   │   ├── ApiHub.svelte         # API Hub
 │   │   ├── MirrorSettings.svelte
-│   │   ├── PortManager.svelte    # Port management
-│   │   ├── TaskScheduler.svelte
+│   │   ├── ProcessManager.svelte # Process/port management
 │   │   ├── PasswordManager.svelte
 │   │   ├── CookieExtractor.svelte
 │   │   ├── AppUninstaller.svelte # Deep uninstall
-│   │   ├── VersionManager.svelte # Version management
-│   │   └── Settings.svelte
+│   │   ├── Migration.svelte      # Environment migration
+│   │   ├── Settings.svelte
+│   │   └── ...
 │   ├── components/
 │   │   ├── Sidebar.svelte
-│   │   ├── TopBar.svelte
-│   │   └── TitleBar.svelte
-│   ├── app.svelte
+│   │   ├── TitleBar.svelte
+│   │   ├── ConfirmDialog.svelte
+│   │   ├── Toast.svelte
+│   │   └── ErrorBoundary.svelte
+│   ├── App.svelte
 │   └── main.js
 ├── src-tauri/                    # Rust Backend
 │   ├── src/
 │   │   ├── main.rs
 │   │   ├── lib.rs
-│   │   └── commands/
-│   │       ├── system.rs         # System info
-│   │       ├── environment.rs    # PATH/env variables
-│   │       ├── software.rs       # Package management
-│   │       ├── mirror.rs         # Mirror sources
-│   │       ├── port_manager.rs   # Port management
-│   │       ├── scheduler.rs      # Task scheduling
-│   │       ├── password_manager.rs
-│   │       ├── cookie_extractor.rs
-│   │       ├── version_manager.rs # Version management (pyenv/fnm/jenv/gvm/rustup)
-│   │       ├── updater.rs         # Auto update
-│   │       └── mod.rs
+│   │   ├── commands/
+│   │   │   ├── system.rs         # System info
+│   │   │   ├── environment.rs    # PATH/env variables
+│   │   │   ├── software.rs       # Package management
+│   │   │   ├── container.rs      # Docker/Podman management
+│   │   │   ├── api_hub/          # API Hub module
+│   │   │   ├── download_manager.rs # Download manager commands
+│   │   │   ├── mirror.rs         # Mirror sources
+│   │   │   ├── port_manager.rs   # Process/port management
+│   │   │   ├── scheduler.rs      # Task scheduling
+│   │   │   ├── password_manager.rs
+│   │   │   ├── cookie_extractor.rs
+│   │   │   ├── version_manager.rs
+│   │   │   ├── migration.rs      # Environment migration
+│   │   │   ├── updater.rs        # Auto update
+│   │   │   └── mod.rs
+│   │   ├── download/             # Download engine module
+│   │   │   ├── mod.rs
+│   │   │   ├── manager.rs        # Work queue + dynamic load balancing
+│   │   │   ├── chunk.rs          # Chunk download + streaming progress
+│   │   │   ├── config.rs         # Download config + GitHub mirrors
+│   │   │   ├── task.rs           # Task/chunk data structures
+│   │   │   ├── progress.rs       # Progress events
+│   │   │   ├── storage.rs        # SQLite persistence
+│   │   │   └── changelog.rs      # Bilingual changelog
+│   │   └── ...
 │   ├── icons/
-│   │   └── DevNexus.png          # App icon source
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── scripts/
-│   └── generate_icons.py         # Icon conversion script
 ├── .github/workflows/
-│   └── build.yml                 # CI auto build
+│   ├── build.yml                 # CI auto build
+│   └── release-cleanup.yml       # Auto-clean old releases
 ├── package.json
+├── CHANGELOG.md
 └── README.md
 ```
 
@@ -248,28 +276,33 @@ Build artifacts:
 
 ## Roadmap
 
-### Completed ✅
+### Completed
 
-- [ ] Project skeleton setup
-- [ ] System package manager backend (brew / apt / winget)
-- [ ] Software Center UI & backend integration
-- [ ] Environment variable read/write & visual editor
-- [ ] Mirror source configuration
-- [ ] System info dashboard
-- [ ] Port management (lsof / procfs / netstat)
-- [ ] Process manager (real-time process list + group view + kill)
-- [ ] Task scheduler (Cron engine + Shell/Python/system actions)
-- [ ] Password manager (AES-256-GCM + SQLite)
-- [ ] Cookie extraction (5 browsers)
-- [ ] Deep uninstall (residue scanning + registry + shortcuts)
-- [ ] Version manager (pyenv/fnm/jenv/gvm/rustup/gcc)
-- [ ] Theme & internationalization (zh / en / ru)
-- [ ] Auto-update mechanism (GitHub Release + updater plugin)
+- [x] Download manager (IDM-style engine, resume, real-time speed, segmented bar)
+- [x] Download mirror acceleration (GitHub auto-detect, configurable mirrors, Xget)
+- [x] Browser environment emulation (full headers, cookies, native-tls)
+- [x] Docker/Podman container management
+- [x] API Hub (local AI gateway, multi-protocol streaming)
+- [x] Environment migration system
+- [x] System package manager backend (brew / apt / winget)
+- [x] Software Center UI & backend integration
+- [x] Environment variable read/write & visual editor
+- [x] Mirror source configuration
+- [x] System info dashboard
+- [x] Process/port manager
+- [x] Task scheduler (Cron engine + Shell/Python/system actions)
+- [x] Password manager (AES-256-GCM + SQLite)
+- [x] Cookie extraction (5 browsers)
+- [x] Deep uninstall (residue scanning + registry + shortcuts)
+- [x] Version manager (pyenv/fnm/jenv/gvm/rustup/gcc)
+- [x] Theme & internationalization (zh / en / ru)
+- [x] Auto-update + bilingual changelog
 
-### In Progress / Planned 🚧
+### Planned
 
-- [ ] Docker / Podman container management
 - [ ] Cloud service configuration (AWS / GCP CLI credential management)
+- [ ] Download scheduler (timed downloads)
+- [ ] Browser extension integration
 
 ---
 
