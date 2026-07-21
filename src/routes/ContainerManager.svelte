@@ -864,21 +864,20 @@
 
 {#if showPull}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="w-full max-w-md bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
-      <div class="flex items-center justify-between px-4 py-3 border-b border-nx-border">
+    <div class="w-full max-w-[300px] bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-3 py-2 border-b border-nx-border">
         <h2 class="text-sm font-semibold text-nx-text">{t("docker.pull_image")}</h2>
         <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { showPull = false; pullImageName = ""; }}>
-          <span class="material-symbols-outlined">close</span>
+          <span class="material-symbols-outlined text-lg">close</span>
         </button>
       </div>
-      <div class="p-4">
-        <label for="pull-image" class="mb-1.5 block text-xs text-nx-text-muted">{t("docker.image_name")}</label>
+      <div class="p-3">
         <input id="pull-image" type="text" bind:value={pullImageName} placeholder="nginx:latest"
-          class="nx-input w-full h-9 text-sm"
+          class="nx-input w-full h-8 text-xs"
           onkeydown={(e) => { if (e.key === 'Enter') pullImageAction(); }} />
-        <div class="mt-4 flex justify-end gap-2">
-          <button class="nx-btn h-8" onclick={() => { showPull = false; pullImageName = ""; }}>{t("common.cancel")}</button>
-          <button class="nx-btn nx-btn-primary h-8" onclick={pullImageAction} disabled={pullLoading || !pullImageName.trim()}>
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="nx-btn h-7 text-xs" onclick={() => { showPull = false; pullImageName = ""; }}>{t("common.cancel")}</button>
+          <button class="nx-btn nx-btn-primary h-7 text-xs" onclick={pullImageAction} disabled={pullLoading || !pullImageName.trim()}>
             {pullLoading ? t("docker.pulling") : t("docker.pull")}
           </button>
         </div>
@@ -889,27 +888,21 @@
 
 {#if showBuild}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="w-full max-w-md bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
-      <div class="flex items-center justify-between px-4 py-3 border-b border-nx-border">
+    <div class="w-full max-w-[300px] bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-3 py-2 border-b border-nx-border">
         <h2 class="text-sm font-semibold text-nx-text">{t("docker.build_image")}</h2>
         <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { showBuild = false; buildTag = ""; buildPath = ""; }}>
-          <span class="material-symbols-outlined">close</span>
+          <span class="material-symbols-outlined text-lg">close</span>
         </button>
       </div>
-      <div class="p-4 space-y-3">
-        <div>
-          <label for="build-tag" class="mb-1.5 block text-xs text-nx-text-muted">{t("docker.build_tag")}</label>
-          <input id="build-tag" type="text" bind:value={buildTag} placeholder="myapp:latest"
-            class="nx-input w-full h-9 text-sm" />
-        </div>
-        <div>
-          <label for="build-path" class="mb-1.5 block text-xs text-nx-text-muted">{t("docker.build_path")}</label>
-          <input id="build-path" type="text" bind:value={buildPath} placeholder="."
-            class="nx-input w-full h-9 text-sm" />
-        </div>
-        <div class="flex justify-end gap-2 pt-2">
-          <button class="nx-btn h-8" onclick={() => { showBuild = false; buildTag = ""; buildPath = ""; }}>{t("common.cancel")}</button>
-          <button class="nx-btn nx-btn-primary h-8" onclick={buildImageAction} disabled={buildLoading || !buildTag.trim() || !buildPath.trim()}>
+      <div class="p-3 space-y-2">
+        <input id="build-tag" type="text" bind:value={buildTag} placeholder={t("docker.build_tag") + " (myapp:latest)"}
+          class="nx-input w-full h-8 text-xs" />
+        <input id="build-path" type="text" bind:value={buildPath} placeholder={t("docker.build_path") + " (.)"}
+          class="nx-input w-full h-8 text-xs" />
+        <div class="flex justify-end gap-2 pt-1">
+          <button class="nx-btn h-7 text-xs" onclick={() => { showBuild = false; buildTag = ""; buildPath = ""; }}>{t("common.cancel")}</button>
+          <button class="nx-btn nx-btn-primary h-7 text-xs" onclick={buildImageAction} disabled={buildLoading || !buildTag.trim() || !buildPath.trim()}>
             {buildLoading ? t("docker.building") : t("docker.build")}
           </button>
         </div>
@@ -920,21 +913,20 @@
 
 {#if showPush}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="w-full max-w-md bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
-      <div class="flex items-center justify-between px-4 py-3 border-b border-nx-border">
+    <div class="w-full max-w-[300px] bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-3 py-2 border-b border-nx-border">
         <h2 class="text-sm font-semibold text-nx-text">{t("docker.push_image")}</h2>
         <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { showPush = false; pushTarget = ""; }}>
-          <span class="material-symbols-outlined">close</span>
+          <span class="material-symbols-outlined text-lg">close</span>
         </button>
       </div>
-      <div class="p-4">
-        <label for="push-target" class="mb-1.5 block text-xs text-nx-text-muted">{t("docker.push_target")}</label>
+      <div class="p-3">
         <input id="push-target" type="text" bind:value={pushTarget} placeholder="registry/user/repo:tag"
-          class="nx-input w-full h-9 text-sm"
+          class="nx-input w-full h-8 text-xs"
           onkeydown={(e) => { if (e.key === 'Enter') pushImageAction(); }} />
-        <div class="mt-4 flex justify-end gap-2">
-          <button class="nx-btn h-8" onclick={() => { showPush = false; pushTarget = ""; }}>{t("common.cancel")}</button>
-          <button class="nx-btn nx-btn-primary h-8" onclick={pushImageAction} disabled={pushLoading || !pushTarget.trim()}>
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="nx-btn h-7 text-xs" onclick={() => { showPush = false; pushTarget = ""; }}>{t("common.cancel")}</button>
+          <button class="nx-btn nx-btn-primary h-7 text-xs" onclick={pushImageAction} disabled={pushLoading || !pushTarget.trim()}>
             {pushLoading ? t("docker.pushing") : t("docker.push")}
           </button>
         </div>
@@ -945,21 +937,20 @@
 
 {#if showTag}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="w-full max-w-md bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
-      <div class="flex items-center justify-between px-4 py-3 border-b border-nx-border">
+    <div class="w-full max-w-[300px] bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-3 py-2 border-b border-nx-border">
         <h2 class="text-sm font-semibold text-nx-text">{t("docker.tag_image")}</h2>
         <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { showTag = false; tagValue = ""; }}>
-          <span class="material-symbols-outlined">close</span>
+          <span class="material-symbols-outlined text-lg">close</span>
         </button>
       </div>
-      <div class="p-4">
-        <label for="tag-value" class="mb-1.5 block text-xs text-nx-text-muted">{t("docker.tag_value")}</label>
+      <div class="p-3">
         <input id="tag-value" type="text" bind:value={tagValue} placeholder="registry/user/repo:tag"
-          class="nx-input w-full h-9 text-sm"
+          class="nx-input w-full h-8 text-xs"
           onkeydown={(e) => { if (e.key === 'Enter') tagImageAction(); }} />
-        <div class="mt-4 flex justify-end gap-2">
-          <button class="nx-btn h-8" onclick={() => { showTag = false; tagValue = ""; }}>{t("common.cancel")}</button>
-          <button class="nx-btn nx-btn-primary h-8" onclick={tagImageAction} disabled={tagLoading || !tagValue.trim()}>
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="nx-btn h-7 text-xs" onclick={() => { showTag = false; tagValue = ""; }}>{t("common.cancel")}</button>
+          <button class="nx-btn nx-btn-primary h-7 text-xs" onclick={tagImageAction} disabled={tagLoading || !tagValue.trim()}>
             {tagLoading ? t("docker.tagging") : t("docker.tag")}
           </button>
         </div>
@@ -970,21 +961,20 @@
 
 {#if showCreateVolume}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="w-full max-w-md bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
-      <div class="flex items-center justify-between px-4 py-3 border-b border-nx-border">
+    <div class="w-full max-w-[300px] bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-3 py-2 border-b border-nx-border">
         <h2 class="text-sm font-semibold text-nx-text">{t("docker.create_volume")}</h2>
         <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { showCreateVolume = false; newVolumeName = ""; }}>
-          <span class="material-symbols-outlined">close</span>
+          <span class="material-symbols-outlined text-lg">close</span>
         </button>
       </div>
-      <div class="p-4">
-        <label for="volume-name" class="mb-1.5 block text-xs text-nx-text-muted">{t("docker.volume_name")}</label>
+      <div class="p-3">
         <input id="volume-name" type="text" bind:value={newVolumeName} placeholder="my_volume"
-          class="nx-input w-full h-9 text-sm"
+          class="nx-input w-full h-8 text-xs"
           onkeydown={(e) => { if (e.key === 'Enter') createVolume(); }} />
-        <div class="mt-4 flex justify-end gap-2">
-          <button class="nx-btn h-8" onclick={() => { showCreateVolume = false; newVolumeName = ""; }}>{t("common.cancel")}</button>
-          <button class="nx-btn nx-btn-primary h-8" onclick={createVolume} disabled={!newVolumeName.trim()}>{t("docker.create")}</button>
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="nx-btn h-7 text-xs" onclick={() => { showCreateVolume = false; newVolumeName = ""; }}>{t("common.cancel")}</button>
+          <button class="nx-btn nx-btn-primary h-7 text-xs" onclick={createVolume} disabled={!newVolumeName.trim()}>{t("docker.create")}</button>
         </div>
       </div>
     </div>
@@ -993,21 +983,20 @@
 
 {#if showCreateNetwork}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="w-full max-w-md bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
-      <div class="flex items-center justify-between px-4 py-3 border-b border-nx-border">
+    <div class="w-full max-w-[300px] bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-3 py-2 border-b border-nx-border">
         <h2 class="text-sm font-semibold text-nx-text">{t("docker.create_network")}</h2>
         <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { showCreateNetwork = false; newNetworkName = ""; }}>
-          <span class="material-symbols-outlined">close</span>
+          <span class="material-symbols-outlined text-lg">close</span>
         </button>
       </div>
-      <div class="p-4">
-        <label for="network-name" class="mb-1.5 block text-xs text-nx-text-muted">{t("docker.network_name")}</label>
+      <div class="p-3">
         <input id="network-name" type="text" bind:value={newNetworkName} placeholder="my_network"
-          class="nx-input w-full h-9 text-sm"
+          class="nx-input w-full h-8 text-xs"
           onkeydown={(e) => { if (e.key === 'Enter') createNetwork(); }} />
-        <div class="mt-4 flex justify-end gap-2">
-          <button class="nx-btn h-8" onclick={() => { showCreateNetwork = false; newNetworkName = ""; }}>{t("common.cancel")}</button>
-          <button class="nx-btn nx-btn-primary h-8" onclick={createNetwork} disabled={!newNetworkName.trim()}>{t("docker.create")}</button>
+        <div class="mt-3 flex justify-end gap-2">
+          <button class="nx-btn h-7 text-xs" onclick={() => { showCreateNetwork = false; newNetworkName = ""; }}>{t("common.cancel")}</button>
+          <button class="nx-btn nx-btn-primary h-7 text-xs" onclick={createNetwork} disabled={!newNetworkName.trim()}>{t("docker.create")}</button>
         </div>
       </div>
     </div>

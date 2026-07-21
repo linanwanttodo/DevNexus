@@ -14,6 +14,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.1] - 2026-07-21
+
+### Added (English)
+- IDM-style segmented progress bar with per-chunk status colors
+- Real-time speed/progress reporting via streaming download + global atomic counter
+- Work queue download engine with fixed worker threads and dynamic load balancing
+- GitHub URL auto-detection with configurable mirror support
+- Bilingual changelog display in update dialog
+- Clipboard auto-paste when opening the Add Download dialog
+- Cookie string support for authenticated downloads
+- Browser environment emulation (Sec-Fetch- headers, native-tls, complete Accept header)
+- Exponential backoff retry for failed chunks
+- Mirror management UI with strip_host mode for Xget-style proxies
+
+### Fixed
+- Download speed always showing 0 B/s (multiple root causes eliminated)
+- HTTP 403 due to missing User-Agent and browser headers
+- Content-Encoding decoding failure with no_gzip / no_brotli config
+- Sequential chunk waiting replaced by FuturesUnordered for immediate progress
+- Confirm dialog excessive width and redundant title bar
+- All dialog widths reduced across the application
+
+### Added (中文)
+- IDM 风格分段进度条，根据不同分块状态显示不同颜色
+- 基于流式下载 + 全局原子计数器的实时速度与进度推送
+- 工作队列下载引擎，固定线程数并发 + 动态负载均衡
+- GitHub 链接自动检测与可配置镜像加速
+- 更新弹窗双语更新日志显示
+- 打开添加下载弹窗时自动读取剪贴板
+- Cookie 字符串支持，用于需要登录态的文件下载
+- 浏览器环境模拟（Sec-Fetch 头、native-tls、完整 Accept 头）
+- 分块失败指数退避重试
+- 镜像管理界面，支持 strip_host 模式适配 Xget 风格代理
+
+### Fixed (中文)
+- 下载速度始终显示 0 B/s（多个根因全部修复）
+- 缺少 User-Agent 和浏览器头导致的 HTTP 403
+- 关闭 gzip/brotli 后 Content-Encoding 解码失败
+- 顺序等待分块改为 FuturesUnordered，立即推送进度
+- 确认弹窗过宽及多余标题栏
+- 全局弹窗宽度缩小
+
+---
+
 ## [1.2.0] - 2026-07-18
 
 ### Added
