@@ -26,6 +26,7 @@ pub struct PasswordManager {
     password_verifier: Arc<Mutex<VerifierState>>, // (salt, hash) for master password verification
 }
 
+#[allow(clippy::new_without_default)]
 impl PasswordManager {
     pub fn new() -> Self {
         let key = Self::load_or_create_key();

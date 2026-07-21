@@ -2,7 +2,7 @@ use crate::download::chunk::ChunkEngine;
 use crate::download::config::DownloadConfig;
 use crate::download::progress::{ChunkProgress, DownloadProgress};
 use crate::download::storage::DownloadStorage;
-use crate::download::task::{ChunkInfo, ChunkStatus, DownloadStatus, DownloadTask};
+use crate::download::task::{ChunkStatus, DownloadStatus, DownloadTask};
 use chrono::Utc;
 use reqwest::header;
 use std::collections::{HashMap, VecDeque};
@@ -427,7 +427,6 @@ impl DownloadManager {
         let progress_task_id = task_id.clone();
         let progress_global = global_progress.clone();
         let progress_start = start_time;
-        let progress_total_size = task.total_size;
         let progress_handle = tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -462,7 +461,6 @@ impl DownloadManager {
             let url = task.url.clone();
             let save_path = task.save_path.clone();
             let chunk_engine = self.chunk_engine.clone();
-            let retry_count = retry_count;
             let cookie = cookie.clone();
             let mgr = self.clone_for_download();
 
