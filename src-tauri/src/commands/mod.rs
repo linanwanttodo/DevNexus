@@ -1,5 +1,6 @@
 pub mod container;
 pub mod cookie_extractor;
+pub mod download_manager;
 pub mod environment;
 pub mod migration;
 pub mod mirror;

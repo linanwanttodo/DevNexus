@@ -409,26 +409,14 @@
       <div class="nx-dialog-header">
         <h3 class="text-base font-semibold text-nx-text">{t("environments.title")} - {t("environments.new")}</h3>
       </div>
-      <div class="nx-dialog-body space-y-4">
+      <div class="nx-dialog-body space-y-2.5">
         <div>
-          <label for="envName" class="block text-sm text-nx-text-secondary">{t("environments.name")}</label>
-          <input
-            id="envName"
-            type="text"
-            bind:value={newEnvName}
-            placeholder="e.g. Node.js v20"
-            class="nx-input mt-1 w-full"
-          />
+          <label for="envName" class="block text-xs text-nx-text-muted mb-0.5">{t("environments.name")}</label>
+          <input id="envName" type="text" bind:value={newEnvName} placeholder="e.g. Node.js v20" class="nx-input h-8 w-full text-xs" />
         </div>
         <div>
-          <label for="envPath" class="block text-sm text-nx-text-secondary">{t("environments.path")}</label>
-          <input
-            id="envPath"
-            type="text"
-            bind:value={newEnvPath}
-            placeholder="e.g. /usr/local/bin"
-            class="nx-input mt-1 w-full"
-          />
+          <label for="envPath" class="block text-xs text-nx-text-muted mb-0.5">{t("environments.path")}</label>
+          <input id="envPath" type="text" bind:value={newEnvPath} placeholder="e.g. /usr/local/bin" class="nx-input h-8 w-full text-xs" />
         </div>
       </div>
       <div class="nx-dialog-footer">

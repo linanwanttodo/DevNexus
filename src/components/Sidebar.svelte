@@ -44,6 +44,7 @@
       { route: "/cookies", label: t("nav.cookies"), icon: "cookie" },
       { route: "/uninstall", label: t("nav.uninstall"), icon: "delete" },
       { route: "/api-hub", label: t("nav.api_hub"), icon: "hub" },
+      { route: "/downloads", label: t("nav.downloads"), icon: "download" },
       { route: "/settings", label: t("nav.settings"), icon: "settings" },
     ];
   });

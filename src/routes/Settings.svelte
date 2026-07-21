@@ -18,6 +18,8 @@
   function isState(v) { return updateState === v; }
   let updateInfo = $state(null);
   let updateError = $state("");
+  let changelogEn = $state("");
+  let changelogZh = $state("");
   let downloadProgress = $state(0);
 
   function applyTheme(t) {
@@ -44,10 +46,17 @@
     updateState = "checking";
     updateError = "";
     updateInfo = null;
+    changelogEn = "";
+    changelogZh = "";
     try {
       const result = await invoke("check_for_updates_github");
       if (result.has_update) {
         updateInfo = result;
+        const cl = await invoke("get_changelog", { version: null });
+        if (cl) {
+          changelogEn = cl.en;
+          changelogZh = cl.zh;
+        }
         updateState = "available";
       } else {
         updateState = "up_to_date";
@@ -280,7 +289,20 @@
                   <span class="material-symbols-outlined text-nx-accent text-sm mt-0.5">system_update</span>
                   <div class="flex-1 min-w-0">
                     <div class="text-sm font-medium text-nx-text">{t("settings.update_available")} {updateInfo?.latest_version}</div>
-                    {#if updateInfo?.release_notes}<div class="mt-1 max-h-20 overflow-y-auto text-xs text-nx-text-secondary whitespace-pre-wrap">{updateInfo.release_notes}</div>{/if}
+                    {#if changelogEn || changelogZh}
+                      <div class="mt-1 space-y-1">
+                        {#if changelogEn}
+                          <div class="text-xs font-medium text-nx-text mt-1">English</div>
+                          <div class="max-h-24 overflow-y-auto text-xs text-nx-text-secondary whitespace-pre-wrap leading-relaxed">{changelogEn}</div>
+                        {/if}
+                        {#if changelogZh}
+                          <div class="text-xs font-medium text-nx-text mt-2">中文</div>
+                          <div class="max-h-24 overflow-y-auto text-xs text-nx-text-secondary whitespace-pre-wrap leading-relaxed">{changelogZh}</div>
+                        {/if}
+                      </div>
+                    {:else if updateInfo?.release_notes}
+                      <div class="mt-1 max-h-20 overflow-y-auto text-xs text-nx-text-secondary whitespace-pre-wrap">{updateInfo.release_notes}</div>
+                    {/if}
                     {#if updateInfo?.published_at}<div class="mt-1 text-xs text-nx-text-muted">{t("settings.released")}: {new Date(updateInfo.published_at).toLocaleDateString()}</div>{/if}
                   </div>
                 </div>

@@ -463,59 +463,30 @@ import { invoke } from "@tauri-apps/api/core";
         <h2 class="text-lg font-semibold text-nx-text">{t('passwords.add')}</h2>
       </div>
       
-      <div class="nx-dialog-body space-y-4">
-        <div>
-          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-name-add">{t('passwords.name')} *</label>
-          <input
-            id="pm-name-add"
-            type="text"
-            bind:value={entryName}
-            placeholder="GitHub Account"
-            class="nx-input w-full"
-          />
+      <div class="nx-dialog-body space-y-2.5">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-name-add">{t('passwords.name')} *</label>
+            <input id="pm-name-add" type="text" bind:value={entryName} placeholder="GitHub Account" class="nx-input h-8 w-full text-xs" />
+          </div>
+          <div>
+            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-username-add">{t('passwords.username')} *</label>
+            <input id="pm-username-add" type="text" bind:value={username} placeholder="user@example.com" class="nx-input h-8 w-full text-xs" />
+          </div>
         </div>
-
-        <div>
-          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-username-add">{t('passwords.username')} *</label>
-          <input
-            id="pm-username-add"
-            type="text"
-            bind:value={username}
-            placeholder="user@example.com"
-            class="nx-input w-full"
-          />
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-password-add">{t('passwords.password')} *</label>
+            <input id="pm-password-add" type="password" bind:value={password} placeholder="••••••••" class="nx-input h-8 w-full text-xs" />
+          </div>
+          <div>
+            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-url-add">URL</label>
+            <input id="pm-url-add" type="url" bind:value={url} placeholder="https://github.com" class="nx-input h-8 w-full text-xs" />
+          </div>
         </div>
-
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-password-add">{t('passwords.password')} *</label>
-          <input
-            id="pm-password-add"
-            type="password"
-            bind:value={password}
-            placeholder="••••••••"
-            class="nx-input w-full"
-          />
-        </div>
-
-        <div>
-          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-url-add">URL</label>
-          <input
-            id="pm-url-add"
-            type="url"
-            bind:value={url}
-            placeholder="https://github.com"
-            class="nx-input w-full"
-          />
-        </div>
-
-        <div>
-          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-notes-add">{t('passwords.notes')}</label>
-          <textarea
-            id="pm-notes-add"
-            bind:value={notes}
-            placeholder="Additional information..."
-            rows="3"
-            class="nx-input w-full"></textarea>
+          <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-notes-add">{t('passwords.notes')}</label>
+          <textarea id="pm-notes-add" bind:value={notes} placeholder="Additional information..." rows="2" class="nx-input w-full text-xs"></textarea>
         </div>
       </div>
 
@@ -543,55 +514,30 @@ import { invoke } from "@tauri-apps/api/core";
         <h2 class="text-lg font-semibold text-nx-text">{t('passwords.edit_title')}</h2>
       </div>
 
-      <div class="nx-dialog-body space-y-4">
-        <div>
-          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-name-edit">{t('passwords.name')} *</label>
-          <input
-            id="pm-name-edit"
-            type="text"
-            bind:value={editName}
-            class="nx-input w-full"
-          />
+      <div class="nx-dialog-body space-y-2.5">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-name-edit">{t('passwords.name')} *</label>
+            <input id="pm-name-edit" type="text" bind:value={editName} class="nx-input h-8 w-full text-xs" />
+          </div>
+          <div>
+            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-username-edit">{t('passwords.username')} *</label>
+            <input id="pm-username-edit" type="text" bind:value={editUsername} class="nx-input h-8 w-full text-xs" />
+          </div>
         </div>
-
-        <div>
-          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-username-edit">{t('passwords.username')} *</label>
-          <input
-            id="pm-username-edit"
-            type="text"
-            bind:value={editUsername}
-            class="nx-input w-full"
-          />
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-password-edit">{t('passwords.password')}</label>
+            <input id="pm-password-edit" type="password" bind:value={editPassword} placeholder={t('passwords.keep_password')} class="nx-input h-8 w-full text-xs" />
+          </div>
+          <div>
+            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-url-edit">URL</label>
+            <input id="pm-url-edit" type="url" bind:value={editUrl} class="nx-input h-8 w-full text-xs" />
+          </div>
         </div>
-
         <div>
-          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-password-edit">{t('passwords.password')}</label>
-          <input
-            id="pm-password-edit"
-            type="password"
-            bind:value={editPassword}
-            placeholder={t('passwords.keep_password')}
-            class="nx-input w-full"
-          />
-        </div>
-
-        <div>
-          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-url-edit">URL</label>
-          <input
-            id="pm-url-edit"
-            type="url"
-            bind:value={editUrl}
-            class="nx-input w-full"
-          />
-        </div>
-
-        <div>
-          <label class="mb-1 block text-xs text-nx-text-muted" for="pm-notes-edit">{t('passwords.notes')}</label>
-          <textarea
-            id="pm-notes-edit"
-            bind:value={editNotes}
-            rows="3"
-            class="nx-input w-full"></textarea>
+          <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-notes-edit">{t('passwords.notes')}</label>
+          <textarea id="pm-notes-edit" bind:value={editNotes} rows="2" class="nx-input w-full text-xs"></textarea>
         </div>
       </div>
 
