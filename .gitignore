@@ -14,6 +14,8 @@ dist/
 # Agent caches
 .atomcode/
 .sisyphus/
+.zcode/
+.agents/
 
 # OS
 .DS_Store
