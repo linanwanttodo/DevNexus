@@ -40,10 +40,12 @@ async fn main() {
             api_key: "x".into(),
             models: vec!["smoke-model".into()],
             model_aliases: Default::default(),
+            model_context_lengths: Default::default(),
             enabled: true,
             created_at: 0,
         },
     )
+    .await
     .unwrap();
 
     let hub_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

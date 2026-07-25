@@ -1493,7 +1493,10 @@ async fn fetch_github_versions(owner: &str, repo: &str) -> Result<Vec<String>, S
         "https://api.github.com/repos/{}/{}/releases?per_page=30",
         owner, repo
     );
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
     let resp = client
         .get(&url)
         .header("User-Agent", "DevNexus/1.0")
@@ -1529,7 +1532,13 @@ async fn fetch_github_versions(owner: &str, repo: &str) -> Result<Vec<String>, S
 /// 从 Node.js 官方 dist 目录获取版本列表
 async fn fetch_node_versions() -> Result<Vec<String>, String> {
     let url = "https://nodejs.org/dist/index.json";
-    let resp = reqwest::get(url)
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let resp = client
+        .get(url)
+        .send()
         .await
         .map_err(|e| format!("Failed to fetch Node.js versions: {}", e))?;
     let versions: Vec<serde_json::Value> = resp
@@ -1552,7 +1561,13 @@ async fn fetch_node_versions() -> Result<Vec<String>, String> {
 /// 从 Go 官方下载页获取版本列表
 async fn fetch_go_versions() -> Result<Vec<String>, String> {
     let url = "https://go.dev/dl/?mode=json";
-    let resp = reqwest::get(url)
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let resp = client
+        .get(url)
+        .send()
         .await
         .map_err(|e| format!("Failed to fetch Go versions: {}", e))?;
     let versions: Vec<serde_json::Value> = resp

@@ -1,4 +1,7 @@
+use std::collections::VecDeque;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+
 pub mod commands;
 pub mod fetch_models;
 pub mod forwarder;
@@ -11,9 +14,9 @@ pub mod usage;
 
 use types::AppState;
 
-/// 初始化 API Hub：创建共享状态
+/// 初始化 API Hub：创建共享状态（同步调用，在应用启动时执行）
 pub fn init(data_dir: &std::path::Path) -> AppState {
-    // 初始化 SQLite（目录由 data_dir() 保证存在）
+    // 初始化 SQLite
     let db_path = data_dir.join("api_hub.db");
     let conn = match rusqlite::Connection::open(&db_path) {
         Ok(c) => Some(c),
@@ -25,58 +28,35 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
             None
         }
     };
-    let db = Arc::new(std::sync::Mutex::new(conn));
-
-    let state = AppState {
-        providers: Arc::new(std::sync::RwLock::new(Vec::new())),
-        request_logs: Arc::new(std::sync::RwLock::new(Vec::new())),
-        db: db.clone(),
-    };
 
     // 初始化数据库表
-    provider::init_db(&state);
-
-    // 从数据库加载已保存的 Provider
-    provider::load_providers_from_db(&state);
-
-    // 如果没有 Provider，添加默认的 Ollama（自动检测）
-    if state
-        .providers
-        .read()
-        .ok()
-        .map(|p| p.is_empty())
-        .unwrap_or(true)
-    {
-        let ollama_running = std::net::TcpStream::connect_timeout(
-            &"127.0.0.1:11434".parse().unwrap(),
-            std::time::Duration::from_millis(500),
-        )
-        .is_ok();
-
-        if ollama_running {
-            let _ = provider::add_provider(
-                &state,
-                types::Provider {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    name: "Ollama (Local)".to_string(),
-                    protocol: types::ApiProtocol::Ollama,
-                    base_url: "http://localhost:11434".to_string(),
-                    api_key: String::new(),
-                    models: vec![
-                        "llama3.2".to_string(),
-                        "qwen2.5".to_string(),
-                        "nomic-embed-text".to_string(),
-                    ],
-                    model_aliases: std::collections::HashMap::new(),
-                    enabled: true,
-                    created_at: chrono::Utc::now().timestamp(),
-                },
-            );
-            println!("[API Hub] Auto-detected Ollama running at localhost:11434");
+    if let Some(ref c) = conn {
+        if let Err(e) = provider::init_db_sync(c) {
+            eprintln!("[API Hub] Database init error: {}", e);
         }
     }
 
-    state
+    // 从数据库加载已保存的 Provider
+    let providers = conn
+        .as_ref()
+        .map(|c| provider::load_providers_from_db_sync(c))
+        .unwrap_or_default();
+
+    // 创建全局 HTTP Client（复用连接池）
+    let http_client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60))
+        .pool_max_idle_per_host(10)
+        .build()
+        .expect("Failed to create HTTP client");
+
+    AppState {
+        providers: Arc::new(tokio::sync::RwLock::new(providers)),
+        request_logs: Arc::new(tokio::sync::RwLock::new(VecDeque::new())),
+        db: Arc::new(tokio::sync::Mutex::new(conn)),
+        http_client,
+        running: Arc::new(AtomicBool::new(false)),
+    }
 }
 
 /// 启动 API Hub HTTP 服务（在 Tauri 的异步运行时中运行）

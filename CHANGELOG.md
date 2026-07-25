@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.2.1] - 2026-07-21
+## [1.2.2] - 2026-07-21
 
 ### Added (English)
 - IDM-style segmented progress bar with per-chunk status colors

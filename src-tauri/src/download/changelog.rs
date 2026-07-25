@@ -17,7 +17,7 @@ pub fn get_latest_changelog() -> Option<ChangelogEntry> {
 
 fn all_changelogs() -> Vec<ChangelogEntry> {
     vec![ChangelogEntry {
-        version: "1.2.1".to_string(),
+        version: "1.2.2".to_string(),
         en: "IDM-style segmented progress bar with per-chunk status colors\n\
                  Real-time speed/progress reporting via streaming download\n\
                  Work queue download engine with fixed worker threads\n\

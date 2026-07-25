@@ -1,18 +1,23 @@
 use super::types::{AppState, RequestLog};
 
-/// 记录一次请求到日志
-pub fn log_request(state: &AppState, log: RequestLog) {
-    // 内存中保留最近 1000 条
-    if let Ok(mut logs) = state.request_logs.write() {
-        logs.push(log.clone());
-        if logs.len() > 1000 {
-            logs.remove(0);
+const MAX_LOGS_IN_MEMORY: usize = 1000;
+
+/// 记录一次请求到日志（async 版本）
+pub async fn log_request(state: &AppState, log: RequestLog) {
+    // 内存中保留最近 MAX_LOGS_IN_MEMORY 条（VecDeque O(1) 移除）
+    {
+        let mut logs = state.request_logs.write().await;
+        if logs.len() >= MAX_LOGS_IN_MEMORY {
+            logs.pop_front();
         }
+        logs.push_back(log.clone());
     }
 
-    // 持久化到 SQLite
-    if let Ok(db) = state.db.lock() {
-        if let Some(ref conn) = *db {
+    // 异步持久化到 SQLite（fire-and-forget via spawn_blocking）
+    let db = state.db.clone();
+    tokio::task::spawn_blocking(move || {
+        let db_guard = db.blocking_lock();
+        if let Some(ref conn) = *db_guard {
             let _ = conn.execute(
                 "INSERT INTO request_logs (id, provider_id, provider_name, model, request_model,
                  input_tokens, output_tokens, latency_ms, status_code, error_message, timestamp, is_streaming)
@@ -23,9 +28,9 @@ pub fn log_request(state: &AppState, log: RequestLog) {
                     log.provider_name,
                     log.model,
                     log.request_model,
-                    log.input_tokens,
-                    log.output_tokens,
-                    log.latency_ms,
+                    log.input_tokens as i64,
+                    log.output_tokens as i64,
+                    log.latency_ms as i64,
                     log.status_code,
                     log.error_message,
                     log.timestamp,
@@ -33,32 +38,24 @@ pub fn log_request(state: &AppState, log: RequestLog) {
                 ],
             );
         }
-    }
+    });
 }
 
-/// 获取请求日志列表（支持分页）
-pub fn get_logs(state: &AppState, limit: usize, offset: usize) -> Vec<RequestLog> {
-    if let Ok(logs) = state.request_logs.read() {
-        let mut all: Vec<RequestLog> = logs.clone();
-        all.reverse(); // 最新的在前
-        all.into_iter().skip(offset).take(limit).collect()
-    } else {
-        Vec::new()
-    }
+/// 获取请求日志列表（支持分页，从最新到最旧）
+pub async fn get_logs(state: &AppState, limit: usize, offset: usize) -> Vec<RequestLog> {
+    let logs = state.request_logs.read().await;
+    // 从尾部（最新）开始迭代
+    logs.iter().rev().skip(offset).take(limit).cloned().collect()
 }
 
 /// 获取用量统计数据
-pub fn get_usage_stats(state: &AppState) -> UsageStats {
-    let logs = if let Ok(l) = state.request_logs.read() {
-        l.clone()
-    } else {
-        return UsageStats::default();
-    };
+pub async fn get_usage_stats(state: &AppState) -> UsageStats {
+    let logs = state.request_logs.read().await;
 
     let mut stats = UsageStats::default();
     let now = chrono::Utc::now().timestamp();
 
-    for log in &logs {
+    for log in logs.iter() {
         stats.total_requests += 1;
         stats.total_input_tokens += log.input_tokens;
         stats.total_output_tokens += log.output_tokens;
@@ -79,7 +76,7 @@ pub fn get_usage_stats(state: &AppState) -> UsageStats {
 
         // 按时段聚合（最近24小时按小时）
         let secs_ago = now - log.timestamp;
-        if secs_ago < 86400 {
+        if secs_ago < 86400 && secs_ago >= 0 {
             let hour_key = (log.timestamp / 3600) * 3600;
             let h_entry = stats
                 .by_hour
@@ -103,24 +100,24 @@ pub fn get_usage_stats(state: &AppState) -> UsageStats {
 pub struct UsageStats {
     pub total_requests: u64,
     pub total_errors: u64,
-    pub total_input_tokens: u32,
-    pub total_output_tokens: u32,
+    pub total_input_tokens: u64,
+    pub total_output_tokens: u64,
     pub total_latency_ms: u64,
     pub avg_latency_ms: u64,
     pub by_model: std::collections::HashMap<String, ModelStats>,
-    pub by_hour: std::collections::HashMap<i64, HourlyStats>, // timestamp(秒) → 统计
+    pub by_hour: std::collections::HashMap<i64, HourlyStats>,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct ModelStats {
     pub requests: u64,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct HourlyStats {
     pub requests: u64,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
 }

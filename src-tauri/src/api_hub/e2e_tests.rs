@@ -8,7 +8,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use std::collections::VecDeque;
 use std::net::SocketAddr;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 async fn mock_openai_chat(Json(body): Json<serde_json::Value>) -> axum::response::Response {
@@ -25,7 +27,7 @@ async fn mock_openai_chat(Json(body): Json<serde_json::Value>) -> axum::response
         .unwrap_or(false)
     {
         let sse = format!(
-            "data: {}\ndata: {}\ndata: {}\ndata: {}\ndata: [DONE]\n",
+            "data: {}\n\ndata: {}\n\ndata: {}\n\ndata: {}\n\ndata: [DONE]\n\n",
             serde_json::json!({"id":"chatcmpl-sse","object":"chat.completion.chunk","created":1,"model":model,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}),
             serde_json::json!({"id":"chatcmpl-sse","object":"chat.completion.chunk","created":1,"model":model,"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}),
             serde_json::json!({"id":"chatcmpl-sse","object":"chat.completion.chunk","created":1,"model":model,"choices":[{"index":0,"delta":{"content":" world"},"finish_reason":null}]}),
@@ -64,6 +66,31 @@ async fn mock_anthropic_messages(Json(body): Json<serde_json::Value>) -> impl In
         "anthropic mock expected messages field, got {}",
         body
     );
+
+    // 如果流式，返回 SSE Anthropic 格式
+    if body
+        .get("stream")
+        .and_then(|s| s.as_bool())
+        .unwrap_or(false)
+    {
+        let sse = format!(
+            "event: message_start\ndata: {}\n\nevent: content_block_start\ndata: {}\n\nevent: content_block_delta\ndata: {}\n\nevent: content_block_delta\ndata: {}\n\nevent: content_block_stop\ndata: {}\n\nevent: message_delta\ndata: {}\n\nevent: message_stop\ndata: {}\n\n",
+            serde_json::json!({"type":"message_start","message":{"id":"msg_sse","type":"message","role":"assistant","model":model,"content":[],"stop_reason":null,"usage":{"input_tokens":5,"output_tokens":0}}}),
+            serde_json::json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}),
+            serde_json::json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}),
+            serde_json::json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" anthropic"}}),
+            serde_json::json!({"type":"content_block_stop","index":0}),
+            serde_json::json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}),
+            serde_json::json!({"type":"message_stop"}),
+        );
+        let body = axum::body::Body::from(sse);
+        return axum::response::Response::builder()
+            .header("content-type", "text/event-stream")
+            .body(body)
+            .unwrap()
+            .into_response();
+    }
+
     Json(serde_json::json!({
         "id": "msg_mock",
         "type": "message",
@@ -73,24 +100,7 @@ async fn mock_anthropic_messages(Json(body): Json<serde_json::Value>) -> impl In
         "stop_reason": "end_turn",
         "usage": {"input_tokens": 4, "output_tokens": 6}
     }))
-}
-
-async fn mock_gemini(Json(body): Json<serde_json::Value>) -> impl IntoResponse {
-    assert!(
-        body.get("contents").is_some(),
-        "gemini mock expected contents, got {}",
-        body
-    );
-    Json(serde_json::json!({
-        "candidates": [{
-            "content": {"parts": [{"text": "hello-from-gemini-mock"}], "role": "model"},
-            "finishReason": "STOP"
-        }],
-        "usageMetadata": {
-            "promptTokenCount": 2,
-            "candidatesTokenCount": 7
-        }
-    }))
+    .into_response()
 }
 
 async fn mock_openai_responses(Json(body): Json<serde_json::Value>) -> impl IntoResponse {
@@ -123,7 +133,6 @@ async fn spawn_mock_upstream() -> (SocketAddr, tokio::task::JoinHandle<()>) {
     let app = Router::new()
         .route("/v1/chat/completions", post(mock_openai_chat))
         .route("/v1/messages", post(mock_anthropic_messages))
-        .route("/v1/models/:model_action", post(mock_gemini))
         .route("/v1/responses", post(mock_openai_responses))
         .route("/health", get(|| async { "ok" }));
 
@@ -136,12 +145,8 @@ async fn spawn_mock_upstream() -> (SocketAddr, tokio::task::JoinHandle<()>) {
 }
 
 fn test_state(upstream: &str) -> AppState {
-    let db = Arc::new(std::sync::Mutex::new(None));
-    let state = AppState {
-        providers: Arc::new(std::sync::RwLock::new(Vec::new())),
-        request_logs: Arc::new(std::sync::RwLock::new(Vec::new())),
-        db,
-    };
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    provider::init_db_sync(&conn).unwrap();
 
     let providers = vec![
         Provider {
@@ -152,6 +157,7 @@ fn test_state(upstream: &str) -> AppState {
             api_key: "sk-test".into(),
             models: vec!["mock-gpt".into(), "mock-sse".into()],
             model_aliases: Default::default(),
+            model_context_lengths: Default::default(),
             enabled: true,
             created_at: 0,
         },
@@ -163,17 +169,7 @@ fn test_state(upstream: &str) -> AppState {
             api_key: "anth-test".into(),
             models: vec!["mock-claude".into()],
             model_aliases: Default::default(),
-            enabled: true,
-            created_at: 0,
-        },
-        Provider {
-            id: "p-gem".into(),
-            name: "Mock Gemini".into(),
-            protocol: ApiProtocol::Gemini,
-            base_url: format!("http://{}", upstream),
-            api_key: "gem-test".into(),
-            models: vec!["gemini-mock".into()],
-            model_aliases: Default::default(),
+            model_context_lengths: Default::default(),
             enabled: true,
             created_at: 0,
         },
@@ -185,14 +181,24 @@ fn test_state(upstream: &str) -> AppState {
             api_key: "sk-resp".into(),
             models: vec!["mock-resp".into()],
             model_aliases: Default::default(),
+            model_context_lengths: Default::default(),
             enabled: true,
             created_at: 0,
         },
     ];
 
-    *state.providers.write().unwrap() = providers;
-    let _ = provider::init_db(&state);
-    state
+    let http_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .unwrap();
+
+    AppState {
+        providers: Arc::new(tokio::sync::RwLock::new(providers)),
+        request_logs: Arc::new(tokio::sync::RwLock::new(VecDeque::new())),
+        db: Arc::new(tokio::sync::Mutex::new(Some(conn))),
+        http_client,
+        running: Arc::new(AtomicBool::new(false)),
+    }
 }
 
 async fn spawn_hub(state: AppState) -> (SocketAddr, tokio::task::JoinHandle<()>) {
@@ -236,7 +242,7 @@ async fn e2e_health_and_models() {
         .unwrap();
     let data = models["data"].as_array().unwrap();
     assert!(
-        data.len() >= 4,
+        data.len() >= 3,
         "expected registered models, got {:?}",
         data
     );
@@ -311,27 +317,6 @@ async fn e2e_anthropic_client_to_openai_upstream() {
 }
 
 #[tokio::test]
-async fn e2e_openai_client_to_gemini_upstream() {
-    let (up_addr, _up) = spawn_mock_upstream().await;
-    let state = test_state(&up_addr.to_string());
-    let (hub, _h) = spawn_hub(state).await;
-
-    let (status, body) = post_json(
-        &format!("http://{}/v1/chat/completions", hub),
-        serde_json::json!({
-            "model": "gemini-mock",
-            "messages": [{"role": "user", "content": "hi gemini"}]
-        }),
-    )
-    .await;
-    assert_eq!(status, 200, "{:?}", body);
-    assert_eq!(
-        body["choices"][0]["message"]["content"],
-        "hello-from-gemini-mock"
-    );
-}
-
-#[tokio::test]
 async fn e2e_openai_client_to_responses_upstream() {
     let (up_addr, _up) = spawn_mock_upstream().await;
     let state = test_state(&up_addr.to_string());
@@ -398,4 +383,62 @@ async fn e2e_streaming_chat() {
         &body[..body.len().min(200)]
     );
     assert!(body.contains("Hello"), "SSE should contain Hello");
+}
+
+#[tokio::test]
+async fn e2e_streaming_cross_protocol_openai_to_anthropic() {
+    // OpenAI Chat 客户端请求，路由到 Anthropic 上游（流式），hub 应转换格式
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://{}/v1/chat/completions", hub))
+        .json(&serde_json::json!({
+            "model": "mock-claude",
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status().as_u16(), 200);
+    let body = resp.text().await.unwrap_or_default();
+    // 转换后应该是 OpenAI Chat 格式的 SSE，包含 data: [DONE]
+    assert!(
+        body.contains("data: [DONE]"),
+        "Converted SSE should end with [DONE], got: {}",
+        &body[..body.len().min(300)]
+    );
+    // 应该包含 chat.completion.chunk 格式
+    assert!(
+        body.contains("chat.completion.chunk"),
+        "Converted SSE should be in OpenAI Chat format, got: {}",
+        &body[..body.len().min(300)]
+    );
+    // 应包含转换后的内容
+    assert!(
+        body.contains("Hello") || body.contains("anthropic"),
+        "Converted SSE should contain content"
+    );
+}
+
+#[tokio::test]
+async fn e2e_unmatched_model_returns_404() {
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let (status, _body) = post_json(
+        &format!("http://{}/v1/chat/completions", hub),
+        serde_json::json!({
+            "model": "nonexistent-model-xyz",
+            "messages": [{"role": "user", "content": "hi"}]
+        }),
+    )
+    .await;
+    // 不再兜底路由，未匹配模型应返回 404
+    assert_eq!(status, 404);
 }

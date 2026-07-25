@@ -20,11 +20,11 @@ pub fn openai_to_anthropic(req: &OpenAIChatRequest) -> AnthropicRequest {
             "system" => system_parts.push(content),
             "assistant" => messages.push(AnthropicMessage {
                 role: "assistant".to_string(),
-                content,
+                content: Value::String(content),
             }),
             _ => messages.push(AnthropicMessage {
                 role: "user".to_string(),
-                content,
+                content: Value::String(content),
             }),
         }
     }
@@ -32,7 +32,7 @@ pub fn openai_to_anthropic(req: &OpenAIChatRequest) -> AnthropicRequest {
     if messages.is_empty() {
         messages.push(AnthropicMessage {
             role: "user".to_string(),
-            content: "Hello".to_string(),
+            content: Value::String("Hello".to_string()),
         });
     }
 
@@ -69,7 +69,7 @@ pub fn anthropic_to_openai_req(req: &AnthropicRequest) -> OpenAIChatRequest {
     for msg in &req.messages {
         messages.push(ChatMessage {
             role: msg.role.clone(),
-            content: Value::String(msg.content.clone()),
+            content: msg.content.clone(),
         });
     }
 

@@ -46,8 +46,6 @@ pub enum ApiProtocol {
     OpenAIChat,       // OpenAI Chat Completions (/v1/chat/completions)
     OpenAIResponses,  // OpenAI Responses (/v1/responses)
     Anthropic,        // Anthropic Messages (/v1/messages)
-    Gemini,           // Google Gemini generateContent
-    Ollama,           // Ollama (OpenAI 兼容, 本地)
 }
 ```
 
@@ -56,8 +54,8 @@ pub enum ApiProtocol {
 | 维度 | 说明 |
 |------|------|
 | 上游端点 (endpoint) | 如 OpenAIChat → `/v1/chat/completions` |
-| 认证方式 | OpenAI: `Bearer`; Anthropic: `x-api-key`; Gemini: URL 参数 |
-| Token 提取方案 | `PromptCompletion` / `InputOutput` / `None` |
+| 认证方式 | OpenAI: `Authorization: Bearer`; Anthropic: `x-api-key` + `anthropic-version` |
+| Token 提取方案 | `PromptCompletion` (OpenAI) / `InputOutput` (Anthropic / Responses) |
 | 格式转换策略 | 确定请求/响应转换的目标协议 |
 
 ### 2.3 请求格式
@@ -134,8 +132,8 @@ pub struct RequestLog {
     pub provider_name: String,
     pub model: String,
     pub request_model: String,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
     pub latency_ms: u64,
     pub status_code: u16,
     pub error_message: Option<String>,
@@ -149,9 +147,11 @@ pub struct RequestLog {
 ```rust
 #[derive(Clone)]
 pub struct AppState {
-    pub providers: Arc<RwLock<Vec<Provider>>>,
-    pub request_logs: Arc<RwLock<Vec<RequestLog>>>,
-    pub db: Arc<Mutex<Option<rusqlite::Connection>>>,
+    pub providers: Arc<tokio::sync::RwLock<Vec<Provider>>>,
+    pub request_logs: Arc<tokio::sync::RwLock<VecDeque<RequestLog>>>,
+    pub db: Arc<tokio::sync::Mutex<Option<rusqlite::Connection>>>,
+    pub http_client: reqwest::Client,
+    pub running: Arc<AtomicBool>,
 }
 ```
 
@@ -175,9 +175,8 @@ api_hub/
 └── transform/
     ├── mod.rs
     ├── anthropic.rs  # OpenAI ↔ Anthropic 格式转换
-    ├── gemini.rs     # OpenAI ↔ Gemini 格式转换
-    ├── openai.rs     # 兼容别名（re-export anthropic 模块）
-    └── responses.rs  # OpenAI Chat ↔ Responses 格式转换
+    ├── responses.rs  # OpenAI Chat ↔ Responses 格式转换
+    └── streaming.rs  # Chunk 级 SSE 跨协议流式格式转换
 ```
 
 ### 3.2 请求处理管线
@@ -196,18 +195,16 @@ api_hub/
 │                                                              │
 │  ② internal_request_to_provider()                           │
 │     内部 OpenAIChat → Provider 协议格式                      │
-│     → OpenAI/Ollama: 直接透传                                │
+│     → OpenAI Chat/Responses: 直接透传                        │
 │     → Anthropic:    openai_to_anthropic()                   │
-│     → Gemini:       openai_to_gemini()                      │
 │                                                              │
 │  ③ forward_request() / forward_streaming()                  │
 │     转发到上游 Provider（认证头 / URL 拼接 / Token 提取）    │
 │                                                              │
 │  ④ provider_response_to_internal()                          │
 │     Provider 响应 → 内部 OpenAIChat 格式                     │
-│     → OpenAI/Ollama: 直接透传                                │
+│     → OpenAI Chat/Responses: 直接透传                        │
 │     → Anthropic:    anthropic_to_openai()                   │
-│     → Gemini:       gemini_to_openai()                      │
 │                                                              │
 │  ⑤ internal_response_to_client()                            │
 │     内部 OpenAIChat → 客户端请求的格式                        │
@@ -226,18 +223,18 @@ api_hub/
 路由模块 (`router.rs`) 根据请求中的 `model` 字段查找对应的 Provider:
 
 1. **精确匹配** — 遍历所有 Provider，匹配 `models` 列表中的模型名（不区分大小写）
-2. **通配符匹配** — 按协议前缀匹配（如 `gpt-` 配 OpenAI、`claude-` 配 Anthropic、`gemini-` 配 Gemini）
-3. **兜底策略** — 仍未匹配则返回第一个启用的 Provider
+2. **通配符匹配** — 按协议前缀匹配（如 `gpt-`/`o1-`/`o3-` 配 OpenAI、`claude-` 配 Anthropic）
+3. **无兜底** — 未匹配则返回 `None`，调用方返回 404 明确错误
 
 ### 3.4 启动流程
 
 ```rust
 pub fn init(data_dir: &Path) -> AppState {
     // 1. 打开 SQLite 数据库
-    // 2. 创建共享状态 (providers, request_logs, db)
-    // 3. 初始化数据库表 + 旧 schema 迁移
-    // 4. 从数据库加载已保存的 Provider
-    // 5. 自动检测 Ollama 并添加默认 Provider
+    // 2. 创建全局 reqwest::Client（连接池复用）
+    // 3. 创建共享状态 (providers, request_logs, db, http_client, running)
+    // 4. 初始化数据库表 + 旧 schema 迁移
+    // 5. 从数据库加载已保存的 Provider
 }
 
 pub async fn start(state: Arc<AppState>) {
@@ -251,31 +248,16 @@ pub async fn start(state: Arc<AppState>) {
 
 | Provider | 协议 | 上游端点 | 认证方式 | 模型默认前缀 |
 |----------|------|----------|----------|-------------|
-| OpenAI | `OpenAIChat` | `/v1/chat/completions` | `Authorization: Bearer` | `gpt-`, `o1-`, `o3-`, `text-` |
+| OpenAI | `OpenAIChat` | `/v1/chat/completions` | `Authorization: Bearer` | `gpt-`, `o1-`, `o3-`, `o4-`, `text-` |
 | OpenAI | `OpenAIResponses` | `/v1/responses` | `Authorization: Bearer` | 同上 |
 | Anthropic | `Anthropic` | `/v1/messages` | `x-api-key` + `anthropic-version` | `claude-` |
-| Google Gemini | `Gemini` | `/v1/models/{model}:generateContent` | URL 参数 `?key=` | `gemini-` |
-| Ollama | `Ollama` | `/v1/chat/completions` | 无认证 | 无前缀（精确匹配） |
 
 ### 模型自动发现
 
 各 Provider 的模型拉取方式:
 
-- **OpenAI / Anthropic**: `GET /v1/models`（标准 OpenAI 风格端点）
-- **Ollama**: `GET /api/tags`（Ollama 专有端点）
-- **Gemini**: 无标准模型列表端点，使用预设列表:
-
-```rust
-fn predefined_gemini_models() -> Vec<FetchedModel> {
-    vec![
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-1.5-pro",
-        "gemini-1.5-flash",
-        "gemini-2.5-pro-preview-06-05",
-    ]
-}
-```
+- **OpenAI / Responses**: `GET /v1/models`（标准 OpenAI 风格端点，使用 `Authorization: Bearer` 认证）
+- **Anthropic**: `GET /v1/models`（使用 `x-api-key` + `anthropic-version` header 认证）
 
 ---
 
@@ -310,26 +292,9 @@ fn predefined_gemini_models() -> Vec<FetchedModel> {
 | `stop_sequences` | `stop` | |
 | `stream` | `stream` | |
 
-**OpenAI Chat → Gemini** (`openai_to_gemini`):
+**OpenAI Chat → Gemini** — 已删除（不再支持 Gemini 协议）
 
-| OpenAI ChatCompletion | Gemini generateContent | 说明 |
-|----------------------|------------------------|------|
-| `messages[role=system].content` | `systemInstruction.parts[].text` | 合并多条 |
-| `messages[role=user].content` | `contents[].role=user` | |
-| `messages[role=assistant].content` | `contents[].role=model` | role 映射为 model |
-| `temperature` | `generationConfig.temperature` | |
-| `max_tokens` | `generationConfig.maxOutputTokens` | |
-| `top_p` | `generationConfig.topP` | |
-| `stop` | `generationConfig.stopSequences` | |
-
-**Gemini → OpenAI Chat** (`gemini_to_openai`):
-
-| Gemini generateContent | OpenAI ChatCompletion | 说明 |
-|------------------------|----------------------|------|
-| `candidates[0].content.parts[].text` | `choices[0].message.content` | 拼接多个 parts |
-| `candidates[0].finishReason` | `choices[0].finish_reason` | STOP→stop, MAX_TOKENS→length |
-| `usageMetadata.promptTokenCount` | `usage.prompt_tokens` | |
-| `usageMetadata.candidatesTokenCount` | `usage.completion_tokens` | |
+**Gemini → OpenAI Chat** — 已删除（不再支持 Gemini 协议）
 
 **OpenAI Responses ↔ Chat** (`responses.rs`):
 
@@ -356,9 +321,8 @@ fn predefined_gemini_models() -> Vec<FetchedModel> {
 
 ```rust
 pub enum TokenScheme {
-    PromptCompletion,  // prompt_tokens + completion_tokens (OpenAI / Ollama)
+    PromptCompletion,  // prompt_tokens + completion_tokens (OpenAI Chat)
     InputOutput,       // input_tokens + output_tokens  (Anthropic / OpenAI Responses)
-    None,              // 无 token 信息 (Gemini)
 }
 ```
 
@@ -366,58 +330,46 @@ pub enum TokenScheme {
 
 ## 6. SSE 流式处理
 
-流式请求的处理采用**透传模式**，不做响应格式转换:
+流式请求支持 **chunk 级别的跨协议格式转换**：
+
+- **同协议**：直接透传字节流（零开销）
+- **跨协议**：通过 `transform/streaming.rs` 逐行解析并转换 SSE 事件
+
+支持的转换方向：
 
 ```rust
-async fn handle_streaming(
-    state: &AppState,
-    route: &RouteResult,
-    endpoint: &str,
-    upstream_body: serde_json::Value,
-) -> Response {
-    // 1. 转发流式请求到上游
-    let resp = forward_streaming(state, &route.provider, endpoint, upstream_body).await?;
-
-    // 2. 透传 HTTP 状态码和 Content-Type
-    let status = resp.status();
-    let headers = resp.headers().clone();
-
-    // 3. 将上游的 bytes stream 直接透传给客户端
-    let stream = resp.bytes_stream();
-    let body = Body::from_stream(stream);
-
-    // 4. 设置 SSE 必要的响应头
-    Response::builder()
-        .status(status)
-        .header("Cache-Control", "no-cache")
-        .header("Connection", "keep-alive")
-        .header("Content-Type", headers.get("content-type"))
-        .body(body)
+pub enum StreamDirection {
+    OpenAIChatToAnthropic,   // data: {choices:[{delta:{content:"X"}}]} → event: content_block_delta
+    AnthropicToOpenAIChat,   // event: content_block_delta → data: {choices:[{delta:{content:"X"}}]}
+    OpenAIChatToResponses,   // data: {choices:...} → data: {type:"response.output_text.delta",...}
+    ResponsesToOpenAIChat,   // data: {type:"response.output_text.delta",...} → data: {choices:...}
 }
 ```
 
 **处理流程**:
 
 ```
-客户端 (SSE)          API Hub (透传)          上游 Provider
+客户端 (OpenAI Chat)     API Hub (转换)        上游 Provider (Anthropic)
     │                      │                       │
     │ POST /v1/chat/       │                       │
     │ completions          │                       │
     │ {stream: true}       │                       │
     │─────────────────────►│                       │
-    │                      │ POST (stream=true)    │
+    │                      │ POST /v1/messages     │
+    │                      │ (stream=true)         │
     │                      │──────────────────────►│
     │                      │                       │
-    │                      │  SSE stream (chunks)  │
+    │                      │  Anthropic SSE events │
     │                      │◄──────────────────────│
-    │  SSE stream (透传)   │                       │
+    │  OpenAI Chat chunks  │ (chunk级转换)          │
     │◄─────────────────────│                       │
 ```
 
-**注意事项**:
-- 上游流式响应直接以字节流形式透传，不进行 chunk 级别的格式转换
-- 非流式响应会完整收到后再进行格式转换，流式响应则逐 chunk 透传
-- Streaming 请求的超时时间为 60 秒（非流式请求为 30 秒）
+**实现细节**:
+- 使用 `async_stream` crate 包装转换流
+- 缓冲不完整的 SSE 行，按 `\n` 分割后逐行处理
+- `StreamState` 跟踪多事件协议转换状态（如 message_start 是否已发出）
+- 流式请求超时时间为 60 秒（非流式请求为 30 秒）
 
 ---
 
@@ -468,42 +420,20 @@ CREATE TABLE IF NOT EXISTS request_logs (
 CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON request_logs(timestamp);
 ```
 
-### 7.2 默认 Provider 自动检测
+### 7.2 Schema 迁移
 
-启动时如果数据库中没有 Provider，自动检测本机 Ollama 是否运行:
-
-```rust
-let ollama_running = TcpStream::connect_timeout(
-    &"127.0.0.1:11434".parse().unwrap(),
-    Duration::from_millis(500),
-).is_ok();
-
-if ollama_running {
-    // 添加 Ollama 默认 Provider
-    add_provider(&state, Provider {
-        name: "Ollama (Local)",
-        protocol: ApiProtocol::Ollama,
-        base_url: "http://localhost:11434",
-        models: vec!["llama3.2", "qwen2.5", "nomic-embed-text"],
-        ...
-    });
-}
-```
-
-### 7.3 Schema 迁移
-
-支持从旧版本（`provider_type` + `api_format` 两列）到单一 `protocol` 列的平滑迁移:
+支持从旧版本（`provider_type` + `api_format` 两列）到单一 `protocol` 列的平滑迁移：
 
 ```sql
 -- 合并逻辑
 UPDATE providers SET protocol = CASE
     WHEN provider_type = 'anthropic' THEN 'anthropic'
-    WHEN provider_type = 'gemini' THEN 'gemini'
-    WHEN provider_type = 'ollama' THEN 'ollama'
     WHEN provider_type = 'openai' AND api_format = 'responses' THEN 'openai_responses'
     ELSE 'openai_chat'
 END;
 ```
+
+注意：已不再支持 Gemini 和 Ollama 协议。旧数据库中配置为这两种协议的 Provider 记录将在迁移时被删除。
 
 ---
 
@@ -529,8 +459,8 @@ END;
 pub struct UsageStats {
     pub total_requests: u64,        // 总请求数
     pub total_errors: u64,          // 总错误数
-    pub total_input_tokens: u32,    // 总输入 token
-    pub total_output_tokens: u32,   // 总输出 token
+    pub total_input_tokens: u64,    // 总输入 token
+    pub total_output_tokens: u64,   // 总输出 token
     pub total_latency_ms: u64,      // 总延迟
     pub avg_latency_ms: u64,        // 平均延迟
     pub by_model: HashMap<String, ModelStats>,   // 按模型聚合
@@ -569,6 +499,7 @@ pub async fn start_server(state: Arc<AppState>) {
 | 设计 | 说明 |
 |------|------|
 | 仅监听 localhost | 外部网络无法访问，天然隔离 |
+| 请求体大小限制 | `DefaultBodyLimit::max(10MB)` 防止内存耗尽攻击 |
 | 无鉴权认证 | v1 版本不添加访问控制（仅本地可用） |
 | API Key 安全 | API Key 仅存储在本地 SQLite 中 |
 | CORS 开放 | 允许所有来源（本地第三方应用跨域调用） |
@@ -646,20 +577,9 @@ response = client.chat.completions.create(
 路由模块中的 `build_upstream_url` 函数负责拼接 Provider 的 `base_url` 与协议 `endpoint`:
 
 ```rust
-pub fn build_upstream_url(provider: &Provider, endpoint: &str, model: &str) -> String {
-    match provider.protocol {
-        // OpenAI / Anthropic: 直接拼接
-        OpenAIChat | OpenAIResponses | Anthropic => join_path(base, endpoint),
-
-        // Gemini: endpoint 含 {model} 占位符
-        Gemini => {
-            let model_name = model 或 provider.models[0] 或 "gemini-2.0-flash";
-            join_path(base, &endpoint.replace("{model}", model_name))
-        }
-
-        // Ollama: 强制使用 /v1/chat/completions
-        Ollama => join_path(base, "/v1/chat/completions"),
-    }
+pub fn build_upstream_url(provider: &Provider, endpoint: &str) -> String {
+    let base = provider.base_url.trim_end_matches('/');
+    join_path(base, endpoint)
 }
 ```
 
@@ -686,14 +606,27 @@ join_path("https://gy.hetaosu.xyz/v1", "/v1/chat/completions")
 #[test] fn test_system_message_extraction()
 #[test] fn test_openai_response_to_anthropic()
 
-// gemini 转换测试
-#[test] fn test_openai_to_gemini_with_system()
-#[test] fn test_gemini_to_openai()
+// streaming 转换测试
+#[test] fn test_openai_to_anthropic_content_delta()
+#[test] fn test_anthropic_to_openai_content_delta()
+#[test] fn test_openai_to_responses_delta()
+#[test] fn test_done_signal()
 
 // responses 转换测试
 #[test] fn test_responses_to_chat_basic()
 #[test] fn test_chat_request_to_responses()
 #[test] fn test_chat_to_responses_basic()
+
+// E2E 测试
+#[tokio::test] fn e2e_health_and_models()
+#[tokio::test] fn e2e_openai_to_openai_passthrough()
+#[tokio::test] fn e2e_openai_client_to_anthropic_upstream()
+#[tokio::test] fn e2e_anthropic_client_to_openai_upstream()
+#[tokio::test] fn e2e_openai_client_to_responses_upstream()
+#[tokio::test] fn e2e_missing_model_returns_400()
+#[tokio::test] fn e2e_streaming_chat()
+#[tokio::test] fn e2e_streaming_cross_protocol_openai_to_anthropic()
+#[tokio::test] fn e2e_unmatched_model_returns_404()
 ```
 
-测试覆盖: URL 拼接去重、各协议格式转换的正确性、system message 提取、Token 字段映射。
+测试覆盖: URL 拼接去重、各协议格式转换的正确性、chunk 级流式跨协议转换、system message 提取、Token 字段映射、未匹配模型 404。

@@ -162,6 +162,7 @@
     "processing": "Обработка...",
     "loading_versions": "Загрузка версий...",
     "latest_version": "Последняя версия",
+    "version_fetch_failed": "Не удалось получить версии",
     "install": "Установить",
     "open": "Открыть",
     "install_confirm": "Установить {name}?",

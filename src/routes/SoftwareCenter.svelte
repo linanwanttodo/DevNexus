@@ -20,6 +20,7 @@
   let copiedCommand = $state("");
   let versionsCache = $state({});
   let loadingVersions = $state("");
+  let versionErrors = $state({});
   let selectedVersion = $state({});
 
   const categories = [
@@ -103,6 +104,7 @@
       }
     } catch {
       versionsCache[item.package_name] = [];
+      versionErrors[item.package_name] = true;
     } finally {
       if (loadingVersions === item.package_name) loadingVersions = "";
     }
@@ -336,6 +338,8 @@
                   disabled={loadingVersions === item.package_name}>
                   {#if loadingVersions === item.package_name}
                     <option>{t('software.loading_versions')}</option>
+                  {:else if versionErrors[item.package_name]}
+                    <option>{t('software.version_fetch_failed')}</option>
                   {:else if versionsCache[item.package_name]?.length}
                     {#each versionsCache[item.package_name] as v}
                       <option value={v}>{v}</option>

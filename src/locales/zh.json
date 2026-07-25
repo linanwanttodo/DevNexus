@@ -162,6 +162,7 @@
     "processing": "处理中...",
     "loading_versions": "加载版本中...",
     "latest_version": "最新版本",
+    "version_fetch_failed": "版本获取失败",
     "install": "安装",
     "open": "打开",
     "install_confirm": "确认安装 {name}？",

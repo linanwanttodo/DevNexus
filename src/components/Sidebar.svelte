@@ -83,21 +83,18 @@
             aria-current={currentRoute === item.route ? "page" : undefined}
             class="group relative flex w-full items-center gap-2.5 px-3 py-2 text-sm cursor-pointer rounded-md transition-all duration-150
               {currentRoute === item.route
-                ? 'bg-nx-selected text-nx-text font-medium'
+                ? 'text-nx-text font-medium'
                 : 'text-nx-text-secondary hover:text-nx-text hover:bg-nx-hover'}"
+            style={currentRoute === item.route ? 'background: var(--nx-accent-bg);' : ''}
             onclick={() => handleClick(item.route)}
           >
-            <!-- Active indicator bar -->
-            {#if currentRoute === item.route}
-              <div class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-r-full" style="background: var(--color-brand);"></div>
-            {/if}
             <!-- Icon -->
             {#if item.route === '/cookies'}
-              <BrandIcons name="cookie" size={18} class="flex-shrink-0 opacity-60 group-hover:opacity-90 transition-opacity" />
+              <BrandIcons name="cookie" size={18} class="flex-shrink-0 {currentRoute === item.route ? 'opacity-90' : 'opacity-60 group-hover:opacity-90'} transition-opacity" />
             {:else if item.route === '/containers'}
-              <ContainerIcons name="docker-logo" size={18} class="flex-shrink-0 opacity-60 group-hover:opacity-90 transition-opacity" />
+              <ContainerIcons name="docker-logo" size={18} class="flex-shrink-0 {currentRoute === item.route ? 'opacity-90' : 'opacity-60 group-hover:opacity-90'} transition-opacity" />
             {:else}
-              <span class="material-symbols-outlined text-lg flex-shrink-0 opacity-50 group-hover:opacity-80 transition-all duration-150">{item.icon}</span>
+              <span class="material-symbols-outlined text-lg flex-shrink-0 {currentRoute === item.route ? 'opacity-80' : 'opacity-50 group-hover:opacity-80'} transition-all duration-150" style={currentRoute === item.route ? 'color: var(--nx-accent);' : ''}>{item.icon}</span>
             {/if}
             <span class="truncate">{item.label}</span>
           </button>

@@ -1,6 +1,6 @@
 [package]
 name = "devnexus"
-version = "1.2.1"
+version = "1.2.2"
 description = "One-stop developer toolstack manager"
 authors = ["DevNexus"]
 edition = "2021"
@@ -22,7 +22,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sysinfo = "0.33"
 which = "7"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "macros", "net"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "macros", "net", "sync"] }
+async-stream = "0.3"
+bytes = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "native-tls"] }
 url = "2"
 thiserror = "1"

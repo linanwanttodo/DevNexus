@@ -162,6 +162,7 @@
     "processing": "Processing...",
     "loading_versions": "Loading versions...",
     "latest_version": "Latest version",
+    "version_fetch_failed": "Version fetch failed",
     "install": "Install",
     "open": "Open",
     "install_confirm": "Install {name}?",

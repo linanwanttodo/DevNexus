@@ -13,20 +13,18 @@
 
   let showForm = $state(false);
   let editingId = $state(null);
-  let form = $state({ name: "", protocol: "openai_chat", base_url: "", api_key: "", model_aliases: {} });
+  let form = $state({ name: "", protocol: "openai_chat", base_url: "", api_key: "", model_aliases: {}, model_context_lengths: {} });
   let fetchingModels = $state(false);
   let fetchedModels = $state([]);
   let selectedModels = $state({});
   let manualModelId = $state("");
-  let manualModelName = $state("");
+  let addingManualModel = $state(false);
 
   // 单一协议选项：同时决定品牌、线协议、端点与认证方式
   const protocolOptions = [
     { id: "openai_chat", label: "OpenAI · Chat Completions", defaultUrl: "https://api.openai.com", endpoint: "/v1/chat/completions", desc: "通用 OpenAI 格式，兼容大多数工具" },
     { id: "openai_responses", label: "OpenAI · Responses", defaultUrl: "https://api.openai.com", endpoint: "/v1/responses", desc: "OpenAI 新格式，Codex/OpenCode 使用" },
     { id: "anthropic", label: "Anthropic · Messages", defaultUrl: "https://api.anthropic.com", endpoint: "/v1/messages", desc: "Claude 原生格式，Anthropic SDK 直接使用" },
-    { id: "gemini", label: "Google Gemini", defaultUrl: "https://generativelanguage.googleapis.com", endpoint: "/v1/models/{model}:generateContent", desc: "Gemini generateContent 端点" },
-    { id: "ollama", label: "Ollama (Local)", defaultUrl: "http://localhost:11434", endpoint: "/v1/chat/completions", desc: "本地 OpenAI 兼容" },
   ];
 
   onMount(() => {
@@ -48,33 +46,35 @@
 
   function beginAdd() {
     editingId = null;
-    form = { name: "", protocol: "openai_chat", base_url: "https://api.openai.com", api_key: "", model_aliases: {} };
+    form = { name: "", protocol: "openai_chat", base_url: "https://api.openai.com", api_key: "", model_aliases: {}, model_context_lengths: {} };
     fetchedModels = []; selectedModels = {}; showForm = true;
   }
   function beginEdit(p) {
     editingId = p.id;
-    form = { name: p.name, protocol: p.protocol || "openai_chat", base_url: p.base_url, api_key: p.api_key, model_aliases: { ...(p.model_aliases || {}) } };
+    form = { name: p.name, protocol: p.protocol || "openai_chat", base_url: p.base_url, api_key: p.api_key, model_aliases: { ...(p.model_aliases || {}) }, model_context_lengths: { ...(p.model_context_lengths || {}) } };
     fetchedModels = []; selectedModels = {};
     p.models.forEach(m => selectedModels[m] = true);
     showForm = true;
   }
-  function cancelForm() { showForm = false; editingId = null; fetchedModels = []; selectedModels = {}; }
+  function cancelForm() { showForm = false; editingId = null; fetchedModels = []; selectedModels = {}; addingManualModel = false; }
   async function saveForm() {
     try {
       const models = Object.keys(selectedModels).filter(m => selectedModels[m]);
       if (models.length === 0) { showToast("请至少选择一个模型", "error"); return; }
       const model_aliases = {};
       models.forEach(m => { model_aliases[m] = form.model_aliases[m] || m; });
+      const model_context_lengths = {};
+      models.forEach(m => { if (form.model_context_lengths[m]) model_context_lengths[m] = Number(form.model_context_lengths[m]); });
       const data = {
         id: editingId || crypto.randomUUID(),
         name: form.name, protocol: form.protocol,
         base_url: form.base_url, api_key: form.api_key,
-        models, model_aliases, enabled: true, created_at: Math.floor(Date.now() / 1000),
+        models, model_aliases, model_context_lengths, enabled: true, created_at: Math.floor(Date.now() / 1000),
       };
       if (editingId) { await invoke("api_hub_update_provider", { id: editingId, provider: data }); showToast("已更新"); }
       else { await invoke("api_hub_add_provider", { provider: data }); showToast("已添加"); }
       showForm = false; editingId = null; providers = await invoke("api_hub_list_providers");
-    } catch (err) { showToast(`错误: ${err.message}`, "error"); }
+    } catch (err) { showToast(`错误: ${err.message || String(err)}`, "error"); }
   }
   async function deleteProvider(id) { await invoke("api_hub_delete_provider", { id }); showToast("已删除"); providers = await invoke("api_hub_list_providers"); }
 
@@ -91,15 +91,15 @@
     finally { fetchingModels = false; }
   }
   function toggleModel(id) { selectedModels[id] = !selectedModels[id]; }
-  function addManualModel() {
+  function confirmManualAdd() {
     const id = manualModelId.trim();
     if (!id) return;
     if (fetchedModels.find(m => m.id === id)) { showToast(`模型 ${id} 已存在`, "error"); return; }
-    const model = { id, name: manualModelName.trim() || id, owned_by: "自定义", enabled: true };
+    const model = { id, name: id, owned_by: "自定义", enabled: true };
     fetchedModels = [...fetchedModels, model];
     selectedModels[id] = true;
-    form.model_aliases[id] = manualModelName.trim() || id;
-    manualModelId = ""; manualModelName = "";
+    form.model_aliases[id] = id;
+    manualModelId = "";
     showToast(`已添加模型 ${id}`);
   }
   function selectAll() { fetchedModels.forEach(m => selectedModels[m.id] = true); }
@@ -313,7 +313,7 @@
 
     <!-- ════ Add/Edit Form ════ -->
     {#if showForm}
-      <div class="nx-card p-5 mb-4">
+      <div class="nx-card p-5 mb-4" style="box-shadow: none !important; border-color: var(--nx-border) !important;">
         <!-- Header -->
         <div class="mb-4 flex items-center justify-between">
           <div class="flex items-center gap-2">
@@ -373,6 +373,9 @@
               <div class="ml-auto flex gap-1">
                 <button class="nx-btn nx-btn-ghost text-xs px-2 py-1" onclick={selectAll}>全选</button>
                 <button class="nx-btn nx-btn-ghost text-xs px-2 py-1" onclick={deselectAll}>全不选</button>
+                <button class="nx-btn nx-btn-ghost text-xs px-2 py-1" onclick={() => addingManualModel = !addingManualModel} title="手动添加模型">
+                  <span class="material-symbols-outlined text-sm">add</span>
+                </button>
               </div>
             {/if}
           </div>
@@ -380,6 +383,13 @@
           <!-- Model list -->
           {#if fetchedModels.length > 0}
             <div class="max-h-60 overflow-y-auto rounded-md border border-nx-border bg-nx-bg/50">
+              {#if addingManualModel}
+                <div class="flex items-center gap-2 px-3 py-2 border-b border-nx-border bg-nx-hover/50">
+                  <input type="text" class="flex-1 nx-input py-1 text-xs" bind:value={manualModelId} placeholder="输入模型 ID，如 gpt-4o" onkeydown={(e) => { if (e.key === 'Enter') confirmManualAdd(); if (e.key === 'Escape') { addingManualModel = false; } }} />
+                  <button class="nx-btn nx-btn-primary px-2 py-1 text-xs" onclick={confirmManualAdd} disabled={!manualModelId.trim()}>确认</button>
+                  <button class="nx-btn nx-btn-ghost px-2 py-1 text-xs" onclick={() => addingManualModel = false}>取消</button>
+                </div>
+              {/if}
               {#each fetchedModels as m}
                 <div
                   class="flex items-center gap-3 px-3 py-2 border-b border-nx-border last:border-0 hover:bg-nx-hover transition-colors"
@@ -406,16 +416,25 @@
                       <div class="text-[10px] text-nx-text-muted">{m.name}</div>
                     {/if}
                   </div>
-                  <!-- Alias input -->
+                  <!-- Alias input + Context length -->
                   {#if selectedModels[m.id]}
                     <input
                       type="text"
-                      class="w-32 text-right nx-input py-0.5 text-[11px]"
+                      class="w-24 text-right nx-input py-0.5 text-[11px]"
                       bind:value={form.model_aliases[m.id]}
                       placeholder="别名"
                       onclick={(e) => e.stopPropagation()}
                       onkeydown={(e) => e.stopPropagation()}
                     />
+                    <input
+                      type="number"
+                      class="w-20 text-right nx-input py-0.5 text-[11px]"
+                      bind:value={form.model_context_lengths[m.id]}
+                      placeholder="200000"
+                      onclick={(e) => e.stopPropagation()}
+                      onkeydown={(e) => e.stopPropagation()}
+                    />
+                    <span class="text-[10px] text-nx-text-muted shrink-0">ctx</span>
                   {/if}
                   {#if m.owned_by}
                     <div class="text-[10px] text-nx-text-muted shrink-0">{m.owned_by}</div>
@@ -424,25 +443,20 @@
               {/each}
             </div>
 
-            <!-- Manual model input -->
-            <div class="mt-3 flex items-end gap-2">
-              <div class="flex-1">
-                <label for="f-manual-id" class="mb-1 block text-[10px] text-nx-text-muted">模型 ID</label>
-                <input id="f-manual-id" type="text" bind:value={manualModelId} class="nx-input w-full py-1.5 text-xs" placeholder="gpt-4o, claude-sonnet-4..." onkeydown={(e) => { if (e.key === 'Enter') addManualModel(); }} />
-              </div>
-              <div class="w-36">
-                <label for="f-manual-name" class="mb-1 block text-[10px] text-nx-text-muted">显示名称</label>
-                <input id="f-manual-name" type="text" bind:value={manualModelName} class="nx-input w-full py-1.5 text-xs" placeholder="别名" onkeydown={(e) => { if (e.key === 'Enter') addManualModel(); }} />
-              </div>
-              <button class="nx-btn nx-btn-ghost flex items-center gap-1 px-3 py-1.5 text-xs shrink-0" onclick={addManualModel} disabled={!manualModelId.trim()}>
-                <span class="material-symbols-outlined text-sm">add</span>
-                添加
-              </button>
-            </div>
           {:else if !fetchingModels}
             <div class="nx-card p-6 text-center border-dashed" style="border-color: var(--nx-border-light);">
               <span class="material-symbols-outlined text-2xl text-nx-text-muted/40">download</span>
-              <div class="mt-2 text-xs text-nx-text-muted">点击上方按钮从 API 获取可用模型，或手动添加</div>
+              <div class="mt-2 text-xs text-nx-text-muted">点击上方按钮从 API 获取可用模型</div>
+              <button class="nx-btn nx-btn-ghost mt-2 text-xs" onclick={() => addingManualModel = true}>
+                <span class="material-symbols-outlined text-sm">add</span>
+                或手动添加模型
+              </button>
+              {#if addingManualModel}
+                <div class="mt-3 flex items-center gap-2 justify-center">
+                  <input type="text" class="nx-input py-1 text-xs w-56" bind:value={manualModelId} placeholder="输入模型 ID，如 gpt-4o" onkeydown={(e) => { if (e.key === 'Enter') confirmManualAdd(); if (e.key === 'Escape') { addingManualModel = false; } }} />
+                  <button class="nx-btn nx-btn-primary px-2 py-1 text-xs" onclick={confirmManualAdd} disabled={!manualModelId.trim()}>确认</button>
+                </div>
+              {/if}
             </div>
           {/if}
         </div>

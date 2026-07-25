@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 // ── Provider ──────────────────────────────────────────────────
@@ -13,6 +15,8 @@ pub struct Provider {
     pub api_key: String,
     pub models: Vec<String>,
     pub model_aliases: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub model_context_lengths: std::collections::HashMap<String, u64>,
     pub enabled: bool,
     pub created_at: i64,
 }
@@ -28,26 +32,25 @@ pub struct FetchedModel {
 
 /// API 协议：一个选项同时锁定品牌预设、线协议、认证方式、上游端点与 token 字段
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
 pub enum ApiProtocol {
     /// OpenAI Chat Completions（/v1/chat/completions）
+    #[serde(rename = "openai_chat")]
     OpenAIChat,
     /// OpenAI Responses（/v1/responses）
+    #[serde(rename = "openai_responses")]
     OpenAIResponses,
     /// Anthropic Messages（/v1/messages）
+    #[serde(rename = "anthropic")]
     Anthropic,
-    /// Google Gemini generateContent
-    Gemini,
-    /// Ollama（OpenAI 兼容，本地）
-    Ollama,
 }
 
 /// token 用量字段风格
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenScheme {
+    /// prompt_tokens + completion_tokens (OpenAI)
     PromptCompletion,
+    /// input_tokens + output_tokens (Anthropic / OpenAI Responses)
     InputOutput,
-    None,
 }
 
 impl ApiProtocol {
@@ -56,8 +59,6 @@ impl ApiProtocol {
             ApiProtocol::OpenAIChat => "openai_chat",
             ApiProtocol::OpenAIResponses => "openai_responses",
             ApiProtocol::Anthropic => "anthropic",
-            ApiProtocol::Gemini => "gemini",
-            ApiProtocol::Ollama => "ollama",
         }
     }
 
@@ -66,8 +67,6 @@ impl ApiProtocol {
             "openai_chat" => Some(ApiProtocol::OpenAIChat),
             "openai_responses" | "responses" => Some(ApiProtocol::OpenAIResponses),
             "anthropic" => Some(ApiProtocol::Anthropic),
-            "gemini" => Some(ApiProtocol::Gemini),
-            "ollama" => Some(ApiProtocol::Ollama),
             _ => None,
         }
     }
@@ -75,19 +74,17 @@ impl ApiProtocol {
     /// 上游请求端点（路径部分）
     pub fn endpoint(&self) -> &'static str {
         match self {
-            ApiProtocol::OpenAIChat | ApiProtocol::Ollama => "/v1/chat/completions",
+            ApiProtocol::OpenAIChat => "/v1/chat/completions",
             ApiProtocol::OpenAIResponses => "/v1/responses",
             ApiProtocol::Anthropic => "/v1/messages",
-            ApiProtocol::Gemini => "/v1/models/{model}:generateContent",
         }
     }
 
     /// token 用量提取风格
     pub fn token_scheme(&self) -> TokenScheme {
         match self {
-            ApiProtocol::OpenAIChat | ApiProtocol::Ollama => TokenScheme::PromptCompletion,
+            ApiProtocol::OpenAIChat => TokenScheme::PromptCompletion,
             ApiProtocol::OpenAIResponses | ApiProtocol::Anthropic => TokenScheme::InputOutput,
-            ApiProtocol::Gemini => TokenScheme::None,
         }
     }
 }
@@ -180,7 +177,7 @@ pub struct AnthropicRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnthropicMessage {
     pub role: String,
-    pub content: String,
+    pub content: serde_json::Value, // String or Vec<ContentBlock>
 }
 
 /// Anthropic /v1/messages 响应
@@ -217,8 +214,8 @@ pub struct RequestLog {
     pub provider_name: String,
     pub model: String,
     pub request_model: String,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
     pub latency_ms: u64,
     pub status_code: u16,
     pub error_message: Option<String>,
@@ -230,7 +227,9 @@ pub struct RequestLog {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub providers: Arc<std::sync::RwLock<Vec<Provider>>>,
-    pub request_logs: Arc<std::sync::RwLock<Vec<RequestLog>>>,
-    pub db: Arc<std::sync::Mutex<Option<rusqlite::Connection>>>,
+    pub providers: Arc<tokio::sync::RwLock<Vec<Provider>>>,
+    pub request_logs: Arc<tokio::sync::RwLock<VecDeque<RequestLog>>>,
+    pub db: Arc<tokio::sync::Mutex<Option<rusqlite::Connection>>>,
+    pub http_client: reqwest::Client,
+    pub running: Arc<AtomicBool>,
 }
