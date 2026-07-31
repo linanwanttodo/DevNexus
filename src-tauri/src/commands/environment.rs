@@ -233,6 +233,7 @@ fn detect_shell_rc() -> &'static str {
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn add_to_path_impl(env_name: &str, path: &str) -> Result<String, String> {
+    crate::utils::validate_rc_value(path)?;
     let home = std::env::var("HOME").map_err(|e| e.to_string())?;
     let export_line = format!(
         "\n# DevNexus: {}\nexport PATH=\"{}:$PATH\"\n",

