@@ -12,7 +12,18 @@ pub async fn add_provider(state: &AppState, provider: Provider) -> Result<(), St
         provider
     };
 
-    // 先尝试持久化到 SQLite（失败则向上传播错误）
+    // 1) 内存重名检查（先于 DB 写入，保证失败无副作用）
+    {
+        let providers = state.providers.read().await;
+        if providers
+            .iter()
+            .any(|p| p.name.eq_ignore_ascii_case(&provider.name))
+        {
+            return Err(format!("Provider '{}' already exists", provider.name));
+        }
+    }
+
+    // 2) 持久化到 SQLite（失败则向上传播错误）
     {
         let db = state.db.lock().await;
         if let Some(ref conn) = *db {
@@ -36,11 +47,8 @@ pub async fn add_provider(state: &AppState, provider: Provider) -> Result<(), St
         }
     }
 
-    // DB 成功后更新内存
+    // 3) DB 成功后更新内存
     let mut providers = state.providers.write().await;
-    if providers.iter().any(|p| p.name == provider.name && p.id != provider.id) {
-        return Err(format!("Provider '{}' already exists", provider.name));
-    }
     providers.push(provider);
     Ok(())
 }
@@ -182,6 +190,18 @@ pub fn init_db_sync(conn: &rusqlite::Connection) -> Result<(), String> {
         "ALTER TABLE providers ADD COLUMN model_context_lengths TEXT NOT NULL DEFAULT '{}'",
         [],
     );
+
+    // C2: Provider 名称唯一约束。先清理历史重名数据（每组保留 id 最小的一条），
+    // 再建唯一索引（幂等）。DELETE 失败（如表不存在）则跳过，由建索引兜底报错。
+    let _ = conn.execute(
+        "DELETE FROM providers WHERE id NOT IN (SELECT MIN(id) FROM providers GROUP BY lower(name))",
+        [],
+    );
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_providers_name_unique ON providers(name)",
+        [],
+    )
+    .map_err(|e| format!("Failed to create unique index on providers.name: {}", e))?;
 
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS request_logs (
