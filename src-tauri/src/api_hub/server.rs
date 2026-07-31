@@ -286,7 +286,7 @@ async fn handle_streaming(
     upstream_body: serde_json::Value,
     client: ClientFormat,
 ) -> Response {
-    let resp =
+    let (resp, log_id) =
         match super::forwarder::forward_streaming(state, &route.provider, endpoint, upstream_body)
             .await
         {
@@ -301,9 +301,11 @@ async fn handle_streaming(
     // Determine if we need format conversion
     let direction = determine_stream_direction(client, route.provider.protocol);
 
+    // 在上游字节流上包一层 usage 捕获：流结束后回填 token 用量到日志
+    let byte_stream = capture_usage_stream(resp.bytes_stream(), state.clone(), log_id);
+
     if let Some(dir) = direction {
         // Cross-protocol: transform each SSE line
-        let byte_stream = resp.bytes_stream();
         let transformed = transform_byte_stream(byte_stream, dir);
         let body = axum::body::Body::from_stream(transformed);
 
@@ -321,7 +323,7 @@ async fn handle_streaming(
             .unwrap_or_else(|_| error_response(500, "Stream build error"))
     } else {
         // Same protocol: passthrough bytes directly (zero overhead)
-        let stream = resp.bytes_stream().map_err(|e| {
+        let stream = byte_stream.map_err(|e| {
             std::io::Error::other(format!("Stream error: {}", e))
         });
         let body = axum::body::Body::from_stream(stream);
@@ -391,6 +393,86 @@ fn determine_stream_direction(
             Some(StreamDirection::ResponsesToOpenAIChat)
         }
         _ => None,
+    }
+}
+
+/// 包装上游字节流：数据原样透传，同时扫描 SSE 行提取 usage token 用量，
+/// 流结束后异步回填到请求日志（解决流式请求 token 统计为 0 的问题）。
+fn capture_usage_stream(
+    byte_stream: impl futures_util::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + 'static,
+    state: AppState,
+    log_id: String,
+) -> impl futures_util::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + 'static {
+    async_stream::stream! {
+        use futures_util::StreamExt;
+        // 扫描缓冲上限：防御异常上游把单行撑得过大占用内存
+        const MAX_SCAN_BUF: usize = 256 * 1024;
+        let mut scan_buf = String::new();
+        let mut input_tokens: u64 = 0;
+        let mut output_tokens: u64 = 0;
+
+        futures_util::pin_mut!(byte_stream);
+
+        while let Some(chunk_result) = byte_stream.next().await {
+            if let Ok(ref chunk) = chunk_result {
+                if scan_buf.len() < MAX_SCAN_BUF {
+                    scan_buf.push_str(&String::from_utf8_lossy(chunk));
+                    while let Some(pos) = scan_buf.find('\n') {
+                        let line = scan_buf[..pos].trim_end_matches('\r').to_string();
+                        scan_buf.drain(..=pos);
+                        extract_usage_from_sse_line(&line, &mut input_tokens, &mut output_tokens);
+                    }
+                }
+            }
+            yield chunk_result;
+        }
+
+        // 处理残余缓冲，然后回填 token 用量
+        let tail = scan_buf.trim().to_string();
+        extract_usage_from_sse_line(&tail, &mut input_tokens, &mut output_tokens);
+        if input_tokens > 0 || output_tokens > 0 {
+            tokio::spawn(async move {
+                super::usage::update_log_tokens(&state, &log_id, input_tokens, output_tokens).await;
+            });
+        }
+    }
+}
+
+/// 从单行 SSE data 中提取 usage 字段（兼容 OpenAI Chat / Responses / Anthropic 三种格式）
+fn extract_usage_from_sse_line(line: &str, input: &mut u64, output: &mut u64) {
+    let data = match line.strip_prefix("data:") {
+        Some(d) => d.trim(),
+        None => return,
+    };
+    // 快速路径：不含 usage 字样的行直接跳过，避免逐 chunk 反序列化
+    if data.is_empty() || data == "[DONE]" || !data.contains("\"usage\"") {
+        return;
+    }
+    let json: serde_json::Value = match serde_json::from_str(data) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    // usage 可能位于顶层（OpenAI Chat / Anthropic message_delta）、
+    // message 下（Anthropic message_start）或 response 下（Responses response.completed）
+    let usage = json
+        .get("usage")
+        .or_else(|| json.get("message").and_then(|m| m.get("usage")))
+        .or_else(|| json.get("response").and_then(|r| r.get("usage")));
+    let Some(usage) = usage else { return };
+
+    let in_val = usage
+        .get("prompt_tokens")
+        .or_else(|| usage.get("input_tokens"))
+        .and_then(|v| v.as_u64());
+    let out_val = usage
+        .get("completion_tokens")
+        .or_else(|| usage.get("output_tokens"))
+        .and_then(|v| v.as_u64());
+    if let Some(v) = in_val {
+        *input = (*input).max(v);
+    }
+    if let Some(v) = out_val {
+        *output = (*output).max(v);
     }
 }
 

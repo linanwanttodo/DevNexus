@@ -214,7 +214,7 @@
       {:else}
         <div class="divide-y divide-nx-border">
           {#each environments as env}
-            <div class="py-3">
+            <div class="px-4 py-3">
               <label class="flex cursor-pointer items-center gap-3">
                 <input
                   type="checkbox"
@@ -260,7 +260,7 @@
           {/each}
         </div>
 
-        <div class="flex items-center justify-between border-t border-nx-border px-1 py-3">
+        <div class="flex items-center justify-between border-t border-nx-border px-4 py-3">
           <span class="text-xs text-nx-text-muted">
             {t("migration.summary")
               .replace("{envs}", selectedEnvs.length)

@@ -64,18 +64,31 @@ pub async fn forward_request(
     Ok((json, status))
 }
 
-/// 对流式响应进行转发，返回 reqwest::Response 供上层处理
+/// 对流式响应进行转发，返回 (reqwest::Response, 日志 ID) 供上层处理与 token 回填
 pub async fn forward_streaming(
     state: &AppState,
     provider: &Provider,
     endpoint: &str,
-    body: serde_json::Value,
-) -> Result<reqwest::Response, String> {
+    mut body: serde_json::Value,
+) -> Result<(reqwest::Response, String), String> {
     let model = body
         .get("model")
         .and_then(|m| m.as_str())
         .unwrap_or("")
         .to_string();
+
+    // OpenAI Chat 协议：请求上游在流尾部附带 usage，便于 token 统计
+    if provider.protocol == ApiProtocol::OpenAIChat {
+        if let Some(obj) = body.as_object_mut() {
+            if !obj.contains_key("stream_options") {
+                obj.insert(
+                    "stream_options".to_string(),
+                    serde_json::json!({ "include_usage": true }),
+                );
+            }
+        }
+    }
+
     let url = build_upstream_url(provider, endpoint);
     let start = Instant::now();
 
@@ -102,10 +115,11 @@ pub async fn forward_streaming(
         return Err(format!("Upstream error: {}", resp.status()));
     }
 
-    // Log streaming start (tokens will be 0; proper tracking would require parsing stream end)
+    // Log streaming start; token 用量在流结束后由上层通过 update_log_tokens 回填
     let elapsed = start.elapsed().as_millis() as u64;
+    let log_id = uuid::Uuid::new_v4().to_string();
     let log = RequestLog {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: log_id.clone(),
         provider_id: provider.id.clone(),
         provider_name: provider.name.clone(),
         model: model.clone(),
@@ -120,7 +134,7 @@ pub async fn forward_streaming(
     };
     super::usage::log_request(state, log).await;
 
-    Ok(resp)
+    Ok((resp, log_id))
 }
 
 // ── Auth Headers ─────────────────────────────────────────────

@@ -9,14 +9,13 @@ pub struct RouteResult {
 /// 根据模型名找到对应的 Provider（async 版本，使用 tokio RwLock）
 pub async fn route_by_model(state: &AppState, model: &str) -> Option<RouteResult> {
     let providers = state.providers.read().await;
-    let model_lower = model.to_lowercase();
 
-    // 1. 精确匹配模型名
+    // 1. 精确匹配模型名（忽略大小写，无堆分配）
     for p in providers.iter() {
         if !p.enabled {
             continue;
         }
-        if p.models.iter().any(|m| m.to_lowercase() == model_lower) {
+        if p.models.iter().any(|m| m.eq_ignore_ascii_case(model)) {
             return Some(RouteResult {
                 provider: p.clone(),
                 model: model.to_string(),
@@ -36,10 +35,10 @@ pub async fn route_by_model(state: &AppState, model: &str) -> Option<RouteResult
             ApiProtocol::Anthropic => &["claude-"],
         };
 
-        if known_prefixes
-            .iter()
-            .any(|prefix| model_lower.starts_with(prefix))
-        {
+        if known_prefixes.iter().any(|prefix| {
+            model.len() >= prefix.len()
+                && model.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
+        }) {
             return Some(RouteResult {
                 provider: p.clone(),
                 model: model.to_string(),

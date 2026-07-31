@@ -8,7 +8,7 @@
 {#if confirmations.length > 0}
   <div class="nx-dialog-overlay">
     {#each confirmations as c (c.id)}
-      <div class="nx-dialog mx-4 nx-animate-scale-in" style="max-width: 300px; width: 100%;">
+      <div class="nx-dialog mx-4 nx-animate-scale-in" style="width: max-content; min-width: 200px; max-width: min(300px, 85vw);">
         <div class="px-4 py-4">
           <p class="text-sm text-nx-text-secondary leading-relaxed">{c.message}</p>
         </div>

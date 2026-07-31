@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -42,6 +41,15 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
         .map(|c| provider::load_providers_from_db_sync(c))
         .unwrap_or_default();
 
+    // 清理过期日志，并恢复最近日志到内存（重启后统计/日志不丢失）
+    let request_logs = conn
+        .as_ref()
+        .map(|c| {
+            usage::cleanup_old_logs_sync(c);
+            usage::load_recent_logs_sync(c)
+        })
+        .unwrap_or_default();
+
     // 创建全局 HTTP Client（复用连接池）
     let http_client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
@@ -52,7 +60,7 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
 
     AppState {
         providers: Arc::new(tokio::sync::RwLock::new(providers)),
-        request_logs: Arc::new(tokio::sync::RwLock::new(VecDeque::new())),
+        request_logs: Arc::new(tokio::sync::RwLock::new(request_logs)),
         db: Arc::new(tokio::sync::Mutex::new(conn)),
         http_client,
         running: Arc::new(AtomicBool::new(false)),

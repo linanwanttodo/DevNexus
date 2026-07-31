@@ -236,8 +236,66 @@ select option {
   color: var(--nx-text);
 }
 
+/* 自绘 checkbox / radio：避免 WebKitGTK 按系统主题渲染原生控件（暗色 UI 下很丑） */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin: 0;
+  border: 1.5px solid var(--nx-border-active);
+  background-color: transparent;
+  cursor: pointer;
+  position: relative;
+  vertical-align: middle;
+  transition: border-color var(--nx-transition-fast), background-color var(--nx-transition-fast);
+}
 input[type="checkbox"] {
-  accent-color: var(--nx-accent);
+  border-radius: 4px;
+}
+input[type="radio"] {
+  border-radius: 50%;
+}
+input[type="checkbox"]:hover:not(:disabled),
+input[type="radio"]:hover:not(:disabled) {
+  border-color: var(--nx-accent);
+}
+input[type="checkbox"]:checked {
+  background-color: var(--nx-accent);
+  border-color: var(--nx-accent);
+}
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 3.5px;
+  top: 0.5px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+input[type="radio"]:checked {
+  border-color: var(--nx-accent);
+}
+input[type="radio"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 50%;
+  background-color: var(--nx-accent);
+}
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--nx-accent-bg);
+  outline-offset: 1px;
 }
 
 /* ===== Reduced motion ===== */

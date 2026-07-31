@@ -2,6 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
+  import { showConfirm } from "../lib/confirm.svelte.js";
 
   let activeTab = $state("stats");
   let providers = $state([]);
@@ -35,14 +36,28 @@
   async function loadData() {
     loading = true; error = null;
     try {
-      providers = await invoke("api_hub_list_providers");
-      logs = await invoke("api_hub_get_logs", { limit: 100, offset: 0 });
-      stats = await invoke("api_hub_get_usage_stats");
-      status = await invoke("api_hub_status");
+      // 并行拉取，避免串行等待造成首屏卡顿
+      const [p, l, s, st] = await Promise.all([
+        invoke("api_hub_list_providers"),
+        invoke("api_hub_get_logs", { limit: 100, offset: 0 }),
+        invoke("api_hub_get_usage_stats"),
+        invoke("api_hub_status"),
+      ]);
+      providers = p; logs = l; stats = s; status = st;
     } catch (err) { error = err.message || String(err); }
     finally { loading = false; }
   }
-  async function loadStats() { try { stats = await invoke("api_hub_get_usage_stats"); logs = await invoke("api_hub_get_logs", { limit: 100, offset: 0 }); } catch {} }
+  async function loadStats() {
+    // 窗口不可见时跳过轮询，减少后台开销
+    if (document.hidden) return;
+    try {
+      const [s, l] = await Promise.all([
+        invoke("api_hub_get_usage_stats"),
+        invoke("api_hub_get_logs", { limit: 100, offset: 0 }),
+      ]);
+      stats = s; logs = l;
+    } catch {}
+  }
 
   function beginAdd() {
     editingId = null;
@@ -76,13 +91,22 @@
       showForm = false; editingId = null; providers = await invoke("api_hub_list_providers");
     } catch (err) { showToast(`错误: ${err.message || String(err)}`, "error"); }
   }
-  async function deleteProvider(id) { await invoke("api_hub_delete_provider", { id }); showToast("已删除"); providers = await invoke("api_hub_list_providers"); }
+  async function deleteProvider(id) {
+    const p = providers.find(x => x.id === id);
+    const ok = await showConfirm(`确定删除 Provider“${p?.name || id}”？`, "删除 Provider");
+    if (!ok) return;
+    try {
+      await invoke("api_hub_delete_provider", { id });
+      showToast("已删除");
+      providers = await invoke("api_hub_list_providers");
+    } catch (err) { showToast(`删除失败: ${err.message || String(err)}`, "error"); }
+  }
 
   async function fetchModels() {
     if (!form.base_url || !form.protocol) { showToast("请先填写 Base URL 和协议", "error"); return; }
     fetchingModels = true; fetchedModels = [];
     try {
-      fetchedModels = await invoke("api_hub_fetch_models", { baseUrl: form.base_url, apiKey: form.api_key || "", protocol: form.protocol });
+      fetchedModels = await invoke("api_hub_fetch_models", { baseUrl: form.base_url, apiKey: form.api_key || "", protocol: form.protocol, providerId: editingId });
       fetchedModels.forEach(m => {
         if (!(m.id in selectedModels)) { selectedModels[m.id] = true; form.model_aliases[m.id] = m.name || m.id; }
       });
@@ -149,9 +173,9 @@
 
   const metricCards = $derived(stats ? [
     { icon: "local_fire_department", label: "Tokens 用量", value: fmtTokens(stats.total_input_tokens + stats.total_output_tokens) },
-    { icon: "forum", label: "总请求数", value: String(stats.total_requests) },
-    { icon: "calendar_month", label: "活跃时段", value: String(Object.keys(stats.by_hour || {}).length) },
-    { icon: "model_training", label: "最常用模型", value: getModelEntries()[0]?.[0] || "——" },
+    { icon: "forum", label: "总请求数", value: fmtTokens(stats.total_requests) },
+    { icon: "check_circle", label: "成功率", value: stats.total_requests ? `${(100 * (1 - stats.total_errors / stats.total_requests)).toFixed(1)}%` : "——" },
+    { icon: "speed", label: "平均延迟", value: stats.total_requests ? fmtLatency(stats.avg_latency_ms) : "——" },
   ] : []);
 </script>
 
@@ -270,7 +294,7 @@
           {@const models = getModelEntries()}
           {@const mr = models[0][1].requests}
           <div class="space-y-2">
-            {#each models as [model, md], i}
+            {#each models.slice(0, 15) as [model, md], i}
               <div class="flex items-center gap-3 py-1.5">
                 <span class="w-5 text-right text-[11px] text-nx-text-muted tabular-nums">{i + 1}</span>
                 <div class="w-36 truncate text-xs text-nx-text-secondary font-mono" title={model}>{model}</div>
@@ -284,6 +308,9 @@
                 <div class="w-16 text-right text-[11px] text-nx-text-muted tabular-nums">{md.requests} 次</div>
               </div>
             {/each}
+            {#if models.length > 15}
+              <div class="pt-1 text-center text-[11px] text-nx-text-muted/60">共 {models.length} 个模型，仅显示前 15 名</div>
+            {/if}
           </div>
         {:else}
           <div class="py-8 text-center text-xs text-nx-text-muted">暂无数据</div>
@@ -492,7 +519,7 @@
               <div><label for="e-name" class="mb-1.5 block text-xs text-nx-text-muted">名称</label><input id="e-name" bind:value={form.name} class="nx-input w-full" /></div>
               <div><label for="e-protocol" class="mb-1.5 block text-xs text-nx-text-muted">API 协议</label><select id="e-protocol" bind:value={form.protocol} class="nx-input w-full" disabled>{#each protocolOptions as pt}<option value={pt.id}>{pt.label}</option>{/each}</select></div>
               <div class="col-span-2"><label for="e-base-url" class="mb-1.5 block text-xs text-nx-text-muted">Base URL</label><input id="e-base-url" bind:value={form.base_url} class="nx-input w-full" /></div>
-              <div class="col-span-2"><label for="e-api-key" class="mb-1.5 block text-xs text-nx-text-muted">API Key</label><input id="e-api-key" type="password" bind:value={form.api_key} class="nx-input w-full" /></div>
+              <div class="col-span-2"><label for="e-api-key" class="mb-1.5 block text-xs text-nx-text-muted">API Key <span class="text-nx-text-muted/40">（已脱敏显示，保持不变则沿用原 Key）</span></label><input id="e-api-key" type="password" bind:value={form.api_key} class="nx-input w-full" placeholder="输入新 Key 以替换" /></div>
             </div>
             <div class="flex items-center gap-3 mb-3">
               <button class="nx-btn nx-btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs" onclick={fetchModels} disabled={fetchingModels}>
@@ -608,7 +635,10 @@
             {#each logs as log}
               <tr>
                 <td class="px-3 py-2.5 whitespace-nowrap font-mono text-[11px] text-nx-text-muted">{fmtTime(log.timestamp)}</td>
-                <td class="px-3 py-2.5 font-mono text-xs font-medium text-nx-text">{log.model}</td>
+                <td class="px-3 py-2.5 font-mono text-xs font-medium text-nx-text">
+                  {log.model}
+                  {#if log.is_streaming}<span class="material-symbols-outlined align-middle text-[12px] text-nx-text-muted/60 ml-0.5" title="流式请求">water_drop</span>{/if}
+                </td>
                 <td class="px-3 py-2.5 text-xs text-nx-text-muted">{log.provider_name}</td>
                 <td class="px-3 py-2.5 text-right text-xs text-nx-text-muted tabular-nums">
                   <span class="text-nx-text-secondary">↑{fmtTokens(log.input_tokens)}</span>
@@ -617,7 +647,7 @@
                 </td>
                 <td class="px-3 py-2.5 text-right text-xs text-nx-text-muted tabular-nums">{fmtLatency(log.latency_ms)}</td>
                 <td class="px-3 py-2.5 text-center">
-                  <span class="inline-flex items-center gap-1 text-xs {statusColor(log.status_code)}">
+                  <span class="inline-flex items-center gap-1 text-xs {statusColor(log.status_code)}" title={log.error_message || ""}>
                     <span class="inline-block h-1.5 w-1.5 rounded-full" style="background: currentColor"></span>
                     {log.status_code || "—"}
                   </span>

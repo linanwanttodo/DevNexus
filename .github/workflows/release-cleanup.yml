@@ -10,14 +10,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Delete previous releases (keep only latest)
+      - name: Delete old releases (keep latest 3 as rollback targets)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          LATEST=$(gh release view --json tagName --jq .tagName)
-          echo "Latest release: $LATEST"
+          KEEP=3
+          # 按发布时间降序，跳过最新 $KEEP 个，删除其余（保留回滚窗口）
           gh release list --limit 100 --json tagName,publishedAt \
-            --jq '.[] | select(.tagName != "'"$LATEST"'") | .tagName' \
+            --jq 'sort_by(.publishedAt) | reverse | .['"$KEEP"':] | .[].tagName' \
             | while read tag; do
               echo "Deleting old release: $tag"
               gh release delete "$tag" --yes --cleanup-tag || true
