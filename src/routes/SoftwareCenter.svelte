@@ -20,14 +20,14 @@
   let pmChecking = $state(true);
   let copiedCommand = $state("");
 
-  const categories = [
+  const categories = $derived([
     { id: "all", label: t("software.all") },
     { id: "ide", label: t("software.ide") },
     { id: "database", label: t("software.database") },
     { id: "cli", label: t("software.cli") },
     { id: "runtime", label: t("software.runtime") },
     { id: "cli-code", label: t("software.cli_code") },
-  ];
+  ]);
 
   const cliCodeTools = [
     { name: "Claude Code", publisher: "Anthropic", command: "npm install -g @anthropic-ai/claude-code@latest", desc: "AI coding assistant by Anthropic" },
