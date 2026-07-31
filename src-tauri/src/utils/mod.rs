@@ -1,4 +1,5 @@
 pub mod exec;
+pub mod rc_editor;
 
 pub fn data_dir() -> std::path::PathBuf {
     let dir = if cfg!(target_os = "macos") {
@@ -45,7 +46,7 @@ pub fn validate_rc_value(value: &str) -> Result<(), String> {
     }
     if value
         .chars()
-        .all(|c| c.is_ascii_alphanumeric() || ":/._-~?&=+%#@[]".contains(c))
+        .all(|c| c.is_ascii_alphanumeric() || ":/._-~?&=+%#@[],".contains(c))
     {
         Ok(())
     } else {

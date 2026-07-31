@@ -1011,41 +1011,19 @@ fn set_brew_mirror(url: &str) -> Result<String, String> {
     }
 
     // 写入 shell profile 使生效（而不是仅当前进程）
-    let shell_rc = if PathBuf::from(&home).join(".zshrc").exists() {
-        PathBuf::from(&home).join(".zshrc")
-    } else {
-        PathBuf::from(&home).join(".bashrc")
-    };
-
-    let export_line = format!("\nexport HOMEBREW_BOTTLE_DOMAIN=\"{}\"\n", url);
-    let existing = fs::read_to_string(&shell_rc).unwrap_or_default();
-    if !existing.contains("HOMEBREW_BOTTLE_DOMAIN") {
-        fs::write(&shell_rc, format!("{}{}", existing, export_line))
-            .map_err(|e| format!("Failed to write {}: {}", shell_rc.display(), e))?;
+    let added = crate::utils::rc_editor::set_export_line(&home, "HOMEBREW_BOTTLE_DOMAIN", url)?;
+    let rc_file = crate::utils::rc_editor::detect_shell_rc(&home);
+    if added {
         Ok(format!(
             "Homebrew mirror set to {}\n(added to {}, restart shell or source it)",
             url,
-            shell_rc.file_name().unwrap_or_default().to_string_lossy()
+            rc_file.file_name().unwrap_or_default().to_string_lossy()
         ))
     } else {
-        // 替换已有行
-        let updated = existing
-            .lines()
-            .map(|line| {
-                if line.contains("HOMEBREW_BOTTLE_DOMAIN") {
-                    export_line.trim().to_string()
-                } else {
-                    line.to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        fs::write(&shell_rc, updated)
-            .map_err(|e| format!("Failed to write {}: {}", shell_rc.display(), e))?;
         Ok(format!(
             "Homebrew mirror updated to {} in {}",
             url,
-            shell_rc.file_name().unwrap_or_default().to_string_lossy()
+            rc_file.file_name().unwrap_or_default().to_string_lossy()
         ))
     }
 }
@@ -1082,39 +1060,19 @@ fn set_go_proxy(url: &str) -> Result<String, String> {
     if home.as_os_str().is_empty() {
         return Err("Cannot determine user home directory".to_string());
     }
-    let shell_rc = if PathBuf::from(&home).join(".zshrc").exists() {
-        PathBuf::from(&home).join(".zshrc")
-    } else {
-        PathBuf::from(&home).join(".bashrc")
-    };
-    let export_line = format!("\nexport GOPROXY=\"{},direct\"\n", url);
-    let existing = fs::read_to_string(&shell_rc).unwrap_or_default();
-    if !existing.contains("GOPROXY") {
-        fs::write(&shell_rc, format!("{}{}", existing, export_line))
-            .map_err(|e| format!("Failed to write {}: {}", shell_rc.display(), e))?;
+    let added = crate::utils::rc_editor::set_export_line(&home, "GOPROXY", &format!("{},direct", url))?;
+    let rc_file = crate::utils::rc_editor::detect_shell_rc(&home);
+    if added {
         Ok(format!(
             "Go proxy set to {}\n(added to {}, restart shell or source it)",
             url,
-            shell_rc.file_name().unwrap_or_default().to_string_lossy()
+            rc_file.file_name().unwrap_or_default().to_string_lossy()
         ))
     } else {
-        let updated = existing
-            .lines()
-            .map(|line| {
-                if line.contains("GOPROXY") {
-                    export_line.trim().to_string()
-                } else {
-                    line.to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        fs::write(&shell_rc, updated)
-            .map_err(|e| format!("Failed to write {}: {}", shell_rc.display(), e))?;
         Ok(format!(
             "Go proxy updated to {} in {}",
             url,
-            shell_rc.file_name().unwrap_or_default().to_string_lossy()
+            rc_file.file_name().unwrap_or_default().to_string_lossy()
         ))
     }
 }
@@ -1203,39 +1161,19 @@ fn set_pub_mirror(url: &str) -> Result<String, String> {
     if home.as_os_str().is_empty() {
         return Err("Cannot determine user home directory".to_string());
     }
-    let shell_rc = if PathBuf::from(&home).join(".zshrc").exists() {
-        PathBuf::from(&home).join(".zshrc")
-    } else {
-        PathBuf::from(&home).join(".bashrc")
-    };
-    let export_line = format!("\nexport PUB_HOSTED_URL=\"{}\"\n", url);
-    let existing = fs::read_to_string(&shell_rc).unwrap_or_default();
-    if !existing.contains("PUB_HOSTED_URL") {
-        fs::write(&shell_rc, format!("{}{}", existing, export_line))
-            .map_err(|e| format!("Failed to write {}: {}", shell_rc.display(), e))?;
+    let added = crate::utils::rc_editor::set_export_line(&home, "PUB_HOSTED_URL", url)?;
+    let rc_file = crate::utils::rc_editor::detect_shell_rc(&home);
+    if added {
         Ok(format!(
             "Flutter Pub mirror set to {}\n(added to {}, restart shell or source it)",
             url,
-            shell_rc.file_name().unwrap_or_default().to_string_lossy()
+            rc_file.file_name().unwrap_or_default().to_string_lossy()
         ))
     } else {
-        let updated = existing
-            .lines()
-            .map(|line| {
-                if line.contains("PUB_HOSTED_URL") {
-                    export_line.trim().to_string()
-                } else {
-                    line.to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        fs::write(&shell_rc, updated)
-            .map_err(|e| format!("Failed to write {}: {}", shell_rc.display(), e))?;
         Ok(format!(
             "Flutter Pub mirror updated to {} in {}",
             url,
-            shell_rc.file_name().unwrap_or_default().to_string_lossy()
+            rc_file.file_name().unwrap_or_default().to_string_lossy()
         ))
     }
 }

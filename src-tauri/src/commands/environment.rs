@@ -218,35 +218,15 @@ pub fn remove_from_path(env_name: String, path: String) -> Result<String, String
 
 // ==================== Unix (macOS / Linux) ====================
 
-/// Detect user's default shell to choose the right rc file
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-fn detect_shell_rc() -> &'static str {
-    let shell = std::env::var("SHELL").unwrap_or_default();
-    if shell.ends_with("zsh") {
-        ".zshrc"
-    } else if shell.ends_with("bash") {
-        ".bashrc"
-    } else {
-        ".profile"
-    }
-}
-
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn add_to_path_impl(env_name: &str, path: &str) -> Result<String, String> {
     crate::utils::validate_rc_value(path)?;
-    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
-    let export_line = format!(
-        "\n# DevNexus: {}\nexport PATH=\"{}:$PATH\"\n",
-        env_name, path
-    );
-
-    let rc_file = detect_shell_rc();
-    let rc_path = format!("{}/{}", home, rc_file);
+    let home = std::path::PathBuf::from(std::env::var("HOME").map_err(|e| e.to_string())?);
 
     // Check all common rc files for existing entry (avoid duplicates across files)
     let all_rcs = &[".zshrc", ".bashrc", ".bash_profile", ".profile"];
     for file in all_rcs {
-        let rc_path = format!("{}/{}", home, file);
+        let rc_path = home.join(file);
         if let Ok(content) = std::fs::read_to_string(&rc_path) {
             if content.contains(path) {
                 return Ok(format!("{} is already in PATH ({})", env_name, file));
@@ -254,19 +234,22 @@ fn add_to_path_impl(env_name: &str, path: &str) -> Result<String, String> {
         }
     }
 
-    let existing = std::fs::read_to_string(&rc_path).unwrap_or_default();
-    std::fs::write(&rc_path, format!("{}{}", existing, export_line)).map_err(|e| e.to_string())?;
+    let rc_file = crate::utils::rc_editor::detect_shell_rc(&home);
+    crate::utils::rc_editor::set_path_line(&home, env_name, path)?;
 
-    Ok(format!("Added {} to PATH in {}", env_name, rc_file))
+    Ok(format!(
+        "Added {} to PATH in {}",
+        env_name,
+        rc_file.file_name().unwrap_or_default().to_string_lossy()
+    ))
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn remove_from_path_impl(env_name: &str, path: &str) -> Result<String, String> {
-    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
-    let rc_file = detect_shell_rc();
-    let rc_path = format!("{}/{}", home, rc_file);
+    let home = std::path::PathBuf::from(std::env::var("HOME").map_err(|e| e.to_string())?);
+    let rc_path = crate::utils::rc_editor::detect_shell_rc(&home);
 
-    if std::path::Path::new(&rc_path).exists() {
+    if rc_path.exists() {
         let content = std::fs::read_to_string(&rc_path).map_err(|e| e.to_string())?;
         let new_content: Vec<&str> = content
             .lines()
