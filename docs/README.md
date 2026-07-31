@@ -2,13 +2,12 @@
 
 > 开发者一站式工具集 — 跨平台桌面工具应用
 
-DevNexus 是一款面向开发者的系统工具集合，提供下载管理、系统信息监控、软件包管理、环境管理、容器管理、API Hub、镜像源配置、端口管理、定时任务、密码管理和浏览器 Cookie 提取等功能的桌面应用。基于 Tauri 2.0 + Rust + Svelte 5 构建。
+DevNexus 是一款面向开发者的系统工具集合，提供系统信息监控、软件包管理、环境管理、容器管理、API Hub、镜像源配置、端口管理、定时任务、密码管理和浏览器 Cookie 提取等功能的桌面应用。基于 Tauri 2.0 + Rust + Svelte 5 构建。
 
 ## 功能概览
 
 | 功能            | 说明 | 文档 |
 |---------------|------|------|
-| **下载管理器**     | IDM 风格多线程下载引擎，工作队列、实时速度、分段进度条、GitHub 镜像加速 | [12-download.md](modules/12-download.md) |
 | **系统仪表板**     | 查看系统硬件信息、CPU/内存/磁盘实时使用率、系统运行时间 | [01-system.md](modules/01-system.md) |
 | **软件中心**      | 浏览器/安装/卸载 37+ 款开发者工具，支持跨平台包管理器自动适配 | [02-software.md](modules/02-software.md) |
 | **环境管理**      | 检测 Python/Node/Java/Go/Rust 等运行时环境，管理 PATH 配置 | [03-environment.md](modules/03-environment.md) |
@@ -75,7 +74,6 @@ docs/
 │   ├── 09-uninstall.md   # 深度卸载与残留扫描
 │   ├── 10-version.md     # 版本管理
 │   ├── 11-api-hub.md     # API Hub
-│   ├── 12-download.md    # 下载管理器
 │   ├── 13-containers.md  # 容器管理
 │   └── 99-cross-platform.md  # 跨平台实现详解
 └── README.md             # 本文件

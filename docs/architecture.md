@@ -8,7 +8,7 @@ DevNexus 采用 **Tauri 2.0** 标准架构：Rust 后端 + Svelte 前端，通�
 ┌─────────────────────────────────────────────────────┐
 │                     前端 (Svelte 5)                   │
 │  ┌─────────────┐ ┌──────────────┐ ┌────────────────┐│
-│  │ Dashboard   │ │ DownloadMgr  │ │SoftwareCenter  ││
+│  │ Dashboard   │ │              │ │SoftwareCenter  ││
 │  ├─────────────┤ ├──────────────┤ ├────────────────┤│
 │  │ ContainerMgr│ │   ApiHub     │ │ Environment    ││
 │  ├─────────────┤ ├──────────────┤ ├────────────────┤│
@@ -30,16 +30,10 @@ DevNexus 采用 **Tauri 2.0** 标准架构：Rust 后端 + Svelte 前端，通�
 │  ┌──────────────────────────────────────────────┐   ││
 │  │ commands/                                     │   ││
 │  │  system.rs  environment.rs  software.rs       │   ││
-│  │  container.rs  api_hub/  download_manager.rs  │   ││
+│  │  container.rs  api_hub/                      │   ││
 │  │  mirror.rs  port_manager.rs  scheduler.rs     │   ││
 │  │  password_manager.rs  cookie_extractor.rs     │   ││
 │  │  version_manager.rs  migration.rs  updater.rs │   ││
-│  └──────────────────────────────────────────────┘   ││
-│  ┌──────────────────────────────────────────────┐   ││
-│  │ 下载引擎 (download/)                          │   ││
-│  │  manager.rs  chunk.rs  config.rs              │   ││
-│  │  task.rs  progress.rs  storage.rs             │   ││
-│  │  changelog.rs                                 │   ││
 │  └──────────────────────────────────────────────┘   ││
 │  ┌──────────────────────────────────────────────┐   ││
 │  │ 工具模块                                       │   ││
@@ -110,7 +104,6 @@ const routes = {
 
 | 编号 | 模块 | 文件 | 核心功能 |
 |------|------|------|---------|
-| 01 | 下载管理器 | `download/` | IDM 风格多线程引擎、工作队列、实时进度、镜像加速 |
 | 02 | 系统仪表板 | `commands/system.rs` | 硬件信息、CPU/内存/磁盘使用率 |
 | 03 | 软件中心 | `commands/software.rs` | 37+ 工具管理、跨平台包管理器 |
 | 04 | 环境管理 | `commands/environment.rs` | 运行时检测、PATH 编辑 |
