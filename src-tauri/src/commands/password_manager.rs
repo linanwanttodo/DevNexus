@@ -148,7 +148,9 @@ impl PasswordManager {
         let encoded = general_purpose::STANDARD.encode(key);
 
         if let Some(ref entry) = entry {
-            let _ = entry.set_password(&encoded);
+            if let Err(e) = entry.set_password(&encoded) {
+                eprintln!("[PasswordManager] Failed to persist master password to keyring: {}", e);
+            }
         }
 
         Self::try_remove_old_keyfile();
@@ -190,7 +192,9 @@ impl PasswordManager {
         // 写入钥匙串
         if let Some(e) = entry {
             let encoded = general_purpose::STANDARD.encode(key);
-            let _ = e.set_password(&encoded);
+            if let Err(err) = e.set_password(&encoded) {
+                eprintln!("[PasswordManager] Failed to persist master password to keyring: {}", err);
+            }
         }
 
         Some(key)
