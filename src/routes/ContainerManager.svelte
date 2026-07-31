@@ -6,6 +6,7 @@
   import { getSearchQuery, setSearchQuery, navigate } from "../lib/stores.svelte.js";
   import { t } from "../lib/i18n.svelte.js";
   import ContainerIcons from "../icons/ContainerIcons.svelte";
+  import ContainerDialog from "../components/containers/ContainerDialog.svelte";
 
   // ── State ──
   let activeTab = $state("containers");
@@ -343,6 +344,59 @@
   function shortId(id) { return id ? id.substring(0, 12) : ""; }
   function formatCreated(created) { return created || "-"; }
   function formatSize(size) { return size || "-"; }
+
+  // ── Dialog configs ──
+  let pullConfig = $derived({
+    title: t("docker.pull_image"), icon: "download", width: "max-w-[300px]",
+    fields: [{ id: "pull-image", placeholder: "nginx:latest", value: pullImageName, onInput: (v) => pullImageName = v }],
+    loading: pullLoading, submitLabel: t("docker.pull"), loadingLabel: t("docker.pulling"),
+    canSubmit: pullImageName.trim() !== "",
+    onSubmit: pullImageAction,
+    onClose: () => { showPull = false; pullImageName = ""; },
+  });
+  let buildConfig = $derived({
+    title: t("docker.build_image"), icon: "construction", width: "max-w-[300px]",
+    fields: [
+      { id: "build-tag", placeholder: `${t("docker.build_tag")} (myapp:latest)`, value: buildTag, onInput: (v) => buildTag = v, enterSubmit: false },
+      { id: "build-path", placeholder: `${t("docker.build_path")} (.)`, value: buildPath, onInput: (v) => buildPath = v, enterSubmit: false },
+    ],
+    loading: buildLoading, submitLabel: t("docker.build"), loadingLabel: t("docker.building"),
+    canSubmit: buildTag.trim() !== "" && buildPath.trim() !== "",
+    onSubmit: buildImageAction,
+    onClose: () => { showBuild = false; buildTag = ""; buildPath = ""; },
+  });
+  let pushConfig = $derived({
+    title: t("docker.push_image"), icon: "upload", width: "max-w-[300px]",
+    fields: [{ id: "push-target", placeholder: "registry/user/repo:tag", value: pushTarget, onInput: (v) => pushTarget = v }],
+    loading: pushLoading, submitLabel: t("docker.push"), loadingLabel: t("docker.pushing"),
+    canSubmit: pushTarget.trim() !== "",
+    onSubmit: pushImageAction,
+    onClose: () => { showPush = false; pushTarget = ""; },
+  });
+  let tagConfig = $derived({
+    title: t("docker.tag_image"), icon: "sell", width: "max-w-[300px]",
+    fields: [{ id: "tag-value", placeholder: "registry/user/repo:tag", value: tagValue, onInput: (v) => tagValue = v }],
+    loading: tagLoading, submitLabel: t("docker.tag"), loadingLabel: t("docker.tagging"),
+    canSubmit: tagValue.trim() !== "",
+    onSubmit: tagImageAction,
+    onClose: () => { showTag = false; tagValue = ""; },
+  });
+  let createVolumeConfig = $derived({
+    title: t("docker.create_volume"), icon: "add", width: "max-w-[300px]",
+    fields: [{ id: "volume-name", placeholder: "my_volume", value: newVolumeName, onInput: (v) => newVolumeName = v }],
+    loading: false, submitLabel: t("docker.create"), loadingLabel: t("docker.create"),
+    canSubmit: newVolumeName.trim() !== "",
+    onSubmit: createVolume,
+    onClose: () => { showCreateVolume = false; newVolumeName = ""; },
+  });
+  let createNetworkConfig = $derived({
+    title: t("docker.create_network"), icon: "add", width: "max-w-[300px]",
+    fields: [{ id: "network-name", placeholder: "my_network", value: newNetworkName, onInput: (v) => newNetworkName = v }],
+    loading: false, submitLabel: t("docker.create"), loadingLabel: t("docker.create"),
+    canSubmit: newNetworkName.trim() !== "",
+    onSubmit: createNetwork,
+    onClose: () => { showCreateNetwork = false; newNetworkName = ""; },
+  });
 </script>
 
 <div class="flex h-full flex-col">
@@ -863,142 +917,25 @@
 {/if}
 
 {#if showPull}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="w-full max-w-[300px] bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
-      <div class="flex items-center justify-between px-3 py-2 border-b border-nx-border">
-        <h2 class="text-sm font-semibold text-nx-text">{t("docker.pull_image")}</h2>
-        <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { showPull = false; pullImageName = ""; }}>
-          <span class="material-symbols-outlined text-lg">close</span>
-        </button>
-      </div>
-      <div class="p-3">
-        <input id="pull-image" type="text" bind:value={pullImageName} placeholder="nginx:latest"
-          class="nx-input w-full h-8 text-xs"
-          onkeydown={(e) => { if (e.key === 'Enter') pullImageAction(); }} />
-        <div class="mt-3 flex justify-end gap-2">
-          <button class="nx-btn h-7 text-xs" onclick={() => { showPull = false; pullImageName = ""; }}>{t("common.cancel")}</button>
-          <button class="nx-btn nx-btn-primary h-7 text-xs" onclick={pullImageAction} disabled={pullLoading || !pullImageName.trim()}>
-            {pullLoading ? t("docker.pulling") : t("docker.pull")}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <ContainerDialog config={pullConfig} />
 {/if}
 
 {#if showBuild}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="w-full max-w-[300px] bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
-      <div class="flex items-center justify-between px-3 py-2 border-b border-nx-border">
-        <h2 class="text-sm font-semibold text-nx-text">{t("docker.build_image")}</h2>
-        <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { showBuild = false; buildTag = ""; buildPath = ""; }}>
-          <span class="material-symbols-outlined text-lg">close</span>
-        </button>
-      </div>
-      <div class="p-3 space-y-2">
-        <input id="build-tag" type="text" bind:value={buildTag} placeholder={t("docker.build_tag") + " (myapp:latest)"}
-          class="nx-input w-full h-8 text-xs" />
-        <input id="build-path" type="text" bind:value={buildPath} placeholder={t("docker.build_path") + " (.)"}
-          class="nx-input w-full h-8 text-xs" />
-        <div class="flex justify-end gap-2 pt-1">
-          <button class="nx-btn h-7 text-xs" onclick={() => { showBuild = false; buildTag = ""; buildPath = ""; }}>{t("common.cancel")}</button>
-          <button class="nx-btn nx-btn-primary h-7 text-xs" onclick={buildImageAction} disabled={buildLoading || !buildTag.trim() || !buildPath.trim()}>
-            {buildLoading ? t("docker.building") : t("docker.build")}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <ContainerDialog config={buildConfig} />
 {/if}
 
 {#if showPush}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="w-full max-w-[300px] bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
-      <div class="flex items-center justify-between px-3 py-2 border-b border-nx-border">
-        <h2 class="text-sm font-semibold text-nx-text">{t("docker.push_image")}</h2>
-        <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { showPush = false; pushTarget = ""; }}>
-          <span class="material-symbols-outlined text-lg">close</span>
-        </button>
-      </div>
-      <div class="p-3">
-        <input id="push-target" type="text" bind:value={pushTarget} placeholder="registry/user/repo:tag"
-          class="nx-input w-full h-8 text-xs"
-          onkeydown={(e) => { if (e.key === 'Enter') pushImageAction(); }} />
-        <div class="mt-3 flex justify-end gap-2">
-          <button class="nx-btn h-7 text-xs" onclick={() => { showPush = false; pushTarget = ""; }}>{t("common.cancel")}</button>
-          <button class="nx-btn nx-btn-primary h-7 text-xs" onclick={pushImageAction} disabled={pushLoading || !pushTarget.trim()}>
-            {pushLoading ? t("docker.pushing") : t("docker.push")}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <ContainerDialog config={pushConfig} />
 {/if}
 
 {#if showTag}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="w-full max-w-[300px] bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
-      <div class="flex items-center justify-between px-3 py-2 border-b border-nx-border">
-        <h2 class="text-sm font-semibold text-nx-text">{t("docker.tag_image")}</h2>
-        <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { showTag = false; tagValue = ""; }}>
-          <span class="material-symbols-outlined text-lg">close</span>
-        </button>
-      </div>
-      <div class="p-3">
-        <input id="tag-value" type="text" bind:value={tagValue} placeholder="registry/user/repo:tag"
-          class="nx-input w-full h-8 text-xs"
-          onkeydown={(e) => { if (e.key === 'Enter') tagImageAction(); }} />
-        <div class="mt-3 flex justify-end gap-2">
-          <button class="nx-btn h-7 text-xs" onclick={() => { showTag = false; tagValue = ""; }}>{t("common.cancel")}</button>
-          <button class="nx-btn nx-btn-primary h-7 text-xs" onclick={tagImageAction} disabled={tagLoading || !tagValue.trim()}>
-            {tagLoading ? t("docker.tagging") : t("docker.tag")}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <ContainerDialog config={tagConfig} />
 {/if}
 
 {#if showCreateVolume}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="w-full max-w-[300px] bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
-      <div class="flex items-center justify-between px-3 py-2 border-b border-nx-border">
-        <h2 class="text-sm font-semibold text-nx-text">{t("docker.create_volume")}</h2>
-        <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { showCreateVolume = false; newVolumeName = ""; }}>
-          <span class="material-symbols-outlined text-lg">close</span>
-        </button>
-      </div>
-      <div class="p-3">
-        <input id="volume-name" type="text" bind:value={newVolumeName} placeholder="my_volume"
-          class="nx-input w-full h-8 text-xs"
-          onkeydown={(e) => { if (e.key === 'Enter') createVolume(); }} />
-        <div class="mt-3 flex justify-end gap-2">
-          <button class="nx-btn h-7 text-xs" onclick={() => { showCreateVolume = false; newVolumeName = ""; }}>{t("common.cancel")}</button>
-          <button class="nx-btn nx-btn-primary h-7 text-xs" onclick={createVolume} disabled={!newVolumeName.trim()}>{t("docker.create")}</button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <ContainerDialog config={createVolumeConfig} />
 {/if}
 
 {#if showCreateNetwork}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div class="w-full max-w-[300px] bg-nx-surface border border-nx-border rounded-lg shadow-xl overflow-hidden">
-      <div class="flex items-center justify-between px-3 py-2 border-b border-nx-border">
-        <h2 class="text-sm font-semibold text-nx-text">{t("docker.create_network")}</h2>
-        <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { showCreateNetwork = false; newNetworkName = ""; }}>
-          <span class="material-symbols-outlined text-lg">close</span>
-        </button>
-      </div>
-      <div class="p-3">
-        <input id="network-name" type="text" bind:value={newNetworkName} placeholder="my_network"
-          class="nx-input w-full h-8 text-xs"
-          onkeydown={(e) => { if (e.key === 'Enter') createNetwork(); }} />
-        <div class="mt-3 flex justify-end gap-2">
-          <button class="nx-btn h-7 text-xs" onclick={() => { showCreateNetwork = false; newNetworkName = ""; }}>{t("common.cancel")}</button>
-          <button class="nx-btn nx-btn-primary h-7 text-xs" onclick={createNetwork} disabled={!newNetworkName.trim()}>{t("docker.create")}</button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <ContainerDialog config={createNetworkConfig} />
 {/if}

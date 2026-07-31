@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
   import { t } from "../lib/i18n.svelte.js";
+  import VaultDialog from "../components/VaultDialog.svelte";
 
   let locked = $state(true);
   let hasMasterPassword = $state(false);
@@ -272,6 +273,34 @@ import { invoke } from "@tauri-apps/api/core";
     });
   }
 
+  // 新增 / 编辑弹窗字段配置
+  let addGroups = $derived([
+    [
+      { id: "pm-name-add", labelKey: "passwords.name", required: true, value: entryName, onInput: (v) => entryName = v, placeholder: "GitHub Account" },
+      { id: "pm-username-add", labelKey: "passwords.username", required: true, value: username, onInput: (v) => username = v, placeholder: "user@example.com" },
+    ],
+    [
+      { id: "pm-password-add", labelKey: "passwords.password", required: true, type: "password", value: password, onInput: (v) => password = v, placeholder: "••••••••" },
+      { id: "pm-url-add", labelKey: "URL", type: "url", value: url, onInput: (v) => url = v, placeholder: "https://github.com" },
+    ],
+    [
+      { id: "pm-notes-add", labelKey: "passwords.notes", textarea: true, value: notes, onInput: (v) => notes = v, placeholder: "Additional information..." },
+    ],
+  ]);
+  let editGroups = $derived([
+    [
+      { id: "pm-name-edit", labelKey: "passwords.name", required: true, value: editName, onInput: (v) => editName = v },
+      { id: "pm-username-edit", labelKey: "passwords.username", required: true, value: editUsername, onInput: (v) => editUsername = v },
+    ],
+    [
+      { id: "pm-password-edit", labelKey: "passwords.password", type: "password", value: editPassword, onInput: (v) => editPassword = v, placeholder: t('passwords.keep_password') },
+      { id: "pm-url-edit", labelKey: "URL", type: "url", value: editUrl, onInput: (v) => editUrl = v },
+    ],
+    [
+      { id: "pm-notes-edit", labelKey: "passwords.notes", textarea: true, value: editNotes, onInput: (v) => editNotes = v },
+    ],
+  ]);
+
   onMount(async () => {
     await checkState();
     if (!locked) {
@@ -457,136 +486,15 @@ import { invoke } from "@tauri-apps/api/core";
 
 <!-- Add Password Modal -->
 {#if showAddModal}
-  <div class="nx-dialog-overlay" role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showAddModal = false)} onclick={() => showAddModal = false}>
-    <div class="nx-dialog" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
-      <div class="nx-dialog-header">
-        <h2 class="text-lg font-semibold text-nx-text">{t('passwords.add')}</h2>
-      </div>
-      
-      <div class="nx-dialog-body space-y-2.5">
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-name-add">{t('passwords.name')} *</label>
-            <input id="pm-name-add" type="text" bind:value={entryName} placeholder="GitHub Account" class="nx-input h-8 w-full text-xs" />
-          </div>
-          <div>
-            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-username-add">{t('passwords.username')} *</label>
-            <input id="pm-username-add" type="text" bind:value={username} placeholder="user@example.com" class="nx-input h-8 w-full text-xs" />
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-password-add">{t('passwords.password')} *</label>
-            <input id="pm-password-add" type="password" bind:value={password} placeholder="••••••••" class="nx-input h-8 w-full text-xs" />
-          </div>
-          <div>
-            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-url-add">URL</label>
-            <input id="pm-url-add" type="url" bind:value={url} placeholder="https://github.com" class="nx-input h-8 w-full text-xs" />
-          </div>
-        </div>
-        <div>
-          <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-notes-add">{t('passwords.notes')}</label>
-          <textarea id="pm-notes-add" bind:value={notes} placeholder="Additional information..." rows="2" class="nx-input w-full text-xs"></textarea>
-        </div>
-      </div>
-
-      <div class="nx-dialog-footer">
-        <button
-          class="nx-btn nx-btn-ghost"
-          onclick={() => showAddModal = false}>
-          {t('passwords.cancel')}
-        </button>
-        <button
-          class="nx-btn nx-btn-primary"
-          onclick={addPassword}>
-          {t('passwords.save')}
-        </button>
-      </div>
-    </div>
-  </div>
+  <VaultDialog title={t('passwords.add')} groups={addGroups} submitLabel={t('passwords.save')} onSubmit={addPassword} onClose={() => showAddModal = false} />
 {/if}
 
 <!-- Edit Password Modal -->
 {#if showEditModal}
-  <div class="nx-dialog-overlay" role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showEditModal = false)} onclick={() => showEditModal = false}>
-    <div class="nx-dialog" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
-      <div class="nx-dialog-header">
-        <h2 class="text-lg font-semibold text-nx-text">{t('passwords.edit_title')}</h2>
-      </div>
-
-      <div class="nx-dialog-body space-y-2.5">
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-name-edit">{t('passwords.name')} *</label>
-            <input id="pm-name-edit" type="text" bind:value={editName} class="nx-input h-8 w-full text-xs" />
-          </div>
-          <div>
-            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-username-edit">{t('passwords.username')} *</label>
-            <input id="pm-username-edit" type="text" bind:value={editUsername} class="nx-input h-8 w-full text-xs" />
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-password-edit">{t('passwords.password')}</label>
-            <input id="pm-password-edit" type="password" bind:value={editPassword} placeholder={t('passwords.keep_password')} class="nx-input h-8 w-full text-xs" />
-          </div>
-          <div>
-            <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-url-edit">URL</label>
-            <input id="pm-url-edit" type="url" bind:value={editUrl} class="nx-input h-8 w-full text-xs" />
-          </div>
-        </div>
-        <div>
-          <label class="mb-0.5 block text-xs text-nx-text-muted" for="pm-notes-edit">{t('passwords.notes')}</label>
-          <textarea id="pm-notes-edit" bind:value={editNotes} rows="2" class="nx-input w-full text-xs"></textarea>
-        </div>
-      </div>
-
-      <div class="nx-dialog-footer">
-        <button
-          class="nx-btn nx-btn-ghost"
-          onclick={() => showEditModal = false}>
-          {t('passwords.cancel')}
-        </button>
-        <button
-          class="nx-btn nx-btn-primary"
-          onclick={saveEdit}>
-          {t('passwords.save')}
-        </button>
-      </div>
-    </div>
-  </div>
+  <VaultDialog title={t('passwords.edit_title')} groups={editGroups} submitLabel={t('passwords.save')} onSubmit={saveEdit} onClose={() => showEditModal = false} />
 {/if}
 
 <!-- View Password Modal -->
 {#if showPassword}
-  <div class="nx-dialog-overlay" role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showPassword = null)} onclick={() => showPassword = null}>
-    <div class="nx-dialog" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.stopPropagation()} onclick={(e) => e.stopPropagation()}>
-      <div class="nx-dialog-header">
-        <h2 class="text-lg font-semibold text-nx-text">{t('passwords.details')}</h2>
-      </div>
-      
-      <div class="nx-dialog-body">
-        <div class="nx-card p-4">
-          <div class="mb-2 text-xs text-nx-text-muted">{t('passwords.password')}</div>
-          <div class="flex items-center gap-2">
-            <code class="flex-1 break-all text-sm text-nx-text">{showPassword.password}</code>
-            <button
-              class="p-1.5 text-nx-text-secondary"
-              onclick={() => copyToClipboard(showPassword.password)}
-              title={t('passwords.title_copy')}>
-              <span class="material-symbols-outlined text-lg">content_copy</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="nx-dialog-footer">
-        <button
-          class="nx-btn nx-btn-primary"
-          onclick={() => showPassword = null}>
-          {t('passwords.close')}
-        </button>
-      </div>
-    </div>
-  </div>
+  <VaultDialog mode="view" title={t('passwords.details')} password={showPassword.password} onCopy={() => copyToClipboard(showPassword.password)} onClose={() => showPassword = null} />
 {/if}

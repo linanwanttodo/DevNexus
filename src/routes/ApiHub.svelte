@@ -4,6 +4,7 @@
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
   import { t, tFormat, getLang } from "../lib/i18n.svelte.js";
+  import ProviderForm from "../components/hub/ProviderForm.svelte";
 
   let activeTab = $state("stats");
   let providers = $state([]);
@@ -15,12 +16,6 @@
 
   let showForm = $state(false);
   let editingId = $state(null);
-  let form = $state({ name: "", protocol: "openai_chat", base_url: "", api_key: "", model_aliases: {}, model_context_lengths: {} });
-  let fetchingModels = $state(false);
-  let fetchedModels = $state([]);
-  let selectedModels = $state({});
-  let manualModelId = $state("");
-  let addingManualModel = $state(false);
 
   // 单一协议选项：同时决定品牌、线协议、端点与认证方式
   const protocolOptions = $derived([
@@ -62,32 +57,16 @@
 
   function beginAdd() {
     editingId = null;
-    form = { name: "", protocol: "openai_chat", base_url: "https://api.openai.com", api_key: "", model_aliases: {}, model_context_lengths: {} };
-    fetchedModels = []; selectedModels = {}; showForm = true;
+    showForm = true;
   }
   function beginEdit(p) {
     editingId = p.id;
-    form = { name: p.name, protocol: p.protocol || "openai_chat", base_url: p.base_url, api_key: p.api_key, model_aliases: { ...(p.model_aliases || {}) }, model_context_lengths: { ...(p.model_context_lengths || {}) } };
-    fetchedModels = []; selectedModels = {};
-    p.models.forEach(m => selectedModels[m] = true);
     showForm = true;
   }
-  function cancelForm() { showForm = false; editingId = null; fetchedModels = []; selectedModels = {}; addingManualModel = false; }
-  async function saveForm() {
+  function cancelForm() { showForm = false; editingId = null; }
+  async function saveProvider(data, isEdit) {
     try {
-      const models = Object.keys(selectedModels).filter(m => selectedModels[m]);
-      if (models.length === 0) { showToast(t("apiHub.errors.selectModel"), "error"); return; }
-      const model_aliases = {};
-      models.forEach(m => { model_aliases[m] = form.model_aliases[m] || m; });
-      const model_context_lengths = {};
-      models.forEach(m => { if (form.model_context_lengths[m]) model_context_lengths[m] = Number(form.model_context_lengths[m]); });
-      const data = {
-        id: editingId || crypto.randomUUID(),
-        name: form.name, protocol: form.protocol,
-        base_url: form.base_url, api_key: form.api_key,
-        models, model_aliases, model_context_lengths, enabled: true, created_at: Math.floor(Date.now() / 1000),
-      };
-      if (editingId) { await invoke("api_hub_update_provider", { id: editingId, provider: data }); showToast(t("apiHub.toast.updated")); }
+      if (isEdit) { await invoke("api_hub_update_provider", { id: data.id, provider: data }); showToast(t("apiHub.toast.updated")); }
       else { await invoke("api_hub_add_provider", { provider: data }); showToast(t("apiHub.toast.added")); }
       showForm = false; editingId = null; providers = await invoke("api_hub_list_providers");
     } catch (err) { showToast(tFormat("apiHub.toast.error", { error: err.message || String(err) }), "error"); }
@@ -103,37 +82,7 @@
     } catch (err) { showToast(tFormat("apiHub.toast.deleteFailed", { error: err.message || String(err) }), "error"); }
   }
 
-  async function fetchModels() {
-    if (!form.base_url || !form.protocol) { showToast(t("apiHub.errors.fillBaseUrl"), "error"); return; }
-    fetchingModels = true; fetchedModels = [];
-    try {
-      fetchedModels = await invoke("api_hub_fetch_models", { baseUrl: form.base_url, apiKey: form.api_key || "", protocol: form.protocol, providerId: editingId });
-      fetchedModels.forEach(m => {
-        if (!(m.id in selectedModels)) { selectedModels[m.id] = true; form.model_aliases[m.id] = m.name || m.id; }
-      });
-      showToast(tFormat("apiHub.toast.fetchedModels", { count: fetchedModels.length }));
-    } catch (err) { showToast(tFormat("apiHub.toast.fetchFailed", { error: err.message }), "error"); }
-    finally { fetchingModels = false; }
-  }
-  function toggleModel(id) { selectedModels[id] = !selectedModels[id]; }
-  function confirmManualAdd() {
-    const id = manualModelId.trim();
-    if (!id) return;
-    if (fetchedModels.find(m => m.id === id)) { showToast(tFormat("apiHub.toast.modelExists", { id }), "error"); return; }
-    const model = { id, name: id, owned_by: t("apiHub.custom"), enabled: true };
-    fetchedModels = [...fetchedModels, model];
-    selectedModels[id] = true;
-    form.model_aliases[id] = id;
-    manualModelId = "";
-    showToast(tFormat("apiHub.toast.modelAdded", { id }));
-  }
-  function selectAll() { fetchedModels.forEach(m => selectedModels[m.id] = true); }
-  function deselectAll() { fetchedModels.forEach(m => selectedModels[m.id] = false); }
   function protocolName(id) { return protocolOptions.find(p => p.id === id)?.label || id; }
-  function onProtocolChange() {
-    const opt = protocolOptions.find(p => p.id === form.protocol);
-    if (opt && !editingId) form.base_url = opt.defaultUrl;
-  }
 
   function fmtTokens(n) { if (!n) return "0"; return new Intl.NumberFormat(getLang(), { notation: "compact", maximumFractionDigits: 1 }).format(n); }
   const LOCALE_TAGS = { zh: "zh-CN", en: "en-US", ru: "ru-RU" };
@@ -146,7 +95,6 @@
   function getModelEntries() { return stats?.by_model ? Object.entries(stats.by_model).sort((a,b) => Number(b[1]?.requests) - Number(a[1]?.requests)) : []; }
   function heatmapColor(requests, max) { const t = Math.min(requests / Math.max(max, 1), 1); return `oklch(${50+t*35}% ${0.08+t*0.08} ${220})`; }
   function getAlias(p, id) { return p.model_aliases?.[id] || id; }
-  function selectedCount() { return Object.values(selectedModels).filter(Boolean).length; }
 
   // 聚合网关对外暴露的统一端点（按模型名路由并在各 Provider 协议间转换）
   let endpoints = $derived(
@@ -343,162 +291,16 @@
 
     <!-- ════ Add/Edit Form ════ -->
     {#if showForm}
-      <div class="nx-card p-5 mb-4" style="box-shadow: none !important; border-color: var(--nx-border) !important;">
-        <!-- Header -->
-        <div class="mb-4 flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-nx-accent text-lg">{editingId ? "edit" : "add_circle"}</span>
-            <span class="text-sm font-medium text-nx-text">{editingId ? t("apiHub.editProvider") : t("apiHub.addProvider")}</span>
-          </div>
-          <button class="nx-btn nx-btn-ghost p-1" onclick={cancelForm}>
-            <span class="material-symbols-outlined text-base">close</span>
-          </button>
-        </div>
-
-        <!-- Form fields -->
-        <div class="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label for="f-name" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.name")}</label>
-            <input id="f-name" bind:value={form.name} class="nx-input w-full" placeholder="My OpenAI" />
-          </div>
-          <div class="col-span-2">
-            <label for="f-protocol" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.protocolLabel")}</label>
-            <select id="f-protocol" bind:value={form.protocol} class="nx-input w-full" onchange={onProtocolChange}>
-              {#each protocolOptions as pt}
-                <option value={pt.id}>{pt.label}</option>
-              {/each}
-            </select>
-            <p class="mt-1 text-[10px] text-nx-text-muted/70 font-mono">
-              {protocolOptions.find(p => p.id === form.protocol)?.endpoint || ""}
-              — {protocolOptions.find(p => p.id === form.protocol)?.desc || ""}
-            </p>
-          </div>
-          <div class="col-span-2">
-            <label for="f-base-url" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.baseUrl")}</label>
-            <input id="f-base-url" bind:value={form.base_url} class="nx-input w-full" placeholder="https://api.openai.com" />
-          </div>
-          <div class="col-span-2">
-            <label for="f-api-key" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.apiKey")} <span class="text-nx-text-muted/40">{t("apiHub.optional")}</span></label>
-            <input id="f-api-key" type="password" bind:value={form.api_key} class="nx-input w-full" placeholder="sk-..." />
-          </div>
-        </div>
-
-        <!-- Model fetching -->
-        <div class="mb-3">
-          <div class="flex items-center gap-3 mb-3">
-            <button class="nx-btn nx-btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs" onclick={fetchModels} disabled={fetchingModels}>
-              {#if fetchingModels}
-                <span class="material-symbols-outlined text-sm nx-animate-spin">progress_activity</span>
-                {t("apiHub.fetching")}
-              {:else}
-                <span class="material-symbols-outlined text-sm">download</span>
-                {t("apiHub.fetchModels")}
-              {/if}
-            </button>
-            {#if fetchedModels.length > 0}
-              <span class="text-xs text-nx-text-muted">
-                {tFormat("apiHub.models.fetched", { count: fetchedModels.length, selected: selectedCount() })}
-              </span>
-              <div class="ml-auto flex gap-1">
-                <button class="nx-btn nx-btn-ghost text-xs px-2 py-1" onclick={selectAll}>{t("apiHub.selectAll")}</button>
-                <button class="nx-btn nx-btn-ghost text-xs px-2 py-1" onclick={deselectAll}>{t("apiHub.deselectAll")}</button>
-                <button class="nx-btn nx-btn-ghost text-xs px-2 py-1" onclick={() => addingManualModel = !addingManualModel} title={t("apiHub.manualAdd")}>
-                  <span class="material-symbols-outlined text-sm">add</span>
-                </button>
-              </div>
-            {/if}
-          </div>
-
-          <!-- Model list -->
-          {#if fetchedModels.length > 0}
-            <div class="max-h-60 overflow-y-auto rounded-md border border-nx-border bg-nx-bg/50">
-              {#if addingManualModel}
-                <div class="flex items-center gap-2 px-3 py-2 border-b border-nx-border bg-nx-hover/50">
-                  <input type="text" class="flex-1 nx-input py-1 text-xs" bind:value={manualModelId} placeholder={t("apiHub.modelIdPlaceholder")} onkeydown={(e) => { if (e.key === 'Enter') confirmManualAdd(); if (e.key === 'Escape') { addingManualModel = false; } }} />
-                  <button class="nx-btn nx-btn-primary px-2 py-1 text-xs" onclick={confirmManualAdd} disabled={!manualModelId.trim()}>{t("apiHub.confirm")}</button>
-                  <button class="nx-btn nx-btn-ghost px-2 py-1 text-xs" onclick={() => addingManualModel = false}>{t("apiHub.cancel")}</button>
-                </div>
-              {/if}
-              {#each fetchedModels as m}
-                <div
-                  class="flex items-center gap-3 px-3 py-2 border-b border-nx-border last:border-0 hover:bg-nx-hover transition-colors"
-                  role="option"
-                  aria-selected={selectedModels[m.id]}
-                  onclick={() => toggleModel(m.id)}
-                  onkeydown={(e) => e.key === 'Enter' && toggleModel(m.id)}
-                  tabindex="0"
-                >
-                  <!-- Checkbox -->
-                  <div class="w-5 flex justify-center shrink-0">
-                    {#if selectedModels[m.id]}
-                      <div class="w-4 h-4 rounded-sm bg-nx-accent flex items-center justify-center">
-                        <span class="material-symbols-outlined text-white text-[11px]">check</span>
-                      </div>
-                    {:else}
-                      <div class="w-4 h-4 rounded-sm border border-nx-border-light"></div>
-                    {/if}
-                  </div>
-                  <!-- Model info -->
-                  <div class="flex-1 min-w-0">
-                    <div class="text-xs font-mono text-nx-text truncate">{m.id}</div>
-                    {#if m.id !== m.name}
-                      <div class="text-[10px] text-nx-text-muted">{m.name}</div>
-                    {/if}
-                  </div>
-                  <!-- Alias input + Context length -->
-                  {#if selectedModels[m.id]}
-                    <input
-                      type="text"
-                      class="w-24 text-right nx-input py-0.5 text-[11px]"
-                      bind:value={form.model_aliases[m.id]}
-                      placeholder={t("apiHub.alias")}
-                      onclick={(e) => e.stopPropagation()}
-                      onkeydown={(e) => e.stopPropagation()}
-                    />
-                    <input
-                      type="number"
-                      class="w-20 text-right nx-input py-0.5 text-[11px]"
-                      bind:value={form.model_context_lengths[m.id]}
-                      placeholder="200000"
-                      onclick={(e) => e.stopPropagation()}
-                      onkeydown={(e) => e.stopPropagation()}
-                    />
-                    <span class="text-[10px] text-nx-text-muted shrink-0">ctx</span>
-                  {/if}
-                  {#if m.owned_by}
-                    <div class="text-[10px] text-nx-text-muted shrink-0">{m.owned_by}</div>
-                  {/if}
-                </div>
-              {/each}
-            </div>
-
-          {:else if !fetchingModels}
-            <div class="nx-card p-6 text-center border-dashed" style="border-color: var(--nx-border-light);">
-              <span class="material-symbols-outlined text-2xl text-nx-text-muted/40">download</span>
-              <div class="mt-2 text-xs text-nx-text-muted">{t("apiHub.models.fetchHint")}</div>
-              <button class="nx-btn nx-btn-ghost mt-2 text-xs" onclick={() => addingManualModel = true}>
-                <span class="material-symbols-outlined text-sm">add</span>
-                {t("apiHub.manualAddHint")}
-              </button>
-              {#if addingManualModel}
-                <div class="mt-3 flex items-center gap-2 justify-center">
-                  <input type="text" class="nx-input py-1 text-xs w-56" bind:value={manualModelId} placeholder={t("apiHub.modelIdPlaceholder")} onkeydown={(e) => { if (e.key === 'Enter') confirmManualAdd(); if (e.key === 'Escape') { addingManualModel = false; } }} />
-                  <button class="nx-btn nx-btn-primary px-2 py-1 text-xs" onclick={confirmManualAdd} disabled={!manualModelId.trim()}>{t("apiHub.confirm")}</button>
-                </div>
-              {/if}
-            </div>
-          {/if}
-        </div>
-
-        <!-- Action buttons -->
-        <div class="mt-4 flex justify-end gap-2 pt-3 border-t border-nx-border">
-          <button class="nx-btn nx-btn-ghost px-3 py-1.5 text-xs" onclick={cancelForm}>{t("apiHub.cancel")}</button>
-          <button class="nx-btn nx-btn-primary px-4 py-1.5 text-xs" onclick={saveForm} disabled={!form.name || !form.base_url || selectedCount() === 0}>
-            {editingId ? t("apiHub.update") : t("apiHub.add")}
-            <span class="opacity-60">({selectedCount()} {t("apiHub.models.countBadge")})</span>
-          </button>
-        </div>
-      </div>
+      {@const editingProvider = providers.find(p => p.id === editingId) || null}
+      <ProviderForm
+        mode={editingId ? "edit" : "add"}
+        title={editingId ? t("apiHub.editProvider") : t("apiHub.addProvider")}
+        subtitle={editingProvider?.name || ""}
+        initial={editingProvider}
+        {protocolOptions}
+        onSave={saveProvider}
+        onCancel={cancelForm}
+      />
     {/if}
 
     <!-- ════ Provider List ════ -->
@@ -506,61 +308,7 @@
       {@const isEditing = showForm && editingId === p.id}
       <div class="nx-card mb-3 overflow-hidden">
         {#if isEditing}
-          <!-- Inline edit mode -->
-          <div class="p-5">
-            <div class="mb-4 flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-nx-accent text-lg">edit</span>
-                <span class="text-sm font-medium text-nx-text">{t("apiHub.editProvider")} — {p.name}</span>
-              </div>
-              <button class="nx-btn nx-btn-ghost p-1" onclick={cancelForm}>
-                <span class="material-symbols-outlined text-base">close</span>
-              </button>
-            </div>
-            <div class="grid grid-cols-2 gap-3 mb-4">
-              <div><label for="e-name" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.name")}</label><input id="e-name" bind:value={form.name} class="nx-input w-full" /></div>
-              <div><label for="e-protocol" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.protocolLabel")}</label><select id="e-protocol" bind:value={form.protocol} class="nx-input w-full" disabled>{#each protocolOptions as pt}<option value={pt.id}>{pt.label}</option>{/each}</select></div>
-              <div class="col-span-2"><label for="e-base-url" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.baseUrl")}</label><input id="e-base-url" bind:value={form.base_url} class="nx-input w-full" /></div>
-              <div class="col-span-2"><label for="e-api-key" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.apiKey")} <span class="text-nx-text-muted/40">{t("apiHub.maskedHint")}</span></label><input id="e-api-key" type="password" bind:value={form.api_key} class="nx-input w-full" placeholder={t("apiHub.apiKeyReplacePlaceholder")} /></div>
-            </div>
-            <div class="flex items-center gap-3 mb-3">
-              <button class="nx-btn nx-btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs" onclick={fetchModels} disabled={fetchingModels}>
-                {#if fetchingModels}
-                  <span class="material-symbols-outlined text-sm nx-animate-spin">progress_activity</span> {t("apiHub.fetching")}
-                {:else}
-                  <span class="material-symbols-outlined text-sm">download</span> {t("apiHub.refreshModels")}
-                {/if}
-              </button>
-              {#if fetchedModels.length > 0}
-                <span class="text-xs text-nx-text-muted">{t("apiHub.models.selected")} {selectedCount()} / {fetchedModels.length}</span>
-              {/if}
-            </div>
-            {#if fetchedModels.length > 0}
-              <div class="max-h-48 overflow-y-auto rounded-md border border-nx-border bg-nx-bg/50 mb-3">
-                {#each fetchedModels as m}
-                  <div class="flex items-center gap-3 px-3 py-2 border-b border-nx-border last:border-0 hover:bg-nx-hover transition-colors cursor-pointer" role="option" aria-selected={selectedModels[m.id]} tabindex="0" onclick={() => toggleModel(m.id)} onkeydown={(e) => e.key === 'Enter' && toggleModel(m.id)}>
-                    <div class="w-5 flex justify-center shrink-0">
-                      {#if selectedModels[m.id]}
-                        <div class="w-4 h-4 rounded-sm bg-nx-accent flex items-center justify-center"><span class="material-symbols-outlined text-white text-[11px]">check</span></div>
-                      {:else}
-                        <div class="w-4 h-4 rounded-sm border border-nx-border-light"></div>
-                      {/if}
-                    </div>
-                    <div class="flex-1 text-xs font-mono text-nx-text truncate">{m.id}</div>
-                    {#if selectedModels[m.id]}
-                      <input type="text" class="w-32 text-right nx-input py-0.5 text-[11px]" bind:value={form.model_aliases[m.id]} placeholder={t("apiHub.alias")} onclick={(e) => e.stopPropagation()} />
-                    {/if}
-                  </div>
-                {/each}
-              </div>
-            {:else}
-              <div class="text-xs text-nx-text-muted mb-3">{tFormat("apiHub.models.existing", { count: p.models.length })}</div>
-            {/if}
-            <div class="flex justify-end gap-2 pt-3 border-t border-nx-border">
-              <button class="nx-btn nx-btn-ghost px-3 py-1.5 text-xs" onclick={cancelForm}>{t("apiHub.cancel")}</button>
-              <button class="nx-btn nx-btn-primary px-3 py-1.5 text-xs" onclick={saveForm}>{t("apiHub.update")}</button>
-            </div>
-          </div>
+          <ProviderForm mode="edit" title={t("apiHub.editProvider")} subtitle={p.name} initial={p} {protocolOptions} onSave={saveProvider} onCancel={cancelForm} />
         {:else}
           <!-- Provider card -->
           <div class="flex items-start justify-between p-4">
