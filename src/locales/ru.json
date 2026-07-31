@@ -538,5 +538,121 @@
     "empty_file": "Пустой или неверный файл",
     "meta_os": "ОС",
     "meta_host": "Хост"
+  },
+  "apiHub": {
+    "title": "API Hub",
+    "tabs": {
+      "stats": "Статистика",
+      "providers": "Провайдеры",
+      "logs": "Журнал запросов"
+    },
+    "gateway": {
+      "title": "Агрегирующий шлюз",
+      "desc": "Единая точка входа — маршрутизация по имени модели и конвертация между OpenAI / Anthropic / Gemini",
+      "copyTooltip": "Нажмите, чтобы скопировать endpoint",
+      "copied": "Endpoint шлюза скопирован",
+      "copyFailed": "Не удалось скопировать"
+    },
+    "addProvider": "Добавить провайдера",
+    "addFirstProvider": "Добавить первого провайдера",
+    "editProvider": "Изменить провайдера",
+    "deleteProvider": "Удалить провайдера",
+    "name": "Название",
+    "protocolLabel": "API протокол",
+    "baseUrl": "Base URL",
+    "apiKey": "API Key",
+    "optional": "(необязательно)",
+    "maskedHint": "(скрыт; оставьте без изменений, чтобы сохранить текущий ключ)",
+    "apiKeyReplacePlaceholder": "Введите новый ключ для замены",
+    "fetching": "Загрузка...",
+    "fetchModels": "Получить список моделей",
+    "refreshModels": "Обновить модели",
+    "manualAdd": "Добавить модель вручную",
+    "manualAddHint": "или добавьте модель вручную",
+    "modelIdPlaceholder": "Введите ID модели, напр. gpt-4o",
+    "confirm": "Подтвердить",
+    "cancel": "Отмена",
+    "update": "Обновить",
+    "add": "Добавить",
+    "selectAll": "Выбрать все",
+    "deselectAll": "Снять выбор",
+    "alias": "Псевдоним",
+    "edit": "Изменить",
+    "delete": "Удалить",
+    "custom": "Пользовательская",
+    "confirmDelete": "Удалить провайдера «{name}»?",
+    "providerCount": "Провайдеров: {count}",
+    "protocol": {
+      "openai_chat": {
+        "label": "OpenAI Chat Completions",
+        "desc": "Универсальный формат OpenAI, совместим с большинством инструментов"
+      },
+      "openai_responses": {
+        "label": "OpenAI Responses",
+        "desc": "Новый формат OpenAI, используется в Codex/OpenCode"
+      },
+      "anthropic": {
+        "label": "Anthropic Messages",
+        "desc": "Нативный формат Claude для Anthropic SDK"
+      }
+    },
+    "models": {
+      "fetched": "Получено моделей: {count}, выбрано: {selected}",
+      "selected": "Выбрано",
+      "existing": "Уже есть моделей: {count} (нажмите кнопку выше, чтобы обновить)",
+      "fetchHint": "Нажмите кнопку выше, чтобы получить доступные модели из API",
+      "countBadge": "моделей",
+      "usageRanking": "Рейтинг использования моделей",
+      "requestsSuffix": "зап.",
+      "onlyTop15": "Всего моделей: {count}, показаны первые 15",
+      "tokens": "ток."
+    },
+    "metrics": {
+      "tokens": "Использовано токенов",
+      "requests": "Всего запросов",
+      "successRate": "Успешность",
+      "avgLatency": "Средняя задержка"
+    },
+    "heatmap": {
+      "title": "Тепловая карта активности",
+      "less": "Меньше",
+      "more": "Больше",
+      "requestTitle": "{date}: запросов {count}"
+    },
+    "status": {
+      "active": "Активен",
+      "disabled": "Отключен"
+    },
+    "toast": {
+      "updated": "Обновлено",
+      "added": "Добавлено",
+      "deleted": "Удалено",
+      "error": "Ошибка: {error}",
+      "deleteFailed": "Не удалось удалить: {error}",
+      "fetchedModels": "Получено моделей: {count}",
+      "fetchFailed": "Не удалось получить: {error}",
+      "modelExists": "Модель {id} уже существует",
+      "modelAdded": "Модель {id} добавлена"
+    },
+    "errors": {
+      "selectModel": "Выберите хотя бы одну модель",
+      "fillBaseUrl": "Сначала заполните Base URL и протокол"
+    },
+    "empty": {
+      "noData": "Нет данных",
+      "waiting": "Ожидание данных...",
+      "noProviders": "Провайдеры ещё не настроены",
+      "addHint": "Добавьте AI API провайдера, чтобы начать использовать API Hub"
+    },
+    "logs": {
+      "time": "Время",
+      "model": "Модель",
+      "provider": "Провайдер",
+      "tokens": "Токены",
+      "latency": "Задержка",
+      "status": "Статус",
+      "streaming": "Стриминговый запрос",
+      "empty": "Журнал запросов пуст"
+    }
   }
 }

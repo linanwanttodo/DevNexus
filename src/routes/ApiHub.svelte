@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
+  import { t, tFormat, getLang } from "../lib/i18n.svelte.js";
 
   let activeTab = $state("stats");
   let providers = $state([]);
@@ -22,11 +23,11 @@
   let addingManualModel = $state(false);
 
   // 单一协议选项：同时决定品牌、线协议、端点与认证方式
-  const protocolOptions = [
-    { id: "openai_chat", label: "OpenAI · Chat Completions", defaultUrl: "https://api.openai.com", endpoint: "/v1/chat/completions", desc: "通用 OpenAI 格式，兼容大多数工具" },
-    { id: "openai_responses", label: "OpenAI · Responses", defaultUrl: "https://api.openai.com", endpoint: "/v1/responses", desc: "OpenAI 新格式，Codex/OpenCode 使用" },
-    { id: "anthropic", label: "Anthropic · Messages", defaultUrl: "https://api.anthropic.com", endpoint: "/v1/messages", desc: "Claude 原生格式，Anthropic SDK 直接使用" },
-  ];
+  const protocolOptions = $derived([
+    { id: "openai_chat", label: t("apiHub.protocol.openai_chat.label"), defaultUrl: "https://api.openai.com", endpoint: "/v1/chat/completions", desc: t("apiHub.protocol.openai_chat.desc") },
+    { id: "openai_responses", label: t("apiHub.protocol.openai_responses.label"), defaultUrl: "https://api.openai.com", endpoint: "/v1/responses", desc: t("apiHub.protocol.openai_responses.desc") },
+    { id: "anthropic", label: t("apiHub.protocol.anthropic.label"), defaultUrl: "https://api.anthropic.com", endpoint: "/v1/messages", desc: t("apiHub.protocol.anthropic.desc") },
+  ]);
 
   onMount(() => {
     loadData();
@@ -75,7 +76,7 @@
   async function saveForm() {
     try {
       const models = Object.keys(selectedModels).filter(m => selectedModels[m]);
-      if (models.length === 0) { showToast("请至少选择一个模型", "error"); return; }
+      if (models.length === 0) { showToast(t("apiHub.errors.selectModel"), "error"); return; }
       const model_aliases = {};
       models.forEach(m => { model_aliases[m] = form.model_aliases[m] || m; });
       const model_context_lengths = {};
@@ -86,57 +87,59 @@
         base_url: form.base_url, api_key: form.api_key,
         models, model_aliases, model_context_lengths, enabled: true, created_at: Math.floor(Date.now() / 1000),
       };
-      if (editingId) { await invoke("api_hub_update_provider", { id: editingId, provider: data }); showToast("已更新"); }
-      else { await invoke("api_hub_add_provider", { provider: data }); showToast("已添加"); }
+      if (editingId) { await invoke("api_hub_update_provider", { id: editingId, provider: data }); showToast(t("apiHub.toast.updated")); }
+      else { await invoke("api_hub_add_provider", { provider: data }); showToast(t("apiHub.toast.added")); }
       showForm = false; editingId = null; providers = await invoke("api_hub_list_providers");
-    } catch (err) { showToast(`错误: ${err.message || String(err)}`, "error"); }
+    } catch (err) { showToast(tFormat("apiHub.toast.error", { error: err.message || String(err) }), "error"); }
   }
   async function deleteProvider(id) {
     const p = providers.find(x => x.id === id);
-    const ok = await showConfirm(`确定删除 Provider“${p?.name || id}”？`, "删除 Provider");
+    const ok = await showConfirm(tFormat("apiHub.confirmDelete", { name: p?.name || id }), t("apiHub.deleteProvider"));
     if (!ok) return;
     try {
       await invoke("api_hub_delete_provider", { id });
-      showToast("已删除");
+      showToast(t("apiHub.toast.deleted"));
       providers = await invoke("api_hub_list_providers");
-    } catch (err) { showToast(`删除失败: ${err.message || String(err)}`, "error"); }
+    } catch (err) { showToast(tFormat("apiHub.toast.deleteFailed", { error: err.message || String(err) }), "error"); }
   }
 
   async function fetchModels() {
-    if (!form.base_url || !form.protocol) { showToast("请先填写 Base URL 和协议", "error"); return; }
+    if (!form.base_url || !form.protocol) { showToast(t("apiHub.errors.fillBaseUrl"), "error"); return; }
     fetchingModels = true; fetchedModels = [];
     try {
       fetchedModels = await invoke("api_hub_fetch_models", { baseUrl: form.base_url, apiKey: form.api_key || "", protocol: form.protocol, providerId: editingId });
       fetchedModels.forEach(m => {
         if (!(m.id in selectedModels)) { selectedModels[m.id] = true; form.model_aliases[m.id] = m.name || m.id; }
       });
-      showToast(`获取到 ${fetchedModels.length} 个模型`);
-    } catch (err) { showToast(`获取失败: ${err.message}`, "error"); }
+      showToast(tFormat("apiHub.toast.fetchedModels", { count: fetchedModels.length }));
+    } catch (err) { showToast(tFormat("apiHub.toast.fetchFailed", { error: err.message }), "error"); }
     finally { fetchingModels = false; }
   }
   function toggleModel(id) { selectedModels[id] = !selectedModels[id]; }
   function confirmManualAdd() {
     const id = manualModelId.trim();
     if (!id) return;
-    if (fetchedModels.find(m => m.id === id)) { showToast(`模型 ${id} 已存在`, "error"); return; }
-    const model = { id, name: id, owned_by: "自定义", enabled: true };
+    if (fetchedModels.find(m => m.id === id)) { showToast(tFormat("apiHub.toast.modelExists", { id }), "error"); return; }
+    const model = { id, name: id, owned_by: t("apiHub.custom"), enabled: true };
     fetchedModels = [...fetchedModels, model];
     selectedModels[id] = true;
     form.model_aliases[id] = id;
     manualModelId = "";
-    showToast(`已添加模型 ${id}`);
+    showToast(tFormat("apiHub.toast.modelAdded", { id }));
   }
   function selectAll() { fetchedModels.forEach(m => selectedModels[m.id] = true); }
   function deselectAll() { fetchedModels.forEach(m => selectedModels[m.id] = false); }
   function protocolName(id) { return protocolOptions.find(p => p.id === id)?.label || id; }
   function onProtocolChange() {
-    const t = protocolOptions.find(p => p.id === form.protocol);
-    if (t && !editingId) form.base_url = t.defaultUrl;
+    const opt = protocolOptions.find(p => p.id === form.protocol);
+    if (opt && !editingId) form.base_url = opt.defaultUrl;
   }
 
-  function fmtTokens(n) { if (!n) return "0"; if (n >= 1e8) return (n/1e8).toFixed(1)+"亿"; if (n >= 1e4) return (n/1e4).toFixed(1)+"万"; if (n >= 1e3) return (n/1e3).toFixed(1)+"K"; return String(n); }
-  function fmtTime(ts) { return ts ? new Date(ts*1000).toLocaleTimeString() : "-"; }
-  function fmtDate(ts) { return ts ? new Date(ts*1000).toLocaleDateString("zh-CN") : "-"; }
+  function fmtTokens(n) { if (!n) return "0"; return new Intl.NumberFormat(getLang(), { notation: "compact", maximumFractionDigits: 1 }).format(n); }
+  const LOCALE_TAGS = { zh: "zh-CN", en: "en-US", ru: "ru-RU" };
+  function localeTag() { return LOCALE_TAGS[getLang()] || "en-US"; }
+  function fmtTime(ts) { return ts ? new Date(ts * 1000).toLocaleTimeString(localeTag()) : "-"; }
+  function fmtDate(ts) { return ts ? new Date(ts * 1000).toLocaleDateString(localeTag()) : "-"; }
   function fmtLatency(ms) { return !ms ? "-" : ms < 1000 ? ms+"ms" : (ms/1000).toFixed(1)+"s"; }
   function statusColor(c) { return c >= 200 && c < 300 ? "text-emerald-400" : c >= 400 ? "text-red-400" : "text-yellow-400"; }
   function getChartHours() { return stats?.by_hour ? Object.entries(stats.by_hour).sort((a,b) => Number(a[0]) - Number(b[0])) : []; }
@@ -159,23 +162,23 @@
   async function copyEndpoint(url) {
     try {
       await navigator.clipboard.writeText(url);
-      showToast("已复制网关端点");
+      showToast(t("apiHub.gateway.copied"));
     } catch {
-      showToast("复制失败", "error");
+      showToast(t("apiHub.gateway.copyFailed"), "error");
     }
   }
 
-  const tabs = [
-    { id: "stats", label: "使用统计", icon: "bar_chart" },
-    { id: "providers", label: "Provider", icon: "dns" },
-    { id: "logs", label: "请求日志", icon: "article" },
-  ];
+  const tabs = $derived([
+    { id: "stats", label: t("apiHub.tabs.stats"), icon: "bar_chart" },
+    { id: "providers", label: t("apiHub.tabs.providers"), icon: "dns" },
+    { id: "logs", label: t("apiHub.tabs.logs"), icon: "article" },
+  ]);
 
   const metricCards = $derived(stats ? [
-    { icon: "local_fire_department", label: "Tokens 用量", value: fmtTokens(stats.total_input_tokens + stats.total_output_tokens) },
-    { icon: "forum", label: "总请求数", value: fmtTokens(stats.total_requests) },
-    { icon: "check_circle", label: "成功率", value: stats.total_requests ? `${(100 * (1 - stats.total_errors / stats.total_requests)).toFixed(1)}%` : "——" },
-    { icon: "speed", label: "平均延迟", value: stats.total_requests ? fmtLatency(stats.avg_latency_ms) : "——" },
+    { icon: "local_fire_department", label: t("apiHub.metrics.tokens"), value: fmtTokens(stats.total_input_tokens + stats.total_output_tokens) },
+    { icon: "forum", label: t("apiHub.metrics.requests"), value: fmtTokens(stats.total_requests) },
+    { icon: "check_circle", label: t("apiHub.metrics.successRate"), value: stats.total_requests ? `${(100 * (1 - stats.total_errors / stats.total_requests)).toFixed(1)}%` : "——" },
+    { icon: "speed", label: t("apiHub.metrics.avgLatency"), value: stats.total_requests ? fmtLatency(stats.avg_latency_ms) : "——" },
   ] : []);
 </script>
 
@@ -192,10 +195,10 @@
     <div class="flex items-center justify-between gap-3 flex-wrap">
       <div class="flex items-center gap-2 min-w-0">
         <span class="inline-block h-1.5 w-1.5 rounded-full {status?.running ? 'bg-nx-success' : 'bg-nx-text-muted'}"></span>
-        <h2 class="text-sm font-medium text-nx-text">聚合网关</h2>
+        <h2 class="text-sm font-medium text-nx-text">{t("apiHub.gateway.title")}</h2>
         <span class="nx-badge" style="background: var(--nx-accent-bg); color: var(--nx-accent);">localhost:{status?.port}</span>
       </div>
-      <p class="text-[11px] text-nx-text-muted">统一入口 · 按模型名路由并在 OpenAI / Anthropic / Gemini 间转换</p>
+      <p class="text-[11px] text-nx-text-muted">{t("apiHub.gateway.desc")}</p>
     </div>
 
     <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -204,7 +207,7 @@
           type="button"
           class="flex items-center gap-2 rounded-md border border-nx-border bg-nx-raised px-3 py-2 text-left text-[11px] font-mono text-nx-text-secondary transition-colors hover:bg-nx-hover hover:text-nx-text cursor-pointer"
           onclick={() => copyEndpoint(ep)}
-          title="点击复制端点"
+          title={t("apiHub.gateway.copyTooltip")}
         >
           <span class="material-symbols-outlined text-sm opacity-50 flex-shrink-0">content_copy</span>
           <span class="truncate">{ep}</span>
@@ -261,13 +264,13 @@
       <!-- Heatmap -->
       <div class="nx-card p-4 mb-4">
         <div class="flex items-center justify-between mb-4">
-          <h3 class="text-sm font-medium text-nx-text">活跃热力图</h3>
+          <h3 class="text-sm font-medium text-nx-text">{t("apiHub.heatmap.title")}</h3>
           <div class="flex items-center gap-1.5 text-[10px] text-nx-text-muted">
-            <span>少</span>
-            {#each [0.15, 0.35, 0.55, 0.75, 0.95] as t}
-              <span class="inline-block w-3 h-3 rounded-sm" style="background: {heatmapColor(t, 1)}"></span>
+            <span>{t("apiHub.heatmap.less")}</span>
+            {#each [0.15, 0.35, 0.55, 0.75, 0.95] as hmv}
+              <span class="inline-block w-3 h-3 rounded-sm" style="background: {heatmapColor(hmv, 1)}"></span>
             {/each}
-            <span>多</span>
+            <span>{t("apiHub.heatmap.more")}</span>
           </div>
         </div>
         {#if getChartHours().length > 0}
@@ -278,18 +281,18 @@
               <div
                 class="h-4 w-full rounded-sm transition-colors hover:brightness-110 cursor-pointer"
                 style="background: {heatmapColor(hd.requests, hmMax)}"
-                title="{fmtDate(Number(ts))}: {hd.requests} 请求"
+                title={t("apiHub.heatmap.requestTitle").replace("{date}", fmtDate(Number(ts))).replace("{count}", hd.requests)}
               ></div>
             {/each}
           </div>
         {:else}
-          <div class="py-8 text-center text-xs text-nx-text-muted">暂无数据</div>
+          <div class="py-8 text-center text-xs text-nx-text-muted">{t("apiHub.empty.noData")}</div>
         {/if}
       </div>
 
       <!-- Model Usage -->
       <div class="nx-card p-4">
-        <h3 class="text-sm font-medium text-nx-text mb-4">模型用量排行</h3>
+        <h3 class="text-sm font-medium text-nx-text mb-4">{t("apiHub.models.usageRanking")}</h3>
         {#if getModelEntries().length > 0}
           {@const models = getModelEntries()}
           {@const mr = models[0][1].requests}
@@ -304,22 +307,22 @@
                     style="width: {(md.requests / mr) * 100}%; background: var(--nx-accent);"
                   ></div>
                 </div>
-                <div class="w-24 text-right text-[11px] text-nx-text-muted tabular-nums">{fmtTokens(md.input_tokens + md.output_tokens)} tokens</div>
-                <div class="w-16 text-right text-[11px] text-nx-text-muted tabular-nums">{md.requests} 次</div>
+                <div class="w-24 text-right text-[11px] text-nx-text-muted tabular-nums">{fmtTokens(md.input_tokens + md.output_tokens)} {t("apiHub.models.tokens")}</div>
+                <div class="w-16 text-right text-[11px] text-nx-text-muted tabular-nums">{md.requests} {t("apiHub.models.requestsSuffix")}</div>
               </div>
             {/each}
             {#if models.length > 15}
-              <div class="pt-1 text-center text-[11px] text-nx-text-muted/60">共 {models.length} 个模型，仅显示前 15 名</div>
+              <div class="pt-1 text-center text-[11px] text-nx-text-muted/60">{tFormat("apiHub.models.onlyTop15", { count: models.length })}</div>
             {/if}
           </div>
         {:else}
-          <div class="py-8 text-center text-xs text-nx-text-muted">暂无数据</div>
+          <div class="py-8 text-center text-xs text-nx-text-muted">{t("apiHub.empty.noData")}</div>
         {/if}
       </div>
     {:else}
       <div class="nx-card p-10 text-center">
         <span class="material-symbols-outlined text-2xl text-nx-text-muted/40 mb-2">bar_chart</span>
-        <div class="text-sm text-nx-text-muted">等待数据...</div>
+        <div class="text-sm text-nx-text-muted">{t("apiHub.empty.waiting")}</div>
       </div>
     {/if}
 
@@ -329,11 +332,11 @@
   {:else if activeTab === "providers"}
     <!-- Toolbar -->
     <div class="mb-4 flex items-center justify-between">
-      <span class="text-xs text-nx-text-muted uppercase tracking-wider">{providers.length} 个 Provider</span>
+      <span class="text-xs text-nx-text-muted uppercase tracking-wider">{tFormat("apiHub.providerCount", { count: providers.length })}</span>
       {#if !showForm}
         <button class="nx-btn nx-btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs" onclick={beginAdd}>
           <span class="material-symbols-outlined text-sm">add</span>
-          添加 Provider
+          {t("apiHub.addProvider")}
         </button>
       {/if}
     </div>
@@ -345,7 +348,7 @@
         <div class="mb-4 flex items-center justify-between">
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-nx-accent text-lg">{editingId ? "edit" : "add_circle"}</span>
-            <span class="text-sm font-medium text-nx-text">{editingId ? "编辑 Provider" : "添加 Provider"}</span>
+            <span class="text-sm font-medium text-nx-text">{editingId ? t("apiHub.editProvider") : t("apiHub.addProvider")}</span>
           </div>
           <button class="nx-btn nx-btn-ghost p-1" onclick={cancelForm}>
             <span class="material-symbols-outlined text-base">close</span>
@@ -355,11 +358,11 @@
         <!-- Form fields -->
         <div class="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label for="f-name" class="mb-1.5 block text-xs text-nx-text-muted">名称</label>
+            <label for="f-name" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.name")}</label>
             <input id="f-name" bind:value={form.name} class="nx-input w-full" placeholder="My OpenAI" />
           </div>
           <div class="col-span-2">
-            <label for="f-protocol" class="mb-1.5 block text-xs text-nx-text-muted">API 协议</label>
+            <label for="f-protocol" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.protocolLabel")}</label>
             <select id="f-protocol" bind:value={form.protocol} class="nx-input w-full" onchange={onProtocolChange}>
               {#each protocolOptions as pt}
                 <option value={pt.id}>{pt.label}</option>
@@ -371,11 +374,11 @@
             </p>
           </div>
           <div class="col-span-2">
-            <label for="f-base-url" class="mb-1.5 block text-xs text-nx-text-muted">Base URL</label>
+            <label for="f-base-url" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.baseUrl")}</label>
             <input id="f-base-url" bind:value={form.base_url} class="nx-input w-full" placeholder="https://api.openai.com" />
           </div>
           <div class="col-span-2">
-            <label for="f-api-key" class="mb-1.5 block text-xs text-nx-text-muted">API Key <span class="text-nx-text-muted/40">（可选）</span></label>
+            <label for="f-api-key" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.apiKey")} <span class="text-nx-text-muted/40">{t("apiHub.optional")}</span></label>
             <input id="f-api-key" type="password" bind:value={form.api_key} class="nx-input w-full" placeholder="sk-..." />
           </div>
         </div>
@@ -386,21 +389,20 @@
             <button class="nx-btn nx-btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs" onclick={fetchModels} disabled={fetchingModels}>
               {#if fetchingModels}
                 <span class="material-symbols-outlined text-sm nx-animate-spin">progress_activity</span>
-                正在获取...
+                {t("apiHub.fetching")}
               {:else}
                 <span class="material-symbols-outlined text-sm">download</span>
-                获取模型列表
+                {t("apiHub.fetchModels")}
               {/if}
             </button>
             {#if fetchedModels.length > 0}
               <span class="text-xs text-nx-text-muted">
-                已获取 <span class="font-mono text-nx-text-secondary">{fetchedModels.length}</span> 个模型，
-                已选 <span class="font-mono text-nx-accent">{selectedCount()}</span>
+                {tFormat("apiHub.models.fetched", { count: fetchedModels.length, selected: selectedCount() })}
               </span>
               <div class="ml-auto flex gap-1">
-                <button class="nx-btn nx-btn-ghost text-xs px-2 py-1" onclick={selectAll}>全选</button>
-                <button class="nx-btn nx-btn-ghost text-xs px-2 py-1" onclick={deselectAll}>全不选</button>
-                <button class="nx-btn nx-btn-ghost text-xs px-2 py-1" onclick={() => addingManualModel = !addingManualModel} title="手动添加模型">
+                <button class="nx-btn nx-btn-ghost text-xs px-2 py-1" onclick={selectAll}>{t("apiHub.selectAll")}</button>
+                <button class="nx-btn nx-btn-ghost text-xs px-2 py-1" onclick={deselectAll}>{t("apiHub.deselectAll")}</button>
+                <button class="nx-btn nx-btn-ghost text-xs px-2 py-1" onclick={() => addingManualModel = !addingManualModel} title={t("apiHub.manualAdd")}>
                   <span class="material-symbols-outlined text-sm">add</span>
                 </button>
               </div>
@@ -412,9 +414,9 @@
             <div class="max-h-60 overflow-y-auto rounded-md border border-nx-border bg-nx-bg/50">
               {#if addingManualModel}
                 <div class="flex items-center gap-2 px-3 py-2 border-b border-nx-border bg-nx-hover/50">
-                  <input type="text" class="flex-1 nx-input py-1 text-xs" bind:value={manualModelId} placeholder="输入模型 ID，如 gpt-4o" onkeydown={(e) => { if (e.key === 'Enter') confirmManualAdd(); if (e.key === 'Escape') { addingManualModel = false; } }} />
-                  <button class="nx-btn nx-btn-primary px-2 py-1 text-xs" onclick={confirmManualAdd} disabled={!manualModelId.trim()}>确认</button>
-                  <button class="nx-btn nx-btn-ghost px-2 py-1 text-xs" onclick={() => addingManualModel = false}>取消</button>
+                  <input type="text" class="flex-1 nx-input py-1 text-xs" bind:value={manualModelId} placeholder={t("apiHub.modelIdPlaceholder")} onkeydown={(e) => { if (e.key === 'Enter') confirmManualAdd(); if (e.key === 'Escape') { addingManualModel = false; } }} />
+                  <button class="nx-btn nx-btn-primary px-2 py-1 text-xs" onclick={confirmManualAdd} disabled={!manualModelId.trim()}>{t("apiHub.confirm")}</button>
+                  <button class="nx-btn nx-btn-ghost px-2 py-1 text-xs" onclick={() => addingManualModel = false}>{t("apiHub.cancel")}</button>
                 </div>
               {/if}
               {#each fetchedModels as m}
@@ -449,7 +451,7 @@
                       type="text"
                       class="w-24 text-right nx-input py-0.5 text-[11px]"
                       bind:value={form.model_aliases[m.id]}
-                      placeholder="别名"
+                      placeholder={t("apiHub.alias")}
                       onclick={(e) => e.stopPropagation()}
                       onkeydown={(e) => e.stopPropagation()}
                     />
@@ -473,15 +475,15 @@
           {:else if !fetchingModels}
             <div class="nx-card p-6 text-center border-dashed" style="border-color: var(--nx-border-light);">
               <span class="material-symbols-outlined text-2xl text-nx-text-muted/40">download</span>
-              <div class="mt-2 text-xs text-nx-text-muted">点击上方按钮从 API 获取可用模型</div>
+              <div class="mt-2 text-xs text-nx-text-muted">{t("apiHub.models.fetchHint")}</div>
               <button class="nx-btn nx-btn-ghost mt-2 text-xs" onclick={() => addingManualModel = true}>
                 <span class="material-symbols-outlined text-sm">add</span>
-                或手动添加模型
+                {t("apiHub.manualAddHint")}
               </button>
               {#if addingManualModel}
                 <div class="mt-3 flex items-center gap-2 justify-center">
-                  <input type="text" class="nx-input py-1 text-xs w-56" bind:value={manualModelId} placeholder="输入模型 ID，如 gpt-4o" onkeydown={(e) => { if (e.key === 'Enter') confirmManualAdd(); if (e.key === 'Escape') { addingManualModel = false; } }} />
-                  <button class="nx-btn nx-btn-primary px-2 py-1 text-xs" onclick={confirmManualAdd} disabled={!manualModelId.trim()}>确认</button>
+                  <input type="text" class="nx-input py-1 text-xs w-56" bind:value={manualModelId} placeholder={t("apiHub.modelIdPlaceholder")} onkeydown={(e) => { if (e.key === 'Enter') confirmManualAdd(); if (e.key === 'Escape') { addingManualModel = false; } }} />
+                  <button class="nx-btn nx-btn-primary px-2 py-1 text-xs" onclick={confirmManualAdd} disabled={!manualModelId.trim()}>{t("apiHub.confirm")}</button>
                 </div>
               {/if}
             </div>
@@ -490,10 +492,10 @@
 
         <!-- Action buttons -->
         <div class="mt-4 flex justify-end gap-2 pt-3 border-t border-nx-border">
-          <button class="nx-btn nx-btn-ghost px-3 py-1.5 text-xs" onclick={cancelForm}>取消</button>
+          <button class="nx-btn nx-btn-ghost px-3 py-1.5 text-xs" onclick={cancelForm}>{t("apiHub.cancel")}</button>
           <button class="nx-btn nx-btn-primary px-4 py-1.5 text-xs" onclick={saveForm} disabled={!form.name || !form.base_url || selectedCount() === 0}>
-            {editingId ? "更新" : "添加"}
-            <span class="opacity-60">({selectedCount()} 模型)</span>
+            {editingId ? t("apiHub.update") : t("apiHub.add")}
+            <span class="opacity-60">({selectedCount()} {t("apiHub.models.countBadge")})</span>
           </button>
         </div>
       </div>
@@ -509,28 +511,28 @@
             <div class="mb-4 flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <span class="material-symbols-outlined text-nx-accent text-lg">edit</span>
-                <span class="text-sm font-medium text-nx-text">编辑 — {p.name}</span>
+                <span class="text-sm font-medium text-nx-text">{t("apiHub.editProvider")} — {p.name}</span>
               </div>
               <button class="nx-btn nx-btn-ghost p-1" onclick={cancelForm}>
                 <span class="material-symbols-outlined text-base">close</span>
               </button>
             </div>
             <div class="grid grid-cols-2 gap-3 mb-4">
-              <div><label for="e-name" class="mb-1.5 block text-xs text-nx-text-muted">名称</label><input id="e-name" bind:value={form.name} class="nx-input w-full" /></div>
-              <div><label for="e-protocol" class="mb-1.5 block text-xs text-nx-text-muted">API 协议</label><select id="e-protocol" bind:value={form.protocol} class="nx-input w-full" disabled>{#each protocolOptions as pt}<option value={pt.id}>{pt.label}</option>{/each}</select></div>
-              <div class="col-span-2"><label for="e-base-url" class="mb-1.5 block text-xs text-nx-text-muted">Base URL</label><input id="e-base-url" bind:value={form.base_url} class="nx-input w-full" /></div>
-              <div class="col-span-2"><label for="e-api-key" class="mb-1.5 block text-xs text-nx-text-muted">API Key <span class="text-nx-text-muted/40">（已脱敏显示，保持不变则沿用原 Key）</span></label><input id="e-api-key" type="password" bind:value={form.api_key} class="nx-input w-full" placeholder="输入新 Key 以替换" /></div>
+              <div><label for="e-name" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.name")}</label><input id="e-name" bind:value={form.name} class="nx-input w-full" /></div>
+              <div><label for="e-protocol" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.protocolLabel")}</label><select id="e-protocol" bind:value={form.protocol} class="nx-input w-full" disabled>{#each protocolOptions as pt}<option value={pt.id}>{pt.label}</option>{/each}</select></div>
+              <div class="col-span-2"><label for="e-base-url" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.baseUrl")}</label><input id="e-base-url" bind:value={form.base_url} class="nx-input w-full" /></div>
+              <div class="col-span-2"><label for="e-api-key" class="mb-1.5 block text-xs text-nx-text-muted">{t("apiHub.apiKey")} <span class="text-nx-text-muted/40">{t("apiHub.maskedHint")}</span></label><input id="e-api-key" type="password" bind:value={form.api_key} class="nx-input w-full" placeholder={t("apiHub.apiKeyReplacePlaceholder")} /></div>
             </div>
             <div class="flex items-center gap-3 mb-3">
               <button class="nx-btn nx-btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs" onclick={fetchModels} disabled={fetchingModels}>
                 {#if fetchingModels}
-                  <span class="material-symbols-outlined text-sm nx-animate-spin">progress_activity</span> 获取中...
+                  <span class="material-symbols-outlined text-sm nx-animate-spin">progress_activity</span> {t("apiHub.fetching")}
                 {:else}
-                  <span class="material-symbols-outlined text-sm">download</span> 刷新模型
+                  <span class="material-symbols-outlined text-sm">download</span> {t("apiHub.refreshModels")}
                 {/if}
               </button>
               {#if fetchedModels.length > 0}
-                <span class="text-xs text-nx-text-muted">已选 {selectedCount()} / {fetchedModels.length}</span>
+                <span class="text-xs text-nx-text-muted">{t("apiHub.models.selected")} {selectedCount()} / {fetchedModels.length}</span>
               {/if}
             </div>
             {#if fetchedModels.length > 0}
@@ -546,17 +548,17 @@
                     </div>
                     <div class="flex-1 text-xs font-mono text-nx-text truncate">{m.id}</div>
                     {#if selectedModels[m.id]}
-                      <input type="text" class="w-32 text-right nx-input py-0.5 text-[11px]" bind:value={form.model_aliases[m.id]} placeholder="别名" onclick={(e) => e.stopPropagation()} />
+                      <input type="text" class="w-32 text-right nx-input py-0.5 text-[11px]" bind:value={form.model_aliases[m.id]} placeholder={t("apiHub.alias")} onclick={(e) => e.stopPropagation()} />
                     {/if}
                   </div>
                 {/each}
               </div>
             {:else}
-              <div class="text-xs text-nx-text-muted mb-3">当前已有 {p.models.length} 个模型（点击上方按钮刷新）</div>
+              <div class="text-xs text-nx-text-muted mb-3">{tFormat("apiHub.models.existing", { count: p.models.length })}</div>
             {/if}
             <div class="flex justify-end gap-2 pt-3 border-t border-nx-border">
-              <button class="nx-btn nx-btn-ghost px-3 py-1.5 text-xs" onclick={cancelForm}>取消</button>
-              <button class="nx-btn nx-btn-primary px-3 py-1.5 text-xs" onclick={saveForm}>更新</button>
+              <button class="nx-btn nx-btn-ghost px-3 py-1.5 text-xs" onclick={cancelForm}>{t("apiHub.cancel")}</button>
+              <button class="nx-btn nx-btn-primary px-3 py-1.5 text-xs" onclick={saveForm}>{t("apiHub.update")}</button>
             </div>
           </div>
         {:else}
@@ -574,7 +576,7 @@
                   </span>
                   <span class="flex items-center gap-1 text-[10px] {p.enabled ? 'text-nx-success' : 'text-nx-text-muted'}">
                     <span class="inline-block h-1.5 w-1.5 rounded-full {p.enabled ? 'bg-nx-success' : 'bg-nx-text-muted'}"></span>
-                    {p.enabled ? '活跃' : '禁用'}
+                    {p.enabled ? t("apiHub.status.active") : t("apiHub.status.disabled")}
                   </span>
                 </div>
                 <div class="mt-1 text-[11px] text-nx-text-muted truncate max-w-lg font-mono">{p.base_url}</div>
@@ -589,10 +591,10 @@
               </div>
             </div>
             <div class="flex shrink-0 gap-1 ml-3">
-              <button class="nx-btn nx-btn-ghost p-1.5" onclick={() => beginEdit(p)} title="编辑">
+              <button class="nx-btn nx-btn-ghost p-1.5" onclick={() => beginEdit(p)} title={t("apiHub.edit")}>
                 <span class="material-symbols-outlined text-base">edit</span>
               </button>
-              <button class="nx-btn nx-btn-ghost p-1.5" style="color: var(--nx-danger);" onclick={() => deleteProvider(p.id)} title="删除">
+              <button class="nx-btn nx-btn-ghost p-1.5" style="color: var(--nx-danger);" onclick={() => deleteProvider(p.id)} title={t("apiHub.delete")}>
                 <span class="material-symbols-outlined text-base">delete</span>
               </button>
             </div>
@@ -605,11 +607,11 @@
     {#if providers.length === 0 && !showForm}
       <div class="nx-card p-10 text-center border-dashed" style="border-color: var(--nx-border-light);">
         <span class="material-symbols-outlined text-3xl text-nx-text-muted/40">dns</span>
-        <div class="mt-2 text-sm text-nx-text-muted">还没有配置 Provider</div>
-        <p class="mt-1 text-xs text-nx-text-muted/60">添加一个 AI API Provider 来开始使用 API Hub</p>
+        <div class="mt-2 text-sm text-nx-text-muted">{t("apiHub.empty.noProviders")}</div>
+        <p class="mt-1 text-xs text-nx-text-muted/60">{t("apiHub.empty.addHint")}</p>
         <button class="nx-btn nx-btn-primary mt-4 px-4 py-2 text-xs" onclick={beginAdd}>
           <span class="material-symbols-outlined text-sm">add</span>
-          添加第一个 Provider
+          {t("apiHub.addFirstProvider")}
         </button>
       </div>
     {/if}
@@ -623,12 +625,12 @@
         <table class="nx-table w-full">
           <thead>
             <tr>
-              <th class="px-3 py-2.5">时间</th>
-              <th class="px-3 py-2.5">模型</th>
-              <th class="px-3 py-2.5">Provider</th>
-              <th class="px-3 py-2.5 text-right">Tokens</th>
-              <th class="px-3 py-2.5 text-right">延迟</th>
-              <th class="px-3 py-2.5 text-center">状态</th>
+              <th class="px-3 py-2.5">{t("apiHub.logs.time")}</th>
+              <th class="px-3 py-2.5">{t("apiHub.logs.model")}</th>
+              <th class="px-3 py-2.5">{t("apiHub.logs.provider")}</th>
+              <th class="px-3 py-2.5 text-right">{t("apiHub.logs.tokens")}</th>
+              <th class="px-3 py-2.5 text-right">{t("apiHub.logs.latency")}</th>
+              <th class="px-3 py-2.5 text-center">{t("apiHub.logs.status")}</th>
             </tr>
           </thead>
           <tbody>
@@ -637,7 +639,7 @@
                 <td class="px-3 py-2.5 whitespace-nowrap font-mono text-[11px] text-nx-text-muted">{fmtTime(log.timestamp)}</td>
                 <td class="px-3 py-2.5 font-mono text-xs font-medium text-nx-text">
                   {log.model}
-                  {#if log.is_streaming}<span class="material-symbols-outlined align-middle text-[12px] text-nx-text-muted/60 ml-0.5" title="流式请求">water_drop</span>{/if}
+                  {#if log.is_streaming}<span class="material-symbols-outlined align-middle text-[12px] text-nx-text-muted/60 ml-0.5" title={t("apiHub.logs.streaming")}>water_drop</span>{/if}
                 </td>
                 <td class="px-3 py-2.5 text-xs text-nx-text-muted">{log.provider_name}</td>
                 <td class="px-3 py-2.5 text-right text-xs text-nx-text-muted tabular-nums">
@@ -657,7 +659,7 @@
               <tr>
                 <td colspan="6" class="px-3 py-12 text-center">
                   <span class="material-symbols-outlined text-xl text-nx-text-muted/30 mb-1">article</span>
-                  <div class="text-xs text-nx-text-muted/50">暂无请求日志</div>
+                  <div class="text-xs text-nx-text-muted/50">{t("apiHub.logs.empty")}</div>
                 </td>
               </tr>
             {/each}

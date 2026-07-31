@@ -538,5 +538,121 @@
     "empty_file": "Empty or invalid file",
     "meta_os": "OS",
     "meta_host": "Host"
+  },
+  "apiHub": {
+    "title": "API Hub",
+    "tabs": {
+      "stats": "Usage Stats",
+      "providers": "Providers",
+      "logs": "Request Logs"
+    },
+    "gateway": {
+      "title": "Aggregation Gateway",
+      "desc": "Single entry point routes by model name and converts between OpenAI / Anthropic / Gemini",
+      "copyTooltip": "Click to copy endpoint",
+      "copied": "Gateway endpoint copied",
+      "copyFailed": "Copy failed"
+    },
+    "addProvider": "Add Provider",
+    "addFirstProvider": "Add your first Provider",
+    "editProvider": "Edit Provider",
+    "deleteProvider": "Delete Provider",
+    "name": "Name",
+    "protocolLabel": "API Protocol",
+    "baseUrl": "Base URL",
+    "apiKey": "API Key",
+    "optional": "(optional)",
+    "maskedHint": "(masked; keep unchanged to keep the existing key)",
+    "apiKeyReplacePlaceholder": "Enter a new key to replace",
+    "fetching": "Fetching...",
+    "fetchModels": "Fetch model list",
+    "refreshModels": "Refresh models",
+    "manualAdd": "Add model manually",
+    "manualAddHint": "or add a model manually",
+    "modelIdPlaceholder": "Enter model ID, e.g. gpt-4o",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "update": "Update",
+    "add": "Add",
+    "selectAll": "Select all",
+    "deselectAll": "Select none",
+    "alias": "Alias",
+    "edit": "Edit",
+    "delete": "Delete",
+    "custom": "Custom",
+    "confirmDelete": "Delete Provider “{name}”?",
+    "providerCount": "{count} Providers",
+    "protocol": {
+      "openai_chat": {
+        "label": "OpenAI Chat Completions",
+        "desc": "Generic OpenAI format, compatible with most tools"
+      },
+      "openai_responses": {
+        "label": "OpenAI Responses",
+        "desc": "New OpenAI format, used by Codex/OpenCode"
+      },
+      "anthropic": {
+        "label": "Anthropic Messages",
+        "desc": "Claude native format, for use with the Anthropic SDK"
+      }
+    },
+    "models": {
+      "fetched": "Fetched {count} models, selected {selected}",
+      "selected": "Selected",
+      "existing": "Currently has {count} models (click the button above to refresh)",
+      "fetchHint": "Click the button above to fetch available models from the API",
+      "countBadge": "models",
+      "usageRanking": "Model Usage Ranking",
+      "requestsSuffix": "reqs",
+      "onlyTop15": "{count} models total, showing top 15",
+      "tokens": "tokens"
+    },
+    "metrics": {
+      "tokens": "Tokens Used",
+      "requests": "Total Requests",
+      "successRate": "Success Rate",
+      "avgLatency": "Avg Latency"
+    },
+    "heatmap": {
+      "title": "Activity Heatmap",
+      "less": "Less",
+      "more": "More",
+      "requestTitle": "{date}: {count} requests"
+    },
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled"
+    },
+    "toast": {
+      "updated": "Updated",
+      "added": "Added",
+      "deleted": "Deleted",
+      "error": "Error: {error}",
+      "deleteFailed": "Delete failed: {error}",
+      "fetchedModels": "Fetched {count} models",
+      "fetchFailed": "Fetch failed: {error}",
+      "modelExists": "Model {id} already exists",
+      "modelAdded": "Model {id} added"
+    },
+    "errors": {
+      "selectModel": "Select at least one model",
+      "fillBaseUrl": "Fill in Base URL and protocol first"
+    },
+    "empty": {
+      "noData": "No data",
+      "waiting": "Waiting for data...",
+      "noProviders": "No Providers configured yet",
+      "addHint": "Add an AI API Provider to start using API Hub"
+    },
+    "logs": {
+      "time": "Time",
+      "model": "Model",
+      "provider": "Provider",
+      "tokens": "Tokens",
+      "latency": "Latency",
+      "status": "Status",
+      "streaming": "Streaming request",
+      "empty": "No request logs"
+    }
   }
 }
