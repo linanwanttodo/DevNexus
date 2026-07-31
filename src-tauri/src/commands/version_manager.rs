@@ -312,6 +312,14 @@ fn nvm_list_versions() -> Vec<VersionInfo> {
 }
 
 fn switch_node_version(version: &str) -> Result<String, String> {
+    if version.is_empty()
+        || version.len() > 64
+        || !version
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' || c == 'v')
+    {
+        return Err("Invalid version string".to_string());
+    }
     // 先试 fnm
     if let Ok(output) = Command::new("fnm").args(["use", version]).output() {
         if output.status.success() {
@@ -1190,5 +1198,21 @@ fn replace_section(existing: &str, marker: &str, new_content: &str) -> String {
     } else {
         // 没找到，追加
         format!("{}\n{}", existing.trim_end(), new_content)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_switch_node_rejects_injection() {
+        // 非法输入必须返回 Err（不 panic、不执行命令）
+        assert!(switch_node_version("v1; touch /tmp/pwned").is_err());
+        assert!(switch_node_version("$(id)").is_err());
+        assert!(switch_node_version("").is_err());
+        assert!(switch_node_version(&"v".repeat(100)).is_err());
+        // 合法输入不 panic（环境无 fnm/nvm 时返回 Err 也允许，但绝不 panic）
+        let _ = switch_node_version("v18.17.0");
     }
 }
