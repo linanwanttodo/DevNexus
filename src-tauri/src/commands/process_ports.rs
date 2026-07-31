@@ -298,7 +298,10 @@ fn build_port_map() -> HashMap<u32, Vec<u16>> {
 /// List all processes (grouped by name) with their associated ports
 #[tauri::command]
 pub fn list_processes() -> Result<ProcessSummary, String> {
-    sys().with(|sys| {
+    // 子进程调用（lsof/ss/netstat）在锁外完成，避免长时间 I/O 占用全局锁
+    let port_map = build_port_map();
+
+    sys().with(|sys| -> Result<ProcessSummary, String> {
         sys.refresh_processes(ProcessesToUpdate::All, true);
 
         // Refresh CPU at most every 500ms
@@ -309,15 +312,15 @@ pub fn list_processes() -> Result<ProcessSummary, String> {
             .unwrap_or_default()
             .as_millis() as u64;
         {
-            let mut last = last_cpu.lock().unwrap();
-            if now_ms - *last > 500 {
+            let mut last = match last_cpu.lock() {
+                Ok(guard) => guard,
+                Err(_) => return Err("internal lock poisoned".to_string()),
+            };
+            if now_ms.saturating_sub(*last) > 500 {
                 sys.refresh_cpu_usage();
                 *last = now_ms;
             }
         }
-
-        // Build port map
-        let port_map = build_port_map();
 
         let now = now_secs();
         let mut groups_map: HashMap<String, ProcessGroup> = HashMap::new();
@@ -374,8 +377,8 @@ pub fn list_processes() -> Result<ProcessSummary, String> {
 
         let total = groups.iter().map(|g| g.count).sum();
 
-        ProcessSummary { groups, total }
-    })
+        Ok(ProcessSummary { groups, total })
+    })?
 }
 
 /// List all listening ports

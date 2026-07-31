@@ -122,16 +122,22 @@ pub struct ResourceUsage {
 }
 
 #[tauri::command]
-pub fn get_system_info() -> SystemInfo {
-    let mut sys = system().lock().unwrap();
+pub fn get_system_info() -> Result<SystemInfo, String> {
+    // 磁盘枚举在锁外完成，避免 I/O 占用全局锁
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    let total_disk_gb =
+        (disks.iter().map(|d| d.total_space() as f64).sum::<f64>() / 1073741824.0 * 100.0).round()
+            / 100.0;
+
+    let mut sys = match system().lock() {
+        Ok(guard) => guard,
+        Err(_) => return Err("internal lock poisoned".to_string()),
+    };
     sys.refresh_all();
 
     let total_memory_gb = sys.total_memory() as f64 / 1073741824.0;
 
-    let disks = sysinfo::Disks::new_with_refreshed_list();
-    let total_disk_gb = disks.iter().map(|d| d.total_space() as f64).sum::<f64>() / 1073741824.0;
-
-    SystemInfo {
+    Ok(SystemInfo {
         os_name: System::name().unwrap_or_default(),
         os_version: System::os_version().unwrap_or_default(),
         kernel_version: System::kernel_version().unwrap_or_default(),
@@ -142,27 +148,13 @@ pub fn get_system_info() -> SystemInfo {
             .unwrap_or_default(),
         cpu_cores: sys.cpus().len(),
         total_memory_gb: (total_memory_gb * 100.0).round() / 100.0,
-        total_disk_gb: (total_disk_gb * 100.0).round() / 100.0,
-    }
+        total_disk_gb,
+    })
 }
 
 #[tauri::command]
-pub fn get_resource_usage() -> ResourceUsage {
-    let mut sys = system().lock().unwrap();
-    sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::everything());
-    sys.refresh_memory();
-
-    let memory_total_gb = sys.total_memory() as f64 / 1073741824.0;
-    let memory_used_gb = sys.used_memory() as f64 / 1073741824.0;
-    let memory_percent = if sys.total_memory() > 0 {
-        (sys.used_memory() as f32 / sys.total_memory() as f32) * 100.0
-    } else {
-        0.0
-    };
-
-    let cpu_usage = sys.global_cpu_usage();
-
-    // 磁盘总量缓存（首次调用时枚举，后续复用），避免每 5 秒枚举磁盘 I/O
+pub fn get_resource_usage() -> Result<ResourceUsage, String> {
+    // 磁盘枚举在锁外完成，避免 I/O 占用全局锁
     let disk_total_gb = cached_disk_total_gb();
     // 从缓存的总量反算使用量：disk_total - 所有磁盘剩余空间之和
     let disks = sysinfo::Disks::new_with_refreshed_list();
@@ -178,7 +170,24 @@ pub fn get_resource_usage() -> ResourceUsage {
         0.0
     };
 
-    ResourceUsage {
+    let mut sys = match system().lock() {
+        Ok(guard) => guard,
+        Err(_) => return Err("internal lock poisoned".to_string()),
+    };
+    sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::everything());
+    sys.refresh_memory();
+
+    let memory_total_gb = sys.total_memory() as f64 / 1073741824.0;
+    let memory_used_gb = sys.used_memory() as f64 / 1073741824.0;
+    let memory_percent = if sys.total_memory() > 0 {
+        (sys.used_memory() as f32 / sys.total_memory() as f32) * 100.0
+    } else {
+        0.0
+    };
+
+    let cpu_usage = sys.global_cpu_usage();
+
+    Ok(ResourceUsage {
         cpu_usage,
         memory_used_gb: (memory_used_gb * 100.0).round() / 100.0,
         memory_total_gb: (memory_total_gb * 100.0).round() / 100.0,
@@ -187,5 +196,5 @@ pub fn get_resource_usage() -> ResourceUsage {
         disk_total_gb: (disk_total_gb * 100.0).round() / 100.0,
         disk_percent,
         uptime_secs: System::uptime(),
-    }
+    })
 }
