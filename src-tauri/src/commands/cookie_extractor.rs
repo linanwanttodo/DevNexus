@@ -182,6 +182,50 @@ mod tests {
         // 空密文 → Err
         assert!(try_aes_128_cbc(&key, &iv, &[], host_key, true).is_err());
     }
+
+    #[test]
+    fn test_make_cookie_tmp_path_unique_and_suffixed() {
+        let a = make_cookie_tmp_path();
+        let b = make_cookie_tmp_path();
+        // 随机后缀（纳秒时间戳）应保证两次调用返回不同路径
+        assert_ne!(a, b);
+        // 路径非空，且文件名包含 pid 与 .sqlite 后缀
+        let fname = a.file_name().unwrap().to_string_lossy().to_string();
+        assert!(!fname.is_empty());
+        assert!(fname.contains(&std::process::id().to_string()));
+        assert!(fname.ends_with(".sqlite"));
+    }
+
+    #[test]
+    fn test_temp_cookie_cleanup_removes_files() {
+        let tmp_path = make_cookie_tmp_path();
+        std::fs::write(&tmp_path, b"main").unwrap();
+        std::fs::write(tmp_path.with_extension("sqlite-wal"), b"wal").unwrap();
+        std::fs::write(tmp_path.with_extension("sqlite-shm"), b"shm").unwrap();
+        std::fs::write(tmp_path.with_extension("sqlite-journal"), b"journal").unwrap();
+        {
+            let _cleanup = TempCookieCleanup(tmp_path.clone());
+            assert!(tmp_path.exists());
+        }
+        // guard drop 后主文件与 wal/shm/journal 辅助文件全部被清理
+        assert!(!tmp_path.exists());
+        assert!(!tmp_path.with_extension("sqlite-wal").exists());
+        assert!(!tmp_path.with_extension("sqlite-shm").exists());
+        assert!(!tmp_path.with_extension("sqlite-journal").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_temp_cookie_permissions_0600() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp_path = make_cookie_tmp_path();
+        std::fs::write(&tmp_path, b"cookie").unwrap();
+        let _cleanup = TempCookieCleanup(tmp_path.clone());
+        // 复刻 read_cookies 中的收紧权限逻辑
+        let _ = std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600));
+        let mode = std::fs::metadata(&tmp_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -584,15 +628,45 @@ fn map_firefox_cookie_row(row: &rusqlite::Row) -> rusqlite::Result<CookieEntry> 
     })
 }
 
+/// 生成带随机后缀的 Cookie 临时文件路径（pid + 纳秒时间戳），
+/// 避免固定文件名（如 cookies_{pid}.sqlite）被同机其他用户预测路径后读取
+fn make_cookie_tmp_path() -> std::path::PathBuf {
+    let tmp_dir = std::env::temp_dir().join("devnexus_cookies");
+    let _ = std::fs::create_dir_all(&tmp_dir);
+    tmp_dir.join(format!(
+        "cookies_{}_{}.sqlite",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ))
+}
+
+/// Cookie 临时文件清理 guard（RAII）：
+/// drop 时删除主文件及 wal/shm/journal 辅助文件，覆盖成功与失败（? 提前返回）路径
+struct TempCookieCleanup(std::path::PathBuf);
+
+impl Drop for TempCookieCleanup {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+        let _ = std::fs::remove_file(self.0.with_extension("sqlite-wal"));
+        let _ = std::fs::remove_file(self.0.with_extension("sqlite-shm"));
+        let _ = std::fs::remove_file(self.0.with_extension("sqlite-journal"));
+    }
+}
+
 fn read_cookies(
     path: &PathBuf,
     domain_filter: Option<String>,
     max_results: Option<usize>,
 ) -> Result<Vec<CookieEntry>, String> {
     // 复制到临时文件再打开，避免浏览器锁定数据库导致 "database is locked"
-    let tmp_dir = std::env::temp_dir().join("devnexus_cookies");
-    let _ = std::fs::create_dir_all(&tmp_dir);
-    let tmp_path = tmp_dir.join(format!("cookies_{}.sqlite", std::process::id()));
+    // 临时文件使用随机名（pid + 纳秒时间戳），防止固定名被同机其他用户预测/读取
+    let tmp_path = make_cookie_tmp_path();
+    // RAII guard：无论 read_cookies 成功还是失败（含 ? 提前返回），
+    // 返回时自动删除主文件及 wal/shm/journal 辅助文件
+    let _cleanup = TempCookieCleanup(tmp_path.clone());
     // 删除残留文件
     let _ = std::fs::remove_file(&tmp_path);
     let _ = std::fs::remove_file(tmp_path.with_extension("sqlite-wal"));
@@ -601,6 +675,13 @@ fn read_cookies(
 
     std::fs::copy(path, &tmp_path)
         .map_err(|e| format!("Failed to copy cookie database: {} (path: {:?})", e, path))?;
+
+    // 复制后收紧权限（Unix）：0600，防止同机其他用户读取浏览器 Cookie
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600));
+    }
 
     // 复制 SQLite 辅助文件（WAL 或 journal 模式），保证数据一致性
     // Chrome 实际辅助文件格式: Cookies-wal, Cookies-shm, Cookies-journal（拼接后缀，非替换扩展名）
