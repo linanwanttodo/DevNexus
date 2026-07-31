@@ -44,7 +44,7 @@
       await scanResidues(app, true);
       await loadApps();
     } catch (err) {
-      showToast(`Uninstall failed: ${friendlyError(err)}`);
+      showToast(tFormat("uninstall_mgr.failed", { error: friendlyError(err) }));
       // Even if uninstall failed, offer to scan & clean residues
       await scanResidues(app, true);
     } finally {
@@ -72,7 +72,7 @@
       selectedResidues = newSel;
       await loadApps();
     } catch (err) {
-      showToast(`Force uninstall failed: ${friendlyError(err)}`);
+      showToast(tFormat("uninstall_mgr.force_failed", { error: friendlyError(err) }));
     } finally {
       uninstalling = null;
     }
@@ -94,7 +94,7 @@
       selectedResidues[app.name] = sel;
     } catch (err) {
       scanErrors[app.name] = friendlyError(err);
-      if (!auto) showToast(`Scan failed: ${friendlyError(err)}`);
+      if (!auto) showToast(tFormat("uninstall_mgr.scan_failed", { error: friendlyError(err) }));
     } finally {
       scanning = null;
     }
@@ -175,7 +175,7 @@
       // Re-scan after cleaning
       await scanResidues({ name: appName });
     } catch (err) {
-      showToast(`Cleanup failed: ${friendlyError(err)}`);
+      showToast(tFormat("uninstall_mgr.clean_failed", { error: friendlyError(err) }));
     } finally {
       cleaningResidues = null;
     }
@@ -356,10 +356,10 @@
                   <div class="mb-3 flex items-center justify-between">
                     <div class="flex items-center gap-3 text-xs text-nx-text-muted">
                       <span>
-                    <span class="font-medium text-nx-text">{scan.total_items}</span> {t("uninstall_mgr.residues_found").replace(/\d+/, "")}
+                    <span class="font-medium text-nx-text">{scan.total_items}</span> {t("uninstall_mgr.residues_count")}
                       </span>
                       <span>
-                        共 <span class="font-medium text-nx-text">{formatSize(scan.total_size)}</span>
+                        {t("uninstall_mgr.total_size")} <span class="font-medium text-nx-text">{formatSize(scan.total_size)}</span>
                       </span>
                     </div>
                     <div class="flex gap-2">

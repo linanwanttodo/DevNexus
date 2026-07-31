@@ -52,7 +52,6 @@
   let stats = $derived([
     { 
       id: "cpu",
-      label: "CPU Cores", 
       tkey: "dashboard.cpu_cores",
       value: systemInfo ? systemInfo.cpu_cores.toString() : "--", 
       sub: systemInfo?.cpu_model ? systemInfo.cpu_model.split(" ").slice(0, 2).join(" ") : "", 
@@ -60,7 +59,6 @@
     },
     { 
       id: "memory",
-      label: "Memory", 
       tkey: "dashboard.memory",
       value: resourceUsage ? `${resourceUsage.memory_percent.toFixed(0)}%` : "--", 
       sub: resourceUsage ? `${resourceUsage.memory_used_gb}GB / ${resourceUsage.memory_total_gb}GB` : "", 
@@ -68,7 +66,6 @@
     },
     { 
       id: "disk",
-      label: "Disk", 
       tkey: "dashboard.disk",
       value: resourceUsage ? `${resourceUsage.disk_percent.toFixed(0)}%` : "--", 
       sub: resourceUsage ? `${resourceUsage.disk_used_gb}GB / ${resourceUsage.disk_total_gb}GB` : "", 
@@ -88,7 +85,7 @@
     environments.slice(0, 5).map(env => ({
       name: env.name,
       version: env.version,
-      status: env.status === "Active" ? "Running" : "Stopped",
+      status: env.status === "Active" ? t("dashboard.running") : t("dashboard.stopped"),
       statusColor: env.status === "Active" ? "running" : "stopped",
     }))
   );
@@ -99,7 +96,7 @@
   <div class="mb-8 flex items-center justify-between">
     <div>
       <h1 class="text-xl font-semibold text-nx-text">{t("dashboard.overview")}</h1>
-      <p class="mt-0.5 text-xs text-nx-text-muted">System status at a glance</p>
+      <p class="mt-0.5 text-xs text-nx-text-muted">{t("dashboard.status_at_a_glance")}</p>
     </div>
     <button class="nx-btn nx-btn-primary flex items-center gap-2" onclick={() => navigate("/environments")}>
       <span class="material-symbols-outlined text-base">add</span>
@@ -148,7 +145,7 @@
             <thead>
               <tr>
                 <th class="px-4 py-2.5">{t("environments.name")}</th>
-                <th class="px-4 py-2.5">Version</th>
+                <th class="px-4 py-2.5">{t("version")}</th>
                 <th class="px-4 py-2.5">{t("software.status")}</th>
               </tr>
             </thead>
@@ -173,7 +170,7 @@
       {:else}
         <div class="nx-empty">
           <span class="material-symbols-outlined text-2xl text-nx-text-muted mb-2">code</span>
-          <p class="text-xs text-nx-text-muted">No environments configured</p>
+          <p class="text-xs text-nx-text-muted">{t("environments.no_data")}</p>
         </div>
       {/if}
     </div>

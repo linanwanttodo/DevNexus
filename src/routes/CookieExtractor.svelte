@@ -4,7 +4,7 @@
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
   import BrandIcons from "../icons/BrandIcons.svelte";
-  import { t } from "../lib/i18n.svelte.js";
+  import { t, tFormat } from "../lib/i18n.svelte.js";
   import { friendlyError } from "../lib/errors.svelte.js";
 
   const MAX_DISPLAY = 500;
@@ -207,7 +207,7 @@
     <!-- 显示上限提示 -->
     {#if cookies.length >= MAX_DISPLAY}
       <div class="border-b border-nx-border bg-amber-500/10 px-4 py-2 text-xs text-amber-600">
-        仅显示前 {MAX_DISPLAY} 条 cookie，请使用域名过滤或导出功能获取完整数据。
+        {tFormat('cookies.display_limit', { count: MAX_DISPLAY })}
       </div>
     {/if}
     <!-- Results -->

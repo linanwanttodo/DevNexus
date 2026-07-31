@@ -163,7 +163,7 @@
 
   // 从 PATH 移除
   async function removeFromPath(env) {
-    if (!await showConfirm(`Remove ${env.name} from PATH?`)) return;
+    if (!await showConfirm(tFormat("environments.remove_from_path_confirm", { name: env.name }))) return;
     
     try {
       const result = await invoke("remove_from_path", { 
@@ -180,9 +180,9 @@
   // 查看配置文件
   function viewConfig(env) {
     if (env.shell_config) {
-      showToast(`Configuration file: ${env.shell_config}`);
+      showToast(tFormat("environments.config_file", { path: env.shell_config }));
     } else {
-      showToast("No configuration file found");
+      showToast(t("environments.no_config"));
     }
   }
 
@@ -395,7 +395,7 @@
     <div class="flex items-center justify-between border-t border-nx-border px-4 py-3">
       <span class="text-xs text-nx-text-muted">{tFormat("environments.count", { count: environments.length })}</span>
       <div class="flex items-center gap-2 text-xs text-nx-text-muted">
-        <span>1 of 1</span>
+        <span>{tFormat("environments.page_indicator", { current: 1, total: 1 })}</span>
       </div>
     </div>
     {/if}
@@ -413,11 +413,11 @@
       <div class="nx-dialog-body space-y-2.5">
         <div>
           <label for="envName" class="block text-xs text-nx-text-muted mb-0.5">{t("environments.name")}</label>
-          <input id="envName" type="text" bind:value={newEnvName} placeholder="e.g. Node.js v20" class="nx-input h-8 w-full text-xs" />
+          <input id="envName" type="text" bind:value={newEnvName} placeholder={t("environments.name_placeholder")} class="nx-input h-8 w-full text-xs" />
         </div>
         <div>
           <label for="envPath" class="block text-xs text-nx-text-muted mb-0.5">{t("environments.path")}</label>
-          <input id="envPath" type="text" bind:value={newEnvPath} placeholder="e.g. /usr/local/bin" class="nx-input h-8 w-full text-xs" />
+          <input id="envPath" type="text" bind:value={newEnvPath} placeholder={t("environments.path_placeholder")} class="nx-input h-8 w-full text-xs" />
         </div>
       </div>
       <div class="nx-dialog-footer">

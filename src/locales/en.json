@@ -68,10 +68,16 @@
     "language": "Language",
     "language_desc": "Select interface language"
   },
+  "titleBar": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "close": "Close"
+  },
   "dashboard": {
     "title": "Dashboard",
     "new_environment": "New Environment",
     "overview": "Overview",
+    "status_at_a_glance": "System status at a glance",
     "cpu_cores": "CPU Cores",
     "memory": "Memory",
     "disk": "Disk",
@@ -109,6 +115,11 @@
     "remove_from_path": "Remove from PATH",
     "view_config": "View Config",
     "no_config": "No configuration file found",
+    "remove_from_path_confirm": "Remove {name} from PATH?",
+    "config_file": "Configuration file: {path}",
+    "name_placeholder": "e.g. Node.js v20",
+    "path_placeholder": "e.g. /usr/local/bin",
+    "page_indicator": "{current} of {total}",
     "count": "{count} environments configured",
     "no_data": "No environments configured",
     "name": "Name",
@@ -285,6 +296,7 @@
     "extract_hint": "Tip: filter by domain first — extracting all cookies at once may crash the process",
     "no_cookies": "No cookies extracted",
     "cookies_extracted": "cookies extracted",
+    "display_limit": "Only showing the first {count} cookies. Use domain filtering or export to get the complete data.",
     "export_netscape": "Export as Netscape",
     "export_json": "Export as JSON",
     "no_browser_selected": "Please select a browser",
@@ -306,6 +318,9 @@
     "uninstalling": "Uninstalling...",
     "success": "Uninstalled successfully",
     "failed": "Uninstallation failed: {error}",
+    "force_failed": "Force uninstall failed: {error}",
+    "scan_failed": "Scan failed: {error}",
+    "clean_failed": "Cleanup failed: {error}",
     "no_apps": "No installed applications found",
     "deep": "Deep Uninstall",
     "deep_short": "Deep",
@@ -332,6 +347,8 @@
     "clean_selected": "Clean Selected",
     "nothing_selected": "No residue items selected",
     "confirm_clean": "Clean {count} selected residue item(s)?",
+    "residues_count": "residues",
+    "total_size": "Total",
     "caution": "Caution"
   },
   "residue": {
