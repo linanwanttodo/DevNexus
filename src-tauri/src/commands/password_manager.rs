@@ -825,6 +825,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)] // 故意守卫：防止未来把默认迭代数降到 OWASP 下限以下
     fn test_default_iterations_meets_owasp() {
         assert!(PBKDF2_ITERATIONS >= 600_000, "PBKDF2 iterations too low");
     }
