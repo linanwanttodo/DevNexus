@@ -1,32 +1,30 @@
 use super::types::{ApiProtocol, FetchedModel};
 
 /// 从 Provider 的模型列表端点获取可用模型
+/// `client` 复用 AppState 中已初始化的全局 HTTP client（连接池复用，避免每次新建）
 pub async fn fetch_models_from_provider(
+    client: &reqwest::Client,
     base_url: &str,
     api_key: &str,
     protocol: &ApiProtocol,
 ) -> Result<Vec<FetchedModel>, String> {
     match protocol {
         ApiProtocol::OpenAIChat | ApiProtocol::OpenAIResponses => {
-            fetch_openai_style_models(base_url, api_key, false).await
+            fetch_openai_style_models(client, base_url, api_key, false).await
         }
-        ApiProtocol::Anthropic => fetch_openai_style_models(base_url, api_key, true).await,
+        ApiProtocol::Anthropic => fetch_openai_style_models(client, base_url, api_key, true).await,
     }
 }
 
 /// OpenAI 风格的 /v1/models 端点（OpenAI / Anthropic 兼容）
 /// `is_anthropic` 决定是否使用 x-api-key + anthropic-version header
 async fn fetch_openai_style_models(
+    client: &reqwest::Client,
     base_url: &str,
     api_key: &str,
     is_anthropic: bool,
 ) -> Result<Vec<FetchedModel>, String> {
     let url = format!("{}/v1/models", base_url.trim_end_matches('/'));
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| format!("Failed to create client: {}", e))?;
-
     let mut req = client.get(&url);
     if !api_key.is_empty() {
         if is_anthropic {
