@@ -55,21 +55,20 @@ fn join_path(base: &str, endpoint: &str) -> String {
     let base = base.trim_end_matches('/');
     let endpoint = endpoint.trim_start_matches('/');
 
-    // 如果 endpoint 以 base 最后一段开头，说明重复了
-    let base_last = base.rsplit('/').next().unwrap_or("");
-    if !base_last.is_empty()
-        && endpoint.starts_with(base_last)
-        && base != "http"
-        && base != "https"
-    {
-        let rest = &endpoint[base_last.len()..];
-        let rest = rest.trim_start_matches('/');
-        if rest.is_empty() {
-            return base.to_string();
+    // 仅当 endpoint 的第一个路径段与 base 最后一段完全相等时去重（边界匹配）
+    if let Some(base_last) = base.rsplit('/').next() {
+        if !base_last.is_empty() {
+            let first_seg = endpoint.split('/').next().unwrap_or("");
+            if first_seg == base_last {
+                let rest = &endpoint[base_last.len()..];
+                let rest = rest.trim_start_matches('/');
+                if rest.is_empty() {
+                    return base.to_string();
+                }
+                return format!("{}/{}", base, rest);
+            }
         }
-        return format!("{}/{}", base, rest);
     }
-
     format!("{}/{}", base, endpoint)
 }
 
@@ -120,6 +119,26 @@ mod tests {
         assert_eq!(
             join_path("https://api.openai.com", "/v1/responses"),
             "https://api.openai.com/v1/responses"
+        );
+    }
+
+    #[test]
+    fn test_join_path_boundary() {
+        assert_eq!(
+            join_path("https://x.com/api", "v1/models"),
+            "https://x.com/api/v1/models"
+        );
+        assert_eq!(
+            join_path("https://x.com/api", "api/v1/models"),
+            "https://x.com/api/v1/models" // 整段相等才去重
+        );
+        assert_eq!(
+            join_path("https://x.com/api", "apix/v1/models"),
+            "https://x.com/api/apix/v1/models" // 前缀相同但非整段，不再误拼
+        );
+        assert_eq!(
+            join_path("https://x.com", "v1/models"),
+            "https://x.com/v1/models"
         );
     }
 }
