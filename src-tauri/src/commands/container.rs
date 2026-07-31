@@ -48,8 +48,6 @@ pub struct DockerStatus {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-const DOCKER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
-
 /// Container actions allowed through `container_action`. Anything else
 /// (e.g. `--privileged`, `rm -rf /`, `pull`) is rejected.
 const ALLOWED_ACTIONS: &[&str] = &[
@@ -84,26 +82,8 @@ fn validate_exec_command(command: &str) -> Result<(), String> {
 
 /// Run a docker command and return stdout, stderr separately. Times out after 120s.
 fn run_docker(args: &[&str]) -> Result<(String, String), String> {
-    let (tx, rx) = std::sync::mpsc::channel();
-    let args_owned: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-    std::thread::spawn(move || {
-        let output = std::process::Command::new("docker").args(&args_owned).output();
-        let _ = tx.send(output);
-    });
-    let output = rx
-        .recv_timeout(DOCKER_TIMEOUT)
-        .map_err(|_| format!("docker command timed out after {}s", DOCKER_TIMEOUT.as_secs()))?
-        .map_err(|e| format!("Failed to execute docker: {}", e))?;
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    if !output.status.success() {
-        return Err(if stderr.is_empty() {
-            stdout.trim().to_string()
-        } else {
-            stderr.trim().to_string()
-        });
-    }
-    Ok((stdout, stderr))
+    let r = crate::utils::exec::run_checked("docker", args)?;
+    Ok((r.stdout, r.stderr))
 }
 
 /// Parse Docker JSON-lines output into a vector of a given type.
