@@ -454,6 +454,71 @@ async fn e2e_streaming_cross_protocol_openai_to_anthropic() {
 }
 
 #[tokio::test]
+async fn e2e_streaming_cross_protocol_anthropic_to_responses_unsupported() {
+    // 回归测试（C3）：Anthropic 上游 → Responses 客户端 的流式级联转换未实现，
+    // 必须显式返回 501，而不是静默降级成 OpenAI Chat 流（chat.completion.chunk）。
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let (status, body) = post_json(
+        &format!("http://{}/v1/responses", hub),
+        serde_json::json!({
+            "model": "mock-claude",
+            "input": "hi",
+            "stream": true
+        }),
+    )
+    .await;
+
+    assert_eq!(status, 501, "expected 501, body: {:?}", body);
+    let msg = body["error"]["message"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        msg.contains("is not supported")
+            && msg.contains("anthropic")
+            && msg.contains("openai_responses"),
+        "error message should mention the unsupported conversion, got: {}",
+        msg
+    );
+}
+
+#[tokio::test]
+async fn e2e_streaming_cross_protocol_responses_to_anthropic_unsupported() {
+    // 回归测试（C3）：Responses 上游 → Anthropic 客户端 的流式级联转换未实现，
+    // 必须显式返回 501，而不是静默降级成 OpenAI Chat 流（chat.completion.chunk）。
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let (status, body) = post_json(
+        &format!("http://{}/v1/messages", hub),
+        serde_json::json!({
+            "model": "mock-resp",
+            "max_tokens": 32,
+            "messages": [{"role": "user", "content": "hello"}],
+            "stream": true
+        }),
+    )
+    .await;
+
+    assert_eq!(status, 501, "expected 501, body: {:?}", body);
+    let msg = body["error"]["message"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        msg.contains("is not supported")
+            && msg.contains("openai_responses")
+            && msg.contains("anthropic"),
+        "error message should mention the unsupported conversion, got: {}",
+        msg
+    );
+}
+
+#[tokio::test]
 async fn e2e_unmatched_model_returns_404() {
     let (up_addr, _up) = spawn_mock_upstream().await;
     let state = test_state(&up_addr.to_string());
