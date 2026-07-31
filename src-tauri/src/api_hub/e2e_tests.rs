@@ -249,6 +249,34 @@ async fn e2e_health_and_models() {
 }
 
 #[tokio::test]
+async fn e2e_cors_blocks_untrusted_origin() {
+    // 回归测试：CORS 白名单化后，任意网页 (evil origin) 不应拿到 ACAO 头，
+    // 防止跨站 JS 读取 hub 响应（避免 API Key 被盗用）。
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(format!("http://{}/health", hub))
+        .header("Origin", "https://evil.example")
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status().as_u16(), 200);
+    let allow_origin = resp
+        .headers()
+        .get("access-control-allow-origin")
+        .map(|v| v.to_str().unwrap_or_default().to_string());
+    assert!(
+        allow_origin.is_none(),
+        "untrusted origin must not be allowed, got access-control-allow-origin: {:?}",
+        allow_origin
+    );
+}
+
+#[tokio::test]
 async fn e2e_openai_to_openai_passthrough() {
     let (up_addr, _up) = spawn_mock_upstream().await;
     let state = test_state(&up_addr.to_string());
