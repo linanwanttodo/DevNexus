@@ -3,7 +3,7 @@
 /// - GUI_APPS：GUI 应用名单（跳过 --version 检测）
 /// - SoftwareDef / build_software_defs：软件定义表
 /// - map_package_name：通用包名 -> 各包管理器实际包名映射
-
+///
 /// 生成当前平台的下载 URL
 pub(super) fn get_download_url(name: &str, version: &str) -> Option<String> {
     match name {

@@ -19,7 +19,7 @@ pub async fn log_request(state: &AppState, mut log: RequestLog) {
                 cut -= 1;
             }
             err.truncate(cut);
-            err.push_str("…");
+            err.push('…');
         }
     }
 
@@ -295,7 +295,7 @@ fn stats_from_iter<'a>(logs: impl Iterator<Item = &'a RequestLog>) -> UsageStats
 
         // 按时段聚合（最近24小时按小时）
         let secs_ago = now - log.timestamp;
-        if secs_ago < 86400 && secs_ago >= 0 {
+        if (0..86400).contains(&secs_ago) {
             let hour_key = (log.timestamp / 3600) * 3600;
             let h_entry = stats
                 .by_hour
