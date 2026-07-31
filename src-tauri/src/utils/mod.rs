@@ -1,3 +1,5 @@
+pub mod exec;
+
 pub fn data_dir() -> std::path::PathBuf {
     let dir = if cfg!(target_os = "macos") {
         std::env::var("HOME")

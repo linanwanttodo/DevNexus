@@ -91,28 +91,18 @@ pub struct VersionInfo {
 
 /// 执行命令并返回标准输出
 fn run_cmd(cmd: &str, args: &[&str]) -> Option<String> {
-    Command::new(cmd)
-        .args(args)
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+    let r = crate::utils::exec::run_checked(cmd, args).ok()?;
+    Some(r.stdout)
 }
 
 /// 执行命令并返回 stdout + stderr（用于 java -version 等输出到 stderr 的命令）
 fn run_cmd_any(cmd: &str, args: &[&str]) -> Option<String> {
-    let output = Command::new(cmd).args(args).output().ok()?;
-    if output.status.success() {
-        let out = String::from_utf8_lossy(&output.stdout).to_string();
-        let err = String::from_utf8_lossy(&output.stderr).to_string();
-        let combined = out + &err;
-        if combined.is_empty() {
-            None
-        } else {
-            Some(combined)
-        }
-    } else {
+    let r = crate::utils::exec::run_checked(cmd, args).ok()?;
+    let combined = r.stdout + &r.stderr;
+    if combined.is_empty() {
         None
+    } else {
+        Some(combined)
     }
 }
 
