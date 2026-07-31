@@ -3,7 +3,7 @@ use super::transform::streaming::{StreamDirection, StreamState, transform_sse_li
 use super::types::{ApiProtocol, AppState};
 use axum::{
     extract::{DefaultBodyLimit, State},
-    http::Method,
+    http::{HeaderName, HeaderValue, Method},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -11,7 +11,7 @@ use axum::{
 use futures_util::TryStreamExt;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 
 /// 客户端请求所使用的格式（由命中的入口端点决定）
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -53,9 +53,16 @@ pub async fn start_server_on(state: Arc<AppState>, addr: &str) {
 /// 构建 Router（供集成测试 / 冒烟示例使用）
 pub fn build_router(state: Arc<AppState>) -> Router {
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin([
+            HeaderValue::from_static("tauri://localhost"),
+            HeaderValue::from_static("http://localhost:1420"), // dev
+            HeaderValue::from_static("http://127.0.0.1:1420"), // dev fallback
+        ])
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-        .allow_headers(Any);
+        .allow_headers([
+            HeaderName::from_static("content-type"),
+            HeaderName::from_static("authorization"),
+        ]);
 
     Router::new()
         .route("/health", get(health_handler))
