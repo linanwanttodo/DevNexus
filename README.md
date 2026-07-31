@@ -48,7 +48,6 @@ DevNexus 是一个**跨平台桌面应用**，将开发者日常需要的环境�
 | [API Hub](docs/modules/11-api-hub.md) | 本地 AI 统一网关，多协议格式转换 |
 | [镜像设置](docs/modules/04-mirror.md) | 12 种包源切换、延迟测试与推荐 |
 | [端口管理](docs/modules/05-port.md) | lsof / procfs / netstat 三平台方案 |
-| [任务调度](docs/modules/06-scheduler.md) | Cron 引擎、Shell/Python 执行、系统关机 |
 | [密码管理器](docs/modules/07-password.md) | AES-256-GCM + PBKDF2 + SQLite |
 | [Cookie 提取](docs/modules/08-cookie.md) | 5 种浏览器、3 种加密机制 |
 | [深度卸载](docs/modules/09-uninstall.md) | 残留路径数据库 + 关键词扫描 |
@@ -129,10 +128,10 @@ DevNexus 是一个**跨平台桌面应用**，将开发者日常需要的环境�
 ├──────────────────────────────────────────────┤
 │              Backend (Rust)                   │
 │  ┌─────────┬──────────┬──────────┬─────────┐  │
-│  │ pkg_mgr │ env_mgr  │ scheduler│ sysinfo │  │
-│  │ brew/   │ PATH &   │ cron/    │ CPU/    │  │
-│  │ apt/    │ dotfile  │ shell    │ MEM/Disk│  │
-│  │ winget  │ parser   │ python   │ which   │  │
+│  │ pkg_mgr │ env_mgr  │  api_hub │ sysinfo │  │
+│  │ brew/   │ PATH &   │ OpenAI/  │ CPU/    │  │
+│  │ apt/    │ dotfile  │ Anthropic│ MEM/Disk│  │
+│  │ winget  │ parser   │ 网关     │ which   │  │
 │  └─────────┴──────────┴──────────┴─────────┘  │
 └──────────────────────────────────────────────┘
 ```
@@ -208,8 +207,7 @@ devnexus/
 │   │   │   ├── container.rs      # Docker/Podman 管理
 │   │   │   ├── api_hub/          # API Hub 模块
 │   │   │   ├── mirror.rs         # 镜像源
-│   │   │   ├── port_manager.rs   # 端口/进程管理
-│   │   │   ├── scheduler.rs      # 任务调度
+│   │   │   ├── process_ports.rs # 端口/进程管理
 │   │   │   ├── password_manager.rs
 │   │   │   ├── cookie_extractor.rs
 │   │   │   ├── version_manager.rs
@@ -277,7 +275,6 @@ pnpm tauri build
 - [x] 镜像源配置
 - [x] 系统信息仪表板
 - [x] 端口/进程管理器
-- [x] 任务调度（Cron 引擎 + Shell/Python/关机）
 - [x] 密码管理器（AES-256-GCM + SQLite）
 - [x] Cookie 提取（5 种浏览器）
 - [x] 深度卸载（残留扫描 + 注册表 + 快捷方式）

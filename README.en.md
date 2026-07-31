@@ -48,7 +48,6 @@ Detailed module design, cross-platform implementation, and development guide are
 | [API Hub](docs/modules/11-api-hub.md) | Local AI gateway, multi-protocol format conversion |
 | [Mirror Settings](docs/modules/04-mirror.md) | 12 package source switches, latency testing |
 | [Port Manager](docs/modules/05-port.md) | lsof / procfs / netstat three-platform solution |
-| [Task Scheduler](docs/modules/06-scheduler.md) | Cron engine, Shell/Python execution, system actions |
 | [Password Manager](docs/modules/07-password.md) | AES-256-GCM + PBKDF2 + SQLite |
 | [Cookie Extractor](docs/modules/08-cookie.md) | 5 browsers, 3 encryption mechanisms |
 | [Deep Uninstall](docs/modules/09-uninstall.md) | Residue path DB + keyword scanning |
@@ -128,10 +127,10 @@ Developers face these fragmented tools every day:
 ├──────────────────────────────────────────────┤
 │              Backend (Rust)                   │
 │  ┌─────────┬──────────┬──────────┬─────────┐  │
-│  │ pkg_mgr │ env_mgr  │ scheduler│ sysinfo │  │
-│  │ brew/   │ PATH &   │ cron/    │ CPU/    │  │
-│  │ apt/    │ dotfile  │ shell    │ MEM/Disk│  │
-│  │ winget  │ parser   │ python   │ which   │  │
+│  │ pkg_mgr │ env_mgr  │  api_hub │ sysinfo │  │
+│  │ brew/   │ PATH &   │ OpenAI/  │ CPU/    │  │
+│  │ apt/    │ dotfile  │ Anthropic│ MEM/Disk│  │
+│  │ winget  │ parser   │ gateway  │ which   │  │
 │  └─────────┴──────────┴──────────┴─────────┘  │
 └──────────────────────────────────────────────┘
 ```
@@ -204,8 +203,7 @@ devnexus/
 │   │   │   ├── container.rs      # Docker/Podman management
 │   │   │   ├── api_hub/          # API Hub module
 │   │   │   ├── mirror.rs         # Mirror sources
-│   │   │   ├── port_manager.rs   # Process/port management
-│   │   │   ├── scheduler.rs      # Task scheduling
+│   │   │   ├── process_ports.rs # Process/port management
 │   │   │   ├── password_manager.rs
 │   │   │   ├── cookie_extractor.rs
 │   │   │   ├── version_manager.rs
@@ -273,7 +271,6 @@ Build artifacts:
 - [x] Mirror source configuration
 - [x] System info dashboard
 - [x] Process/port manager
-- [x] Task scheduler (Cron engine + Shell/Python/system actions)
 - [x] Password manager (AES-256-GCM + SQLite)
 - [x] Cookie extraction (5 browsers)
 - [x] Deep uninstall (residue scanning + registry + shortcuts)

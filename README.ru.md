@@ -50,7 +50,6 @@ DevNexus — это **кроссплатформенное десктопное 
 | [API Hub](docs/modules/11-api-hub.md) | Локальный AI-шлюз, мультипротокольная конвертация |
 | [Зеркала](docs/modules/04-mirror.md) | 12 источников пакетов, тестирование задержки |
 | [Менеджер процессов/портов](docs/modules/05-port.md) | lsof / procfs / netstat |
-| [Планировщик задач](docs/modules/06-scheduler.md) | Cron, Shell/Python, действия системы |
 | [Менеджер паролей](docs/modules/07-password.md) | AES-256-GCM + PBKDF2 + SQLite |
 | [Извлечение Cookie](docs/modules/08-cookie.md) | 5 браузеров, 3 механизма шифрования |
 | [Глубокое удаление](docs/modules/09-uninstall.md) | База путей остатков, поиск по ключам |
@@ -131,10 +130,10 @@ DevNexus — это **кроссплатформенное десктопное 
 ├──────────────────────────────────────────────┤
 │              Backend (Rust)                   │
 │  ┌─────────┬──────────┬──────────┬─────────┐  │
-│  │ pkg_mgr │ env_mgr  │ scheduler│ sysinfo │  │
-│  │ brew/   │ PATH &   │ cron/    │ CPU/    │  │
-│  │ apt/    │ dotfile  │ shell    │ MEM/Disk│  │
-│  │ winget  │ parser   │ python   │ which   │  │
+│  │ pkg_mgr │ env_mgr  │  api_hub │ sysinfo │  │
+│  │ brew/   │ PATH &   │ OpenAI/  │ CPU/    │  │
+│  │ apt/    │ dotfile  │ Anthropic│ MEM/Disk│  │
+│  │ winget  │ parser   │ шлюз     │ which   │  │
 │  └─────────┴──────────┴──────────┴─────────┘  │
 └──────────────────────────────────────────────┘
 ```
@@ -177,8 +176,7 @@ devnexus/
 │   │   ├── EnvironmentManager.svelte
 │   │   ├── SoftwareCenter.svelte
 │   │   ├── MirrorSettings.svelte
-│   │   ├── PortManager.svelte    # Управление портами
-│   │   ├── TaskScheduler.svelte
+│   │   ├── ProcessManager.svelte # Управление процессами/портами
 │   │   ├── PasswordManager.svelte
 │   │   ├── CookieExtractor.svelte
 │   │   ├── AppUninstaller.svelte # Глубокое удаление
@@ -199,8 +197,7 @@ devnexus/
 │   │       ├── environment.rs    # PATH/переменные окружения
 │   │       ├── software.rs       # Управление пакетами
 │   │       ├── mirror.rs         # Зеркала
-│   │       ├── port_manager.rs   # Управление портами
-│   │       ├── scheduler.rs      # Планировщик задач
+│   │       ├── process_ports.rs  # Управление портами
 │   │       ├── password_manager.rs
 │   │       ├── cookie_extractor.rs
 │   │       ├── version_manager.rs # Управление версиями (pyenv/fnm/jenv/gvm/rustup)
@@ -269,7 +266,6 @@ pnpm tauri build
 - [x] Настройка источников зеркал
 - [x] Панель информации о системе
 - [x] Менеджер процессов/портов
-- [x] Планировщик задач (Cron + Shell/Python/действия системы)
 - [x] Менеджер паролей (AES-256-GCM + SQLite)
 - [x] Извлечение Cookie (5 браузеров)
 - [x] Глубокое удаление (сканирование остатков + реестр + ярлыки)

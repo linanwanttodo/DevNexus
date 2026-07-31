@@ -12,9 +12,9 @@ DevNexus 采用 **Tauri 2.0** 标准架构：Rust 后端 + Svelte 前端，通�
 │  ├─────────────┤ ├──────────────┤ ├────────────────┤│
 │  │ ContainerMgr│ │   ApiHub     │ │ Environment    ││
 │  ├─────────────┤ ├──────────────┤ ├────────────────┤│
-│  │MirrorSetting│ │ ProcessMgr   │ │TaskScheduler   ││
+│  │MirrorSetting│ │ ProcessMgr   │ │  Uninstaller ││
 │  ├─────────────┤ ├──────────────┤ ├────────────────┤│
-│  │PasswordMgr  │ │CookieViewer  │ │ Migration      ││
+│  │PasswordMgr  │ │CookieExtractor│ │ Migration      ││
 │  ├─────────────┤ ├──────────────┤ ├────────────────┤│
 │  │AppUninstall │ │VersionMgr    │ │  Settings      ││
 │  └──────┬──────┘ └──────┬───────┘ └──────┬─────────┘│
@@ -31,7 +31,7 @@ DevNexus 采用 **Tauri 2.0** 标准架构：Rust 后端 + Svelte 前端，通�
 │  │ commands/                                     │   ││
 │  │  system.rs  environment.rs  software.rs       │   ││
 │  │  container.rs  api_hub/                      │   ││
-│  │  mirror.rs  port_manager.rs  scheduler.rs     │   ││
+│  │  mirror.rs  process_ports.rs                │   ││
 │  │  password_manager.rs  cookie_extractor.rs     │   ││
 │  │  version_manager.rs  migration.rs  updater.rs │   ││
 │  └──────────────────────────────────────────────┘   ││
@@ -92,10 +92,9 @@ const routes = {
     '/software':            SoftwareCenter,      // 软件中心
     '/environment':         EnvironmentManager,  // 环境管理
     '/mirrors':             MirrorSettings,      // 镜像设置
-    '/ports':               PortManager,         // 端口管理
-    '/scheduler':           TaskScheduler,       // 任务调度
+    '/ports':               ProcessManager,      // 进程/端口管理
     '/passwords':           PasswordManager,     // 密码管理器
-    '/cookies':             CookieViewer,        // Cookie 提取
+    '/cookies':             CookieExtractor,   // Cookie 提取
     '/settings':            Settings,            // 设置
 };
 ```
@@ -110,9 +109,8 @@ const routes = {
 | 05 | 容器管理 | `commands/container.rs` | Docker/Podman 容器、镜像、卷、Compose |
 | 06 | API Hub | `commands/api_hub/` | 本地 AI 网关、多协议格式转换、流式 |
 | 07 | 镜像设置 | `commands/mirror.rs` | 12 种包源切换、延迟测试 |
-| 08 | 端口/进程管理 | `commands/port_manager.rs` | 端口列表、进程查杀 |
-| 09 | 任务调度 | `commands/scheduler.rs` | Cron 定时、Shell/Python 执行 |
-| 10 | 密码管理器 | `commands/password_manager.rs` | AES-256-GCM 加密存储、密码生成 |
+| 08 | 端口/进程管理 | `commands/process_ports.rs` | 端口列表、进程查杀 |
+| 09 | 密码管理器 | `commands/password_manager.rs` | AES-256-GCM 加密存储、密码生成 |
 | 11 | Cookie 提取 | `commands/cookie_extractor.rs` | 浏览器 Cookie 读取与导出 |
 | 12 | 深度卸载 | `residue_scanner.rs` | 残留扫描、跨平台路径数据库 |
 | 13 | 版本管理 | `commands/version_manager.rs` | 6 种语言版本切换、Shell 配置 |

@@ -15,7 +15,6 @@ DevNexus 是一款面向开发者的系统工具集合，提供系统信息监�
 | **API Hub**      | 本地 AI 统一网关，OpenAI/Anthropic/Google 多协议格式转换 | [11-api-hub.md](modules/11-api-hub.md) |
 | **镜像设置**      | 一键切换 12 种包管理器和语言运行时的镜像源，延迟测试与推荐 | [04-mirror.md](modules/04-mirror.md) |
 | **进程/端口管理**  | 列出监听端口及占用进程，一键释放冲突端口 | [05-port.md](modules/05-port.md) |
-| **任务调度**      | Cron 定时任务，支持 Shell/Python 脚本执行和系统操作 | [06-scheduler.md](modules/06-scheduler.md) |
 | **密码管理器**     | AES-256-GCM 加密本地密码存储，支持强密码生成 | [07-password.md](modules/07-password.md) |
 | **Cookie 提取** | 从浏览器导出 Cookie 为 Netscape/cURL 格式 | [08-cookie.md](modules/08-cookie.md) |
 | **深度卸载**    | 残留文件扫描，跨平台清理已知工具的配置文件和数据目录 | [09-uninstall.md](modules/09-uninstall.md) |
@@ -68,7 +67,6 @@ docs/
 │   ├── 03-environment.md # 环境管理
 │   ├── 04-mirror.md      # 镜像设置
 │   ├── 05-port.md        # 端口/进程管理
-│   ├── 06-scheduler.md   # 任务调度
 │   ├── 07-password.md    # 密码管理器
 │   ├── 08-cookie.md      # Cookie 提取
 │   ├── 09-uninstall.md   # 深度卸载与残留扫描
