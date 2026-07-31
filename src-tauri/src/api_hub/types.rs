@@ -3,6 +3,8 @@ use std::collections::VecDeque;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use super::crypto::ApiKeyCipher;
+
 // ── Provider ──────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,4 +234,5 @@ pub struct AppState {
     pub db: Arc<tokio::sync::Mutex<Option<rusqlite::Connection>>>,
     pub http_client: reqwest::Client,
     pub running: Arc<AtomicBool>,
+    pub api_key_cipher: Arc<ApiKeyCipher>,
 }

@@ -1,5 +1,6 @@
 //! API Hub 端到端测试：mock 上游 + 真实 axum hub
 
+use super::crypto::ApiKeyCipher;
 use super::provider;
 use super::server::build_router;
 use super::types::{ApiProtocol, AppState, Provider};
@@ -198,6 +199,7 @@ fn test_state(upstream: &str) -> AppState {
         db: Arc::new(tokio::sync::Mutex::new(Some(conn))),
         http_client,
         running: Arc::new(AtomicBool::new(false)),
+        api_key_cipher: Arc::new(ApiKeyCipher::from_key([7u8; 32], true)),
     }
 }
 
@@ -604,6 +606,7 @@ async fn e2e_provider_duplicate_name_rejected_and_not_persisted() {
         db: Arc::new(tokio::sync::Mutex::new(Some(conn))),
         http_client,
         running: Arc::new(AtomicBool::new(false)),
+        api_key_cipher: Arc::new(ApiKeyCipher::from_key([7u8; 32], true)),
     };
 
     let mk = |name: &str| Provider {
@@ -639,7 +642,7 @@ async fn e2e_provider_duplicate_name_rejected_and_not_persisted() {
     // 模拟重启：重新从 DB 加载，仍只有一条
     let reloaded = {
         let db = state.db.lock().await;
-        provider::load_providers_from_db_sync(db.as_ref().unwrap())
+        provider::load_providers_from_db_sync(db.as_ref().unwrap(), &state.api_key_cipher)
     };
     assert_eq!(reloaded.len(), 1, "no duplicate after simulated restart");
     assert_eq!(reloaded[0].name, "OpenAI");
@@ -657,6 +660,7 @@ fn provider_test_state() -> AppState {
         db: Arc::new(tokio::sync::Mutex::new(Some(conn))),
         http_client,
         running: Arc::new(AtomicBool::new(false)),
+        api_key_cipher: Arc::new(ApiKeyCipher::from_key([7u8; 32], true)),
     }
 }
 
@@ -716,7 +720,7 @@ async fn e2e_provider_update_empty_key_keeps_original() {
     // 4) 模拟重启：重新从 DB 加载，key 仍为 "secret123"
     let reloaded = {
         let db = state.db.lock().await;
-        provider::load_providers_from_db_sync(db.as_ref().unwrap())
+        provider::load_providers_from_db_sync(db.as_ref().unwrap(), &state.api_key_cipher)
     };
     assert_eq!(reloaded.len(), 1);
     assert_eq!(reloaded[0].api_key, "secret123", "DB must keep the original key");
