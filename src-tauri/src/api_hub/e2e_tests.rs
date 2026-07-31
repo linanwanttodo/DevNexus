@@ -524,3 +524,58 @@ async fn e2e_streaming_log_tokens_backfilled() {
     assert_eq!(input, 5, "input_tokens should be backfilled from Anthropic mock");
     assert_eq!(output, 2, "output_tokens should be backfilled from Anthropic mock");
 }
+
+#[tokio::test]
+async fn e2e_provider_duplicate_name_rejected_and_not_persisted() {
+    // 回归测试（C2）：重名 Provider（含大小写差异）第二次添加必须返回 Err 且无副作用，
+    // 模拟重启（重新 load_providers_from_db_sync）后仍只有一条。
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    provider::init_db_sync(&conn).unwrap();
+
+    let http_client = reqwest::Client::new();
+    let state = AppState {
+        providers: Arc::new(tokio::sync::RwLock::new(vec![])),
+        request_logs: Arc::new(tokio::sync::RwLock::new(VecDeque::new())),
+        db: Arc::new(tokio::sync::Mutex::new(Some(conn))),
+        http_client,
+        running: Arc::new(AtomicBool::new(false)),
+    };
+
+    let mk = |name: &str| Provider {
+        id: String::new(), // add_provider 会自动生成 UUID
+        name: name.into(),
+        protocol: ApiProtocol::OpenAIChat,
+        base_url: "http://127.0.0.1:1".into(),
+        api_key: "sk-test".into(),
+        models: vec!["mock-gpt".into()],
+        model_aliases: Default::default(),
+        model_context_lengths: Default::default(),
+        enabled: true,
+        created_at: 0,
+    };
+
+    // 第一次添加成功
+    super::provider::add_provider(&state, mk("OpenAI"))
+        .await
+        .expect("first add should succeed");
+    assert_eq!(state.providers.read().await.len(), 1);
+
+    // 第二次同名（大小写不同）必须失败
+    let err = super::provider::add_provider(&state, mk("openai")).await;
+    assert!(
+        err.is_err(),
+        "duplicate provider (case-insensitive) should be rejected, got {:?}",
+        err
+    );
+
+    // 内存中仍只有一条
+    assert_eq!(state.providers.read().await.len(), 1);
+
+    // 模拟重启：重新从 DB 加载，仍只有一条
+    let reloaded = {
+        let db = state.db.lock().await;
+        provider::load_providers_from_db_sync(db.as_ref().unwrap())
+    };
+    assert_eq!(reloaded.len(), 1, "no duplicate after simulated restart");
+    assert_eq!(reloaded[0].name, "OpenAI");
+}
