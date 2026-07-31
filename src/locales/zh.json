@@ -6,6 +6,12 @@
     "dismiss": "关闭",
     "details": "错误详情"
   },
+  "errors": {
+    "vault_locked": "保险库已锁定",
+    "provider_exists": "Provider 已存在",
+    "already_exists": "已存在",
+    "invalid_version": "版本号格式无效"
+  },
   "version": "版本",
   "search": "搜索...",
   "search_ports": "搜索端口、进程...",

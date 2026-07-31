@@ -5,6 +5,7 @@
   import { showConfirm } from "../lib/confirm.svelte.js";
   import { getSearchQuery, setSearchQuery, navigate } from "../lib/stores.svelte.js";
   import { t } from "../lib/i18n.svelte.js";
+  import { friendlyError } from "../lib/errors.svelte.js";
   import ContainerIcons from "../icons/ContainerIcons.svelte";
   import ContainerDialog from "../components/containers/ContainerDialog.svelte";
 
@@ -114,7 +115,7 @@
   async function loadContainers() {
     containersLoading = true; containerError = null;
     try { containers = await invoke("list_containers", { all: showAll }); }
-    catch (err) { containerError = err.message || String(err); }
+    catch (err) { containerError = friendlyError(err); }
     finally { containersLoading = false; }
   }
 
@@ -129,14 +130,14 @@
       showToast(result || t("docker.action_done"), "success");
       await loadContainers();
     } catch (err) {
-      showToast(`${t("docker.action_failed")}: ${err.message || err}`, "error");
+      showToast(`${t("docker.action_failed")}: ${friendlyError(err)}`, "error");
     } finally { actionLoading = ""; }
   }
 
   async function openLogs(name) {
     logContainer = name; logContent = ""; showLogs = true; logLoading = true;
     try { logContent = await invoke("get_container_logs", { name, tail: 200 }); }
-    catch (err) { logContent = `Error: ${err.message || err}`; }
+    catch (err) { logContent = `Error: ${friendlyError(err)}`; }
     finally { logLoading = false; }
   }
 
@@ -148,7 +149,7 @@
     if (!termCommand.trim()) return;
     termLoading = true;
     try { termOutput = await invoke("exec_in_container", { name: termContainer, command: termCommand }); }
-    catch (err) { termOutput = `Error: ${err.message || err}`; }
+    catch (err) { termOutput = `Error: ${friendlyError(err)}`; }
     finally { termLoading = false; }
   }
 
@@ -164,7 +165,7 @@
   async function loadImages() {
     imagesLoading = true; imageError = null;
     try { images = await invoke("list_images"); }
-    catch (err) { imageError = err.message || String(err); }
+    catch (err) { imageError = friendlyError(err); }
     finally { imagesLoading = false; }
   }
 
@@ -176,7 +177,7 @@
       showToast(result, "success"); showPull = false; pullImageName = "";
       await loadImages();
     } catch (err) {
-      showToast(`${t("docker.pull_failed")}: ${err.message || err}`, "error");
+      showToast(`${t("docker.pull_failed")}: ${friendlyError(err)}`, "error");
     } finally { pullLoading = false; }
   }
 
@@ -187,7 +188,7 @@
       const result = await invoke("remove_image", { imageId: id, force: false });
       showToast(result || t("docker.action_done"), "success"); await loadImages();
     } catch (err) {
-      showToast(`${t("docker.action_failed")}: ${err.message || err}`, "error");
+      showToast(`${t("docker.action_failed")}: ${friendlyError(err)}`, "error");
     } finally { actionLoading = ""; }
   }
 
@@ -199,7 +200,7 @@
       showToast(result || t("docker.build_done"), "success"); showBuild = false; buildTag = ""; buildPath = "";
       await loadImages();
     } catch (err) {
-      showToast(`${t("docker.build_failed")}: ${err.message || err}`, "error");
+      showToast(`${t("docker.build_failed")}: ${friendlyError(err)}`, "error");
     } finally { buildLoading = false; }
   }
 
@@ -215,7 +216,7 @@
       showToast(result || t("docker.push_done"), "success");
       showPush = false; pushTarget = "";
     } catch (err) {
-      showToast(`${t("docker.push_failed")}: ${err.message || err}`, "error");
+      showToast(`${t("docker.push_failed")}: ${friendlyError(err)}`, "error");
     } finally { pushLoading = false; }
   }
 
@@ -233,7 +234,7 @@
       showTag = false; tagValue = ""; tagImageId = "";
       await loadImages();
     } catch (err) {
-      showToast(`${t("docker.tag_failed")}: ${err.message || err}`, "error");
+      showToast(`${t("docker.tag_failed")}: ${friendlyError(err)}`, "error");
     } finally { tagLoading = false; }
   }
 
@@ -249,7 +250,7 @@
   async function loadVolumes() {
     volumesLoading = true; volumeError = null;
     try { volumes = await invoke("list_volumes"); }
-    catch (err) { volumeError = err.message || String(err); }
+    catch (err) { volumeError = friendlyError(err); }
     finally { volumesLoading = false; }
   }
 
@@ -259,7 +260,7 @@
       await invoke("volume_action", { name: newVolumeName.trim(), action: "create" });
       showToast(t("docker.volume_created"), "success"); showCreateVolume = false; newVolumeName = "";
       await loadVolumes();
-    } catch (err) { showToast(`${t("docker.action_failed")}: ${err.message || err}`, "error"); }
+    } catch (err) { showToast(`${t("docker.action_failed")}: ${friendlyError(err)}`, "error"); }
   }
 
   async function removeVolume(name) {
@@ -269,14 +270,14 @@
       await invoke("volume_action", { name, action: "rm" });
       showToast(t("docker.volume_deleted"), "success"); await loadVolumes();
     } catch (err) {
-      showToast(`${t("docker.action_failed")}: ${err.message || err}`, "error");
+      showToast(`${t("docker.action_failed")}: ${friendlyError(err)}`, "error");
     } finally { actionLoading = ""; }
   }
 
   async function loadNetworks() {
     networksLoading = true; networkError = null;
     try { networks = await invoke("list_networks"); }
-    catch (err) { networkError = err.message || String(err); }
+    catch (err) { networkError = friendlyError(err); }
     finally { networksLoading = false; }
   }
 
@@ -286,7 +287,7 @@
       await invoke("network_action", { name: newNetworkName.trim(), action: "create" });
       showToast(t("docker.network_created"), "success"); showCreateNetwork = false; newNetworkName = "";
       await loadNetworks();
-    } catch (err) { showToast(`${t("docker.action_failed")}: ${err.message || err}`, "error"); }
+    } catch (err) { showToast(`${t("docker.action_failed")}: ${friendlyError(err)}`, "error"); }
   }
 
   async function removeNetwork(name) {
@@ -296,7 +297,7 @@
       await invoke("network_action", { name, action: "rm" });
       showToast(t("docker.network_deleted"), "success"); await loadNetworks();
     } catch (err) {
-      showToast(`${t("docker.action_failed")}: ${err.message || err}`, "error");
+      showToast(`${t("docker.action_failed")}: ${friendlyError(err)}`, "error");
     } finally { actionLoading = ""; }
   }
 
@@ -305,7 +306,7 @@
     try {
       const result = await invoke("compose_up", { file: composeFile.trim() || null, projectName: composeProject.trim() || null });
       showToast(result || t("docker.compose_up_done"), "success");
-    } catch (err) { composeError = err.message || String(err); }
+    } catch (err) { composeError = friendlyError(err); }
     finally { composeLoading = false; }
   }
 
@@ -315,21 +316,21 @@
     try {
       const result = await invoke("compose_down", { file: composeFile.trim() || null, projectName: composeProject.trim() || null });
       showToast(result || t("docker.compose_down_done"), "success");
-    } catch (err) { composeError = err.message || String(err); }
+    } catch (err) { composeError = friendlyError(err); }
     finally { composeLoading = false; }
   }
 
   async function composePs() {
     composeLoading = true; composeError = null;
     try { composeContainers = await invoke("compose_ps", { file: composeFile.trim() || null, projectName: composeProject.trim() || null }); }
-    catch (err) { composeError = err.message || String(err); }
+    catch (err) { composeError = friendlyError(err); }
     finally { composeLoading = false; }
   }
 
   async function composeViewLogs() {
     composeLoading = true; composeError = null;
     try { composeLogs = await invoke("compose_logs", { file: composeFile.trim() || null, projectName: composeProject.trim() || null, tail: 100 }); }
-    catch (err) { composeError = err.message || String(err); }
+    catch (err) { composeError = friendlyError(err); }
     finally { composeLoading = false; }
   }
 

@@ -3,6 +3,7 @@
   import { t, initI18n, getLang } from "../lib/i18n.svelte.js";
   import { invoke } from "@tauri-apps/api/core";
   import { navigate } from "../lib/stores.svelte.js";
+  import { friendlyError } from "../lib/errors.svelte.js";
 
   let theme = $state("dark");
   let lang = $state(getLang());
@@ -62,7 +63,7 @@
         updateState = "up_to_date";
       }
     } catch (err) {
-      updateError = err.message || String(err);
+      updateError = friendlyError(err);
       updateState = "error";
     }
   }
@@ -98,7 +99,7 @@
         await open(updateInfo?.html_url || `https://github.com/linanwanttodo/DevNexus/releases/latest`);
         updateState = "opened";
       } catch (e) {
-        updateError = e.message || String(e);
+        updateError = friendlyError(e);
         updateState = "error";
       }
     }
@@ -108,7 +109,7 @@
     try {
       const { relaunch } = await import("@tauri-apps/plugin-process");
       await relaunch();
-    } catch (e) { updateError = e.message || String(e); }
+    } catch (e) { updateError = friendlyError(e); }
   }
 
   onMount(() => {

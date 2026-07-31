@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { t } from "../lib/i18n.svelte.js";
+  import { friendlyError } from "../lib/errors.svelte.js";
 
   let activeTab = $state("export");
   let environments = $state([]);
@@ -33,7 +34,7 @@
       error = null;
       environments = await invoke("list_environments");
     } catch (err) {
-      error = err.message || String(err);
+      error = friendlyError(err);
     } finally {
       loading = false;
     }
@@ -60,7 +61,7 @@
       if (!selectedVersions[name]) selectedVersions[name] = [];
     } catch (err) {
       versionsMap[name] = [];
-      showToast(t("migration.versions_failed").replace("{error}", err.message || err), "error");
+      showToast(t("migration.versions_failed").replace("{error}", friendlyError(err)), "error");
     } finally {
       loadingVersions[name] = false;
     }
@@ -101,7 +102,7 @@
       URL.revokeObjectURL(url);
       showToast(t("migration.exported"));
     } catch (err) {
-      showToast(t("migration.export_failed").replace("{error}", err.message || err), "error");
+      showToast(t("migration.export_failed").replace("{error}", friendlyError(err)), "error");
     }
   }
 
@@ -117,7 +118,7 @@
       importManifest = await invoke("load_migration_file", { path: importPath });
     } catch (err) {
       importManifest = null;
-      showToast(t("migration.import_failed").replace("{error}", err.message || err), "error");
+      showToast(t("migration.import_failed").replace("{error}", friendlyError(err)), "error");
     }
   }
 
@@ -143,7 +144,7 @@
       );
       await loadEnvironments();
     } catch (err) {
-      showToast(t("migration.import_failed").replace("{error}", err.message || err), "error");
+      showToast(t("migration.import_failed").replace("{error}", friendlyError(err)), "error");
     } finally {
       importing = false;
     }

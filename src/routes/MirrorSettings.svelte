@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { t } from "../lib/i18n.svelte.js";
+  import { friendlyError } from "../lib/errors.svelte.js";
 
   let groups = $state([]);
   let loading = $state(true);
@@ -33,7 +34,7 @@
         }
       }
     } catch (err) {
-      error = err.message || t('common.error');
+      error = friendlyError(err);
     } finally {
       loading = false;
     }
@@ -66,7 +67,7 @@
       showToast(msg);
       await loadMirrors();
     } catch (err) {
-      showToast(t('common.error_msg').replace('{error}', err.message || err));
+      showToast(t('common.error_msg').replace('{error}', friendlyError(err)));
     }
   }
 

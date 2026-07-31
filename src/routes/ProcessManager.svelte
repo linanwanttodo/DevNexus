@@ -5,6 +5,7 @@
   import { showConfirm } from "../lib/confirm.svelte.js";
   import { getSearchQuery, setSearchQuery } from "../lib/stores.svelte.js";
   import { t } from "../lib/i18n.svelte.js";
+  import { friendlyError } from "../lib/errors.svelte.js";
 
   let groups = $state([]);
   let total = $state(0);
@@ -29,7 +30,7 @@
       groups = result.groups;
       total = result.total;
     } catch (err) {
-      error = err.message || "Failed to list processes";
+      error = friendlyError(err);
     } finally {
       loading = false;
       loadInProgress = false;
@@ -44,7 +45,7 @@
       showToast(msg, "success");
       await loadProcesses();
     } catch (err) {
-      showToast(`${t("process.kill_failed")}: ${err.message || err}`, "error");
+      showToast(`${t("process.kill_failed")}: ${friendlyError(err)}`, "error");
     } finally {
       killing = null;
     }
@@ -58,7 +59,7 @@
       showToast(msg, "success");
       await loadProcesses();
     } catch (err) {
-      showToast(`${t("process.kill_failed")}: ${err.message || err}`, "error");
+      showToast(`${t("process.kill_failed")}: ${friendlyError(err)}`, "error");
     } finally {
       killing = null;
     }
@@ -85,7 +86,7 @@
       }
       await loadProcesses();
     } catch (err) {
-      showToast(`${t("process.kill_failed")}: ${err.message || err}`, "error");
+      showToast(`${t("process.kill_failed")}: ${friendlyError(err)}`, "error");
     }
   }
 
@@ -96,7 +97,7 @@
       showToast(result, "success");
       await loadProcesses();
     } catch (err) {
-      showToast(`${t("process.kill_failed")}: ${err.message || err}`, "error");
+      showToast(`${t("process.kill_failed")}: ${friendlyError(err)}`, "error");
     }
   }
 
