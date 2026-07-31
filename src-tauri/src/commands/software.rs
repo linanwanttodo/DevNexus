@@ -125,6 +125,7 @@ const GUI_APPS: &[&str] = &[
 ];
 
 /// 安全获取软件版本：对 GUI 应用跳过，避免启动它们
+/// 仅在真正超时时返回 "timeout"；其余失败返回具体错误，避免误报
 async fn safe_get_version(cmd: &str) -> String {
     if GUI_APPS.contains(&cmd) {
         return "installed".to_string();
@@ -151,7 +152,17 @@ async fn safe_get_version(cmd: &str) -> String {
                 first_line.to_string()
             }
         }
-        _ => "timeout".to_string(),
+        Ok(Ok(Ok(output))) => {
+            let code = output
+                .status
+                .code()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "terminated by signal".to_string());
+            format!("version check failed (exit {})", code)
+        }
+        Ok(Ok(Err(e))) => format!("version check failed: {}", e),
+        Ok(Err(e)) => format!("version check failed: {}", e),
+        Err(_) => "timeout".to_string(),
     }
 }
 

@@ -473,15 +473,19 @@ pub fn add_password(
 
 /// 获取所有密码条目（不返回解密后的密码）
 #[tauri::command]
-pub fn list_passwords(state: tauri::State<'_, PasswordManager>) -> Vec<PasswordEntry> {
+pub fn list_passwords(
+    state: tauri::State<'_, PasswordManager>,
+) -> Result<Vec<PasswordEntry>, String> {
     if state.check_locked().is_err() {
-        return Vec::new();
+        return Err(
+            crate::utils::error::DevNexusError::Permission("vault is locked".to_string()).into(),
+        );
     }
     state
         .entries
         .lock()
         .map(|entries| entries.clone())
-        .unwrap_or_else(|_| Vec::new())
+        .map_err(|e| e.to_string())
 }
 
 /// 获取解密后的密码
