@@ -1,3 +1,4 @@
+use super::crypto::ApiKeyCipher;
 use super::types::{ApiProtocol, AppState, Provider};
 
 /// 添加 Provider（async，使用 tokio locks）
@@ -23,10 +24,11 @@ pub async fn add_provider(state: &AppState, provider: Provider) -> Result<(), St
         }
     }
 
-    // 2) 持久化到 SQLite（失败则向上传播错误）
+    // 2) 持久化到 SQLite（失败则向上传播错误）；api_key 存储边界加密
     {
         let db = state.db.lock().await;
         if let Some(ref conn) = *db {
+            let encrypted_key = state.api_key_cipher.encrypt(&provider.api_key)?;
             conn.execute(
                 "INSERT INTO providers (id, name, protocol, base_url, api_key, models, enabled, created_at, model_aliases, model_context_lengths)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
@@ -35,7 +37,7 @@ pub async fn add_provider(state: &AppState, provider: Provider) -> Result<(), St
                     provider.name,
                     provider.protocol.as_str(),
                     provider.base_url,
-                    provider.api_key,
+                    encrypted_key,
                     serde_json::to_string(&provider.models).unwrap_or_default(),
                     provider.enabled as i32,
                     provider.created_at,
@@ -78,7 +80,7 @@ pub async fn update_provider(state: &AppState, id: &str, provider: Provider) -> 
     // 前端列表中的 api_key 已脱敏；若传回的是空串或掩码，则保留原 key
     let keep_old_key = provider.api_key.is_empty() || provider.api_key.contains("••••");
     let api_key = if keep_old_key {
-        // 优先从内存取原 key；内存缺失（异常场景）时回退查询 DB
+        // 优先从内存取原 key（明文）；内存缺失（异常场景）时回退查询 DB（存储为密文，需解密还原）
         let mem_key = {
             let providers = state.providers.read().await;
             providers
@@ -99,6 +101,7 @@ pub async fn update_provider(state: &AppState, id: &str, provider: Provider) -> 
                         )
                         .ok()
                     })
+                    .map(|stored| state.api_key_cipher.decrypt(&stored))
                     .unwrap_or_default()
             }
         }
@@ -111,11 +114,12 @@ pub async fn update_provider(state: &AppState, id: &str, provider: Provider) -> 
         ..provider
     };
 
-    // 先持久化到数据库；影响行数为 0 说明 id 不存在
+    // 先持久化到数据库；影响行数为 0 说明 id 不存在；api_key 存储边界加密
     {
         let db = state.db.lock().await;
         match *db {
             Some(ref conn) => {
+                let encrypted_key = state.api_key_cipher.encrypt(&provider.api_key)?;
                 let affected = conn
                     .execute(
                         "UPDATE providers SET name=?1, protocol=?2, base_url=?3, api_key=?4, models=?5, enabled=?6, model_aliases=?7, model_context_lengths=?8 WHERE id=?9",
@@ -123,7 +127,7 @@ pub async fn update_provider(state: &AppState, id: &str, provider: Provider) -> 
                             provider.name,
                             provider.protocol.as_str(),
                             provider.base_url,
-                            provider.api_key,
+                            encrypted_key,
                             serde_json::to_string(&provider.models).unwrap_or_default(),
                             provider.enabled as i32,
                             serde_json::to_string(&provider.model_aliases).unwrap_or_else(|_| "{}".to_string()),
@@ -167,8 +171,11 @@ pub async fn update_provider(state: &AppState, id: &str, provider: Provider) -> 
     Ok(())
 }
 
-/// 从 SQLite 加载已保存的 Provider（启动时调用，同步上下文）
-pub fn load_providers_from_db_sync(conn: &rusqlite::Connection) -> Vec<Provider> {
+/// 从 SQLite 加载已保存的 Provider（启动时调用，同步上下文）；api_key 存储为密文，解密还原为明文
+pub fn load_providers_from_db_sync(
+    conn: &rusqlite::Connection,
+    cipher: &ApiKeyCipher,
+) -> Vec<Provider> {
     let mut stmt = match conn.prepare(
         "SELECT id, name, protocol, base_url, api_key, models, model_aliases, enabled, created_at, model_context_lengths FROM providers",
     ) {
@@ -193,7 +200,7 @@ pub fn load_providers_from_db_sync(conn: &rusqlite::Connection) -> Vec<Provider>
             name: row.get(1)?,
             protocol,
             base_url: row.get(3)?,
-            api_key: row.get(4)?,
+            api_key: cipher.decrypt(&row.get::<_, String>(4)?),
             models,
             model_aliases,
             model_context_lengths,

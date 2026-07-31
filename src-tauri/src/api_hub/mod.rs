@@ -2,6 +2,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 pub mod commands;
+pub mod crypto;
 pub mod fetch_models;
 pub mod forwarder;
 pub mod provider;
@@ -15,6 +16,9 @@ use types::AppState;
 
 /// 初始化 API Hub：创建共享状态（同步调用，在应用启动时执行）
 pub fn init(data_dir: &std::path::Path) -> AppState {
+    // API key 加密器（OS keyring → data_dir 文件兜底 → 明文降级）
+    let api_key_cipher = Arc::new(crypto::ApiKeyCipher::load_or_create(data_dir));
+
     // 初始化 SQLite
     let db_path = data_dir.join("api_hub.db");
     let conn = match rusqlite::Connection::open(&db_path) {
@@ -38,7 +42,7 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
     // 从数据库加载已保存的 Provider
     let providers = conn
         .as_ref()
-        .map(provider::load_providers_from_db_sync)
+        .map(|c| provider::load_providers_from_db_sync(c, &api_key_cipher))
         .unwrap_or_default();
 
     // 清理过期日志，并恢复最近日志到内存（重启后统计/日志不丢失）
@@ -67,6 +71,7 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
         db: Arc::new(tokio::sync::Mutex::new(conn)),
         http_client,
         running: Arc::new(AtomicBool::new(false)),
+        api_key_cipher,
     }
 }
 
