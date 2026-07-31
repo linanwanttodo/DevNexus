@@ -21,7 +21,7 @@ type VerifierState = Option<(Vec<u8>, Vec<u8>)>;
 pub struct PasswordManager {
     pub entries: Arc<Mutex<Vec<PasswordEntry>>>,
     pub next_id: Arc<Mutex<u32>>,
-    encryption_key: [u8; 32], // AES-256 key
+    encryption_key: Arc<Mutex<[u8; 32]>>, // AES-256 key
     pub locked: Arc<Mutex<bool>>,
     password_verifier: Arc<Mutex<VerifierState>>, // (salt, hash) for master password verification
 }
@@ -38,7 +38,7 @@ impl PasswordManager {
         let pm = Self {
             entries: entries.clone(),
             next_id,
-            encryption_key: key,
+            encryption_key: Arc::new(Mutex::new(key)),
             locked: Arc::new(Mutex::new(true)),
             password_verifier: Arc::new(Mutex::new(None)),
         };
@@ -223,7 +223,11 @@ impl PasswordManager {
 
     /// 加密数据
     fn encrypt(&self, data: &str) -> Result<String, String> {
-        let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
+        let key = self
+            .encryption_key
+            .lock()
+            .map_err(|e| format!("Encryption lock error: {}", e))?;
+        let cipher = Aes256Gcm::new_from_slice(&key[..])
             .map_err(|e| format!("Encryption error: {}", e))?;
 
         let nonce_bytes: [u8; 12] = rand::random();
@@ -253,7 +257,11 @@ impl PasswordManager {
         let (nonce_bytes, ciphertext) = combined.split_at(12);
         let nonce = Nonce::from_slice(nonce_bytes);
 
-        let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
+        let key = self
+            .encryption_key
+            .lock()
+            .map_err(|e| format!("Decryption lock error: {}", e))?;
+        let cipher = Aes256Gcm::new_from_slice(&key[..])
             .map_err(|e| format!("Decryption error: {}", e))?;
 
         let plaintext = cipher
@@ -261,6 +269,17 @@ impl PasswordManager {
             .map_err(|e| format!("Decryption error: {}", e))?;
 
         String::from_utf8(plaintext).map_err(|e| format!("UTF-8 error: {}", e))
+    }
+
+    /// 从系统钥匙串重新加载加密密钥（lock() 清零后，解锁时恢复）
+    fn restore_encryption_key(&self) -> Result<(), String> {
+        let key = Self::load_or_create_key();
+        let mut guard = self
+            .encryption_key
+            .lock()
+            .map_err(|e| format!("Encryption lock error: {}", e))?;
+        *guard = key;
+        Ok(())
     }
 
     /// 主密码验证器文件路径
@@ -384,6 +403,8 @@ pub fn unlock(
 
     // 解锁并加载条目
     *state.locked.lock().map_err(|e| e.to_string())? = false;
+    // 恢复加密密钥（lock() 已清零，解锁后重新从钥匙串加载）
+    state.restore_encryption_key()?;
     let _ = state.load_entries();
 
     Ok(true)
@@ -394,6 +415,12 @@ pub fn unlock(
 pub fn lock(state: tauri::State<'_, PasswordManager>) -> Result<(), String> {
     // 清空内存中的条目
     state.entries.lock().map_err(|e| e.to_string())?.clear();
+    // 清零 AES 密钥，避免密钥常驻内存
+    state
+        .encryption_key
+        .lock()
+        .map_err(|e| e.to_string())?
+        .fill(0);
     *state.locked.lock().map_err(|e| e.to_string())? = true;
     Ok(())
 }
@@ -648,11 +675,7 @@ pub fn load_from_file(
         .try_into()
         .map_err(|_| "Invalid salt".to_string())?;
 
-    let iterations = u32::from_le_bytes(
-        combined[16..20]
-            .try_into()
-            .map_err(|_| "Invalid iterations".to_string())?,
-    );
+    let iterations = parse_iterations(&combined)?;
 
     let nonce_bytes: [u8; 12] = combined[20..32]
         .try_into()
@@ -681,6 +704,27 @@ pub fn load_from_file(
     *stored_entries = entries;
 
     Ok(count)
+}
+
+/// 从二进制包中解析 PBKDF2 迭代次数（salt16 + iter4）并做区间校验
+fn parse_iterations(combined: &[u8]) -> Result<u32, String> {
+    if combined.len() < 20 {
+        return Err("Invalid or corrupted file format".to_string());
+    }
+
+    let iterations = u32::from_le_bytes(
+        combined[16..20]
+            .try_into()
+            .map_err(|_| "Invalid iterations".to_string())?,
+    );
+
+    const MIN_ITERATIONS: u32 = 10_000;
+    const MAX_ITERATIONS: u32 = 10_000_000; // 防止恶意文件构造超大迭代数 DoS
+    if !(MIN_ITERATIONS..=MAX_ITERATIONS).contains(&iterations) {
+        return Err("Invalid iterations count in file".to_string());
+    }
+
+    Ok(iterations)
 }
 
 /// CSV 转义辅助函数
@@ -774,5 +818,16 @@ mod tests {
     #[test]
     fn test_escape_csv_empty() {
         assert_eq!(escape_csv(""), "");
+    }
+
+    #[test]
+    fn test_parse_iterations_rejects_huge() {
+        let mut data = vec![0u8; 20];
+        data[16..20].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(parse_iterations(&data).is_err());
+        data[16..20].copy_from_slice(&1u32.to_le_bytes());
+        assert!(parse_iterations(&data).is_err());
+        data[16..20].copy_from_slice(&600_000u32.to_le_bytes());
+        assert_eq!(parse_iterations(&data), Ok(600_000));
     }
 }
