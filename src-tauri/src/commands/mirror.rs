@@ -655,13 +655,15 @@ pub fn list_mirrors() -> Vec<MirrorGroup> {
     ]
 }
 
+/// 测试镜像延迟：成功返回 Ok(延迟ms)，失败返回 Err（区分超时与其他错误）。
+/// 返回类型保持数值便于前端展示，失败通过 Err 表达，不再用 0 混淆"超时/错误"与真实延迟。
 #[tauri::command]
-pub async fn test_mirror_latency(url: String) -> i64 {
+pub async fn test_mirror_latency(url: String) -> Result<i64, String> {
     {
         if let Ok(cache) = LATENCY_CACHE.read() {
             if let Some(&(latency, cached_at)) = cache.get(&url) {
                 if cached_at.elapsed().as_secs() < 60 {
-                    return latency;
+                    return Ok(latency);
                 }
             }
         } else {
@@ -676,7 +678,7 @@ pub async fn test_mirror_latency(url: String) -> i64 {
         .build()
     {
         Ok(c) => c,
-        Err(_) => return 0,
+        Err(e) => return Err(format!("failed to build HTTP client: {}", e)),
     };
 
     let status_ok = |s: u16| matches!(s, 200..=299 | 401 | 403 | 405);
@@ -689,14 +691,17 @@ pub async fn test_mirror_latency(url: String) -> i64 {
                 ms
             }
         }
-        _ => 0,
+        Ok(resp) => return Err(format!("mirror returned HTTP {}", resp.status())),
+        Err(e) if e.is_timeout() => return Err("timeout".to_string()),
+        Err(e) => return Err(format!("failed to reach mirror: {}", e)),
     };
 
+    // 仅缓存成功结果，避免把错误/超时作为 0 混入缓存
     if let Ok(mut cache) = LATENCY_CACHE.write() {
         cache.insert(url, (latency, Instant::now()));
     }
 
-    latency
+    Ok(latency)
 }
 
 #[tauri::command]
