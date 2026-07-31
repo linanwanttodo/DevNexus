@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { t } from "../lib/i18n.svelte.js";
   import { navigate } from "../lib/stores.svelte.js";
+  import { friendlyError } from "../lib/errors.svelte.js";
 
   let systemInfo = $state(null);
   let resourceUsage = $state(null);
@@ -23,7 +24,7 @@
       systemInfo = await invoke("get_system_info");
       resourceUsage = await invoke("get_resource_usage");
     } catch (err) {
-      error = err.message || "Failed to load system information";
+      error = friendlyError(err);
     } finally {
       loading = false;
     }

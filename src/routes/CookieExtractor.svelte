@@ -5,6 +5,7 @@
   import { showConfirm } from "../lib/confirm.svelte.js";
   import BrandIcons from "../icons/BrandIcons.svelte";
   import { t } from "../lib/i18n.svelte.js";
+  import { friendlyError } from "../lib/errors.svelte.js";
 
   const MAX_DISPLAY = 500;
   let browsers = $state([]);
@@ -48,7 +49,7 @@
         maxResults: null,
       });
     } catch (err) {
-      showToast(t('cookies.extract_failed').replace('{error}', err.message || err));
+      showToast(t('cookies.extract_failed').replace('{error}', friendlyError(err)));
       cookies = [];
     } finally {
       extracting = false;
@@ -66,7 +67,7 @@
       downloadFile(content, `cookies_${selectedBrowser.toLowerCase()}.txt`, 'text/plain');
       showToast(t('cookies.export_netscape_ok'));
     } catch (err) {
-      showToast(t('cookies.export_failed').replace('{error}', err.message || err));
+      showToast(t('cookies.export_failed').replace('{error}', friendlyError(err)));
     }
   }
 
@@ -81,7 +82,7 @@
       downloadFile(content, `cookies_${selectedBrowser.toLowerCase()}.json`, 'application/json');
       showToast(t('cookies.export_json_ok'));
     } catch (err) {
-      showToast(t('cookies.export_failed').replace('{error}', err.message || err));
+      showToast(t('cookies.export_failed').replace('{error}', friendlyError(err)));
     }
   }
 

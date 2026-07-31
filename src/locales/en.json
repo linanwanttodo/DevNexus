@@ -6,6 +6,12 @@
     "dismiss": "Dismiss",
     "details": "Error details"
   },
+  "errors": {
+    "vault_locked": "Vault is locked",
+    "provider_exists": "Provider already exists",
+    "already_exists": "Already exists",
+    "invalid_version": "Invalid version string"
+  },
   "version": "Version",
   "search": "Search...",
   "search_ports": "Search ports, processes...",

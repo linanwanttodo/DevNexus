@@ -5,6 +5,7 @@
   import { showConfirm } from "../lib/confirm.svelte.js";
   import { getSearchQuery, setSearchQuery } from "../lib/stores.svelte.js";
   import { t, tFormat } from "../lib/i18n.svelte.js";
+  import { friendlyError } from "../lib/errors.svelte.js";
 
   let apps = $state([]);
   let loading = $state(true);
@@ -27,7 +28,7 @@
       error = null;
       apps = await invoke("list_installed_apps");
     } catch (err) {
-      error = err.message || "Failed to list installed apps";
+      error = friendlyError(err);
     } finally {
       loading = false;
     }
@@ -44,7 +45,7 @@
       await scanResidues(app, true);
       await loadApps();
     } catch (err) {
-      showToast(`Uninstall failed: ${err.message || err}`);
+      showToast(`Uninstall failed: ${friendlyError(err)}`);
       // Even if uninstall failed, offer to scan & clean residues
       await scanResidues(app, true);
     } finally {
@@ -72,7 +73,7 @@
       selectedResidues = newSel;
       await loadApps();
     } catch (err) {
-      showToast(`Force uninstall failed: ${err.message || err}`);
+      showToast(`Force uninstall failed: ${friendlyError(err)}`);
     } finally {
       uninstalling = null;
     }
@@ -93,8 +94,8 @@
       }
       selectedResidues[app.name] = sel;
     } catch (err) {
-      scanErrors[app.name] = err.message || err;
-      if (!auto) showToast(`Scan failed: ${err.message || err}`);
+      scanErrors[app.name] = friendlyError(err);
+      if (!auto) showToast(`Scan failed: ${friendlyError(err)}`);
     } finally {
       scanning = null;
     }
@@ -175,7 +176,7 @@
       // Re-scan after cleaning
       await scanResidues({ name: appName });
     } catch (err) {
-      showToast(`Cleanup failed: ${err.message || err}`);
+      showToast(`Cleanup failed: ${friendlyError(err)}`);
     } finally {
       cleaningResidues = null;
     }

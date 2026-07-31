@@ -4,6 +4,7 @@
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
   import { t, tFormat, getLang } from "../lib/i18n.svelte.js";
+  import { friendlyError } from "../lib/errors.svelte.js";
   import ProviderForm from "../components/hub/ProviderForm.svelte";
 
   let activeTab = $state("stats");
@@ -40,7 +41,7 @@
         invoke("api_hub_status"),
       ]);
       providers = p; logs = l; stats = s; status = st;
-    } catch (err) { error = err.message || String(err); }
+    } catch (err) { error = friendlyError(err); }
     finally { loading = false; }
   }
   async function loadStats() {
@@ -69,7 +70,7 @@
       if (isEdit) { await invoke("api_hub_update_provider", { id: data.id, provider: data }); showToast(t("apiHub.toast.updated")); }
       else { await invoke("api_hub_add_provider", { provider: data }); showToast(t("apiHub.toast.added")); }
       showForm = false; editingId = null; providers = await invoke("api_hub_list_providers");
-    } catch (err) { showToast(tFormat("apiHub.toast.error", { error: err.message || String(err) }), "error"); }
+    } catch (err) { showToast(tFormat("apiHub.toast.error", { error: friendlyError(err) }), "error"); }
   }
   async function deleteProvider(id) {
     const p = providers.find(x => x.id === id);
@@ -79,7 +80,7 @@
       await invoke("api_hub_delete_provider", { id });
       showToast(t("apiHub.toast.deleted"));
       providers = await invoke("api_hub_list_providers");
-    } catch (err) { showToast(tFormat("apiHub.toast.deleteFailed", { error: err.message || String(err) }), "error"); }
+    } catch (err) { showToast(tFormat("apiHub.toast.deleteFailed", { error: friendlyError(err) }), "error"); }
   }
 
   function protocolName(id) { return protocolOptions.find(p => p.id === id)?.label || id; }

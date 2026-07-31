@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
   import { t } from "../lib/i18n.svelte.js";
+  import { friendlyError } from "../lib/errors.svelte.js";
   import VaultDialog from "../components/VaultDialog.svelte";
 
   let locked = $state(true);
@@ -40,7 +41,7 @@ import { invoke } from "@tauri-apps/api/core";
       hasMasterPassword = hasPwd;
     } catch (err) {
       console.error("Failed to check password manager state:", err);
-      showToast(t('common.error_msg').replace('{error}', err.message || err), "error");
+      showToast(t('common.error_msg').replace('{error}', friendlyError(err)), "error");
     }
   }
 
@@ -63,7 +64,7 @@ import { invoke } from "@tauri-apps/api/core";
       await loadPasswords();
       showToast(t('common.master_set_ok'));
     } catch (err) {
-      showToast(t('common.set_master_failed').replace('{error}', err.message || err));
+      showToast(t('common.set_master_failed').replace('{error}', friendlyError(err)));
     }
   }
 
@@ -81,7 +82,7 @@ import { invoke } from "@tauri-apps/api/core";
         showToast(t('common.incorrect'));
       }
     } catch (err) {
-      showToast(t('common.unlock_failed').replace('{error}', err.message || err));
+      showToast(t('common.unlock_failed').replace('{error}', friendlyError(err)));
     }
   }
 
@@ -128,7 +129,7 @@ import { invoke } from "@tauri-apps/api/core";
       await loadPasswords();
       showToast(t('passwords.add_success'));
     } catch (err) {
-      showToast(t('passwords.add_failed').replace('{error}', err.message || err));
+      showToast(t('passwords.add_failed').replace('{error}', friendlyError(err)));
     }
   }
 
@@ -139,7 +140,7 @@ import { invoke } from "@tauri-apps/api/core";
       await invoke("delete_password", { id });
       await loadPasswords();
     } catch (err) {
-      showToast(t('passwords.delete_failed').replace('{error}', err.message || err));
+      showToast(t('passwords.delete_failed').replace('{error}', friendlyError(err)));
     }
   }
 
@@ -171,7 +172,7 @@ import { invoke } from "@tauri-apps/api/core";
       await loadPasswords();
       showToast(t('passwords.edit_success'));
     } catch (err) {
-      showToast(t('passwords.edit_failed').replace('{error}', err.message || err));
+      showToast(t('passwords.edit_failed').replace('{error}', friendlyError(err)));
     }
   }
 
@@ -180,7 +181,7 @@ import { invoke } from "@tauri-apps/api/core";
       const pwd = await invoke("get_password", { id });
       showPassword = { id, password: pwd };
     } catch (err) {
-      showToast(t('passwords.view_failed').replace('{error}', err.message || err));
+      showToast(t('passwords.view_failed').replace('{error}', friendlyError(err)));
     }
   }
 
@@ -201,7 +202,7 @@ import { invoke } from "@tauri-apps/api/core";
       
       showToast(t('passwords.export_success'));
     } catch (err) {
-      showToast(t('passwords.export_failed').replace('{error}', err.message || err));
+      showToast(t('passwords.export_failed').replace('{error}', friendlyError(err)));
     }
   }
 
@@ -216,7 +217,7 @@ import { invoke } from "@tauri-apps/api/core";
       showToast(t('passwords.import_success').replace('{count}', count));
       event.target.value = ''; // 重置文件输入
     } catch (err) {
-      showToast(t('passwords.import_failed').replace('{error}', err.message || err));
+      showToast(t('passwords.import_failed').replace('{error}', friendlyError(err)));
     }
   }
 
@@ -234,7 +235,7 @@ import { invoke } from "@tauri-apps/api/core";
       });
       showToast(t('passwords.save_success'));
     } catch (err) {
-      showToast(t('passwords.save_failed').replace('{error}', err.message || err));
+      showToast(t('passwords.save_failed').replace('{error}', friendlyError(err)));
     }
   }
 
@@ -253,7 +254,7 @@ import { invoke } from "@tauri-apps/api/core";
       await loadPasswords();
       showToast(t('passwords.load_success').replace('{count}', count));
     } catch (err) {
-      showToast(t('passwords.load_failed').replace('{error}', err.message || err));
+      showToast(t('passwords.load_failed').replace('{error}', friendlyError(err)));
     }
   }
 

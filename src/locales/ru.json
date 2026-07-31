@@ -6,6 +6,12 @@
     "dismiss": "Закрыть",
     "details": "Детали ошибки"
   },
+  "errors": {
+    "vault_locked": "Хранилище заблокировано",
+    "provider_exists": "Провайдер уже существует",
+    "already_exists": "Уже существует",
+    "invalid_version": "Недопустимая строка версии"
+  },
   "version": "Версия",
   "search": "Поиск...",
   "search_ports": "Поиск портов, процессов...",

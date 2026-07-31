@@ -5,6 +5,7 @@
   import { showConfirm } from "../lib/confirm.svelte.js";
   import { navigate } from "../lib/stores.svelte.js";
   import { t, tFormat } from "../lib/i18n.svelte.js";
+  import { friendlyError } from "../lib/errors.svelte.js";
   import BrandIcons from "../icons/BrandIcons.svelte";
 
   let selectedCategory = $state("all");
@@ -95,7 +96,7 @@
       error = null;
       software = await invoke("list_software");
     } catch (err) {
-      error = err.message || "Failed to load software list";
+      error = friendlyError(err);
       console.error("Error loading software:", err);
     } finally {
       loading = false;
@@ -136,7 +137,7 @@
         showToast(result);
         await loadSoftware();
       } catch (err) {
-        showToast(t('common.install_failed').replace('{error}', err.message || err));
+        showToast(t('common.install_failed').replace('{error}', friendlyError(err)));
       } finally {
         installing = false;
         currentItem = null;
@@ -159,7 +160,7 @@
         showToast(result);
         await loadSoftware();
       } catch (err) {
-        showToast(t('common.uninstall_failed').replace('{error}', err.message || err));
+        showToast(t('common.uninstall_failed').replace('{error}', friendlyError(err)));
       } finally {
         installing = false;
         currentItem = null;

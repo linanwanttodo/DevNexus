@@ -5,6 +5,7 @@
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
   import { t, tFormat } from "../lib/i18n.svelte.js";
+  import { friendlyError } from "../lib/errors.svelte.js";
 
   let environments = $state([]);
   let loading = $state(true);
@@ -37,7 +38,7 @@
       error = null;
       environments = await invoke("list_environments");
     } catch (err) {
-      error = err.message || t('common.error');
+      error = friendlyError(err);
       console.error("Error loading environments:", err);
     } finally {
       loading = false;
@@ -55,7 +56,7 @@
       const msg = await invoke("save_export_file", { path: filePath });
       showToast(msg, "success");
     } catch (err) {
-      showToast(t('common.error_msg').replace('{error}', err.message || err), "error");
+      showToast(t('common.error_msg').replace('{error}', friendlyError(err)), "error");
     }
   }
 
@@ -85,7 +86,7 @@
       });
     } catch (err) {
       console.error(`Error loading versions for ${env.name}:`, err);
-      showToast(t('common.error_msg').replace('{error}', err.message || err));
+      showToast(t('common.error_msg').replace('{error}', friendlyError(err)));
       versionsMap[env.name] = [];
     } finally {
       loadingVersions[env.name] = false;
@@ -140,7 +141,7 @@
       // 刷新环境列表（更新显示版本号）
       await loadEnvironments();
     } catch (err) {
-      showToast(t('common.error_msg').replace('{error}', err.message || err));
+      showToast(t('common.error_msg').replace('{error}', friendlyError(err)));
     } finally {
       switchingVersion[env.name] = false;
     }
@@ -156,7 +157,7 @@
       showToast(result);
       await loadEnvironments();
     } catch (err) {
-      showToast(t('common.error_msg').replace('{error}', err.message || err));
+      showToast(t('common.error_msg').replace('{error}', friendlyError(err)));
     }
   }
 
@@ -172,7 +173,7 @@
       showToast(result);
       await loadEnvironments();
     } catch (err) {
-      showToast(t('common.error_msg').replace('{error}', err.message || err));
+      showToast(t('common.error_msg').replace('{error}', friendlyError(err)));
     }
   }
 
@@ -200,7 +201,7 @@
       newEnvPath = "";
       await loadEnvironments();
     } catch (err) {
-      showToast(t('common.error_msg').replace('{error}', err.message || err));
+      showToast(t('common.error_msg').replace('{error}', friendlyError(err)));
     } finally {
       creating = false;
     }
