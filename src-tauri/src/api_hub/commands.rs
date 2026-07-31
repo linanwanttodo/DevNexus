@@ -106,5 +106,6 @@ pub async fn api_hub_fetch_models(
         api_key
     };
 
-    super::fetch_models::fetch_models_from_provider(&base_url, &api_key, &pt).await
+    super::fetch_models::fetch_models_from_provider(&state.http_client, &base_url, &api_key, &pt)
+        .await
 }
