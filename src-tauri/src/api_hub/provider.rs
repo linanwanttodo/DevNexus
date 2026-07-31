@@ -71,42 +71,83 @@ pub async fn delete_provider(state: &AppState, id: &str) -> Result<(), String> {
 }
 
 /// 更新 Provider（先写 DB，成功后更新内存）
+///
+/// api_key 传回空串或掩码（`••••`，来自前端脱敏列表）时保留原 key（C6）；
+/// id 不存在时返回 Err（DB 影响行数为 0）。
 pub async fn update_provider(state: &AppState, id: &str, provider: Provider) -> Result<(), String> {
-    // 前端列表中的 api_key 已脱敏；若传回的仍是掩码，则保留原 key
-    let provider = if provider.api_key.contains("••••") {
-        let providers = state.providers.read().await;
-        let old_key = providers
-            .iter()
-            .find(|p| p.id == id)
-            .map(|p| p.api_key.clone())
-            .unwrap_or_default();
-        Provider {
-            api_key: old_key,
-            ..provider
+    // 前端列表中的 api_key 已脱敏；若传回的是空串或掩码，则保留原 key
+    let keep_old_key = provider.api_key.is_empty() || provider.api_key.contains("••••");
+    let api_key = if keep_old_key {
+        // 优先从内存取原 key；内存缺失（异常场景）时回退查询 DB
+        let mem_key = {
+            let providers = state.providers.read().await;
+            providers
+                .iter()
+                .find(|p| p.id == id)
+                .map(|p| p.api_key.clone())
+        };
+        match mem_key {
+            Some(k) => k,
+            None => {
+                let db = state.db.lock().await;
+                db.as_ref()
+                    .and_then(|conn| {
+                        conn.query_row(
+                            "SELECT api_key FROM providers WHERE id = ?1",
+                            rusqlite::params![id],
+                            |row| row.get::<_, String>(0),
+                        )
+                        .ok()
+                    })
+                    .unwrap_or_default()
+            }
         }
     } else {
-        provider
+        provider.api_key
     };
 
-    // 先持久化到数据库
+    let provider = Provider {
+        api_key,
+        ..provider
+    };
+
+    // 先持久化到数据库；影响行数为 0 说明 id 不存在
     {
         let db = state.db.lock().await;
-        if let Some(ref conn) = *db {
-            conn.execute(
-                "UPDATE providers SET name=?1, protocol=?2, base_url=?3, api_key=?4, models=?5, enabled=?6, model_aliases=?7, model_context_lengths=?8 WHERE id=?9",
-                rusqlite::params![
-                    provider.name,
-                    provider.protocol.as_str(),
-                    provider.base_url,
-                    provider.api_key,
-                    serde_json::to_string(&provider.models).unwrap_or_default(),
-                    provider.enabled as i32,
-                    serde_json::to_string(&provider.model_aliases).unwrap_or_else(|_| "{}".to_string()),
-                    serde_json::to_string(&provider.model_context_lengths).unwrap_or_else(|_| "{}".to_string()),
-                    id,
-                ],
-            )
-            .map_err(|e| format!("Database error: {}", e))?;
+        match *db {
+            Some(ref conn) => {
+                let affected = conn
+                    .execute(
+                        "UPDATE providers SET name=?1, protocol=?2, base_url=?3, api_key=?4, models=?5, enabled=?6, model_aliases=?7, model_context_lengths=?8 WHERE id=?9",
+                        rusqlite::params![
+                            provider.name,
+                            provider.protocol.as_str(),
+                            provider.base_url,
+                            provider.api_key,
+                            serde_json::to_string(&provider.models).unwrap_or_default(),
+                            provider.enabled as i32,
+                            serde_json::to_string(&provider.model_aliases).unwrap_or_else(|_| "{}".to_string()),
+                            serde_json::to_string(&provider.model_context_lengths).unwrap_or_else(|_| "{}".to_string()),
+                            id,
+                        ],
+                    )
+                    .map_err(|e| format!("Database error: {}", e))?;
+                if affected == 0 {
+                    return Err(format!("Provider not found: {}", id));
+                }
+            }
+            None => {
+                // DB 不可用（降级模式）：仅凭内存判断存在性，避免静默成功
+                let exists = state
+                    .providers
+                    .read()
+                    .await
+                    .iter()
+                    .any(|p| p.id == id);
+                if !exists {
+                    return Err(format!("Provider not found: {}", id));
+                }
+            }
         }
     }
 
