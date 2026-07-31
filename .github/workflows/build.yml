@@ -16,8 +16,13 @@ concurrency:
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: 私钥口令（仅存于 Secrets，禁止写入仓库任何文件）
 
 env:
-  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+  # 签名密钥仅在可信触发（push 到 main 或 tag）注入——该上下文携带仓库 Secrets。
+  # fork/PR 的 pull_request 事件不暴露 Secrets：即便注入空字符串，tauri CLI 的
+  # updater 签名步骤也会失败，因此无密钥时在 Build Tauri 步骤用 --config 关闭
+  # bundle.createUpdaterArtifacts，跳过 updater 签名产物（HAS_SIGNING_KEY 复用）。
+  HAS_SIGNING_KEY: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
+  TAURI_SIGNING_PRIVATE_KEY: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))) && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))) && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
 
 jobs:
   # ============================================================
@@ -27,6 +32,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-${{ hashFiles('.github/workflows/build.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-
 
       - name: Install system dependencies
         run: |
@@ -63,7 +76,24 @@ jobs:
         run: echo "TAURI_SIGNING_PRIVATE_KEY already set via workflow env"
 
       - name: Setup pnpm
-        run: npm install -g pnpm@9
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set pnpm store directory
+        id: pnpm-store
+        run: |
+          STORE_DIR="${RUNNER_TEMP//\\//}/.pnpm-store"
+          pnpm config set store-dir "$STORE_DIR"
+          echo "store-dir=$STORE_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.store-dir }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
@@ -72,7 +102,13 @@ jobs:
         run: pnpm check
 
       - name: Build Tauri
-        run: pnpm tauri build --bundles deb,appimage
+        run: |
+          if [ "$HAS_SIGNING_KEY" = "true" ]; then
+            pnpm tauri build --bundles deb,appimage
+          else
+            echo "::warning::No TAURI_SIGNING_PRIVATE_KEY for this event — building without updater signature artifacts"
+            pnpm tauri build --bundles deb,appimage --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          fi
 
       - name: Collect signature & updater archives
         run: |
@@ -121,10 +157,33 @@ jobs:
           node-version: 22
 
       - name: Install create-dmg (for DMG bundling)
-        run: brew install create-dmg || true
+        run: |
+          brew install create-dmg || true
+          if command -v create-dmg >/dev/null 2>&1; then
+            echo "create-dmg available: $(command -v create-dmg)"
+          else
+            echo "::warning::create-dmg could not be installed — DMG bundling may fail"
+          fi
 
       - name: Setup pnpm
-        run: npm install -g pnpm@9
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set pnpm store directory
+        id: pnpm-store
+        run: |
+          STORE_DIR="${RUNNER_TEMP//\\//}/.pnpm-store"
+          pnpm config set store-dir "$STORE_DIR"
+          echo "store-dir=$STORE_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.store-dir }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -152,7 +211,13 @@ jobs:
         run: pnpm check
 
       - name: Build Tauri
-        run: pnpm tauri build --target ${{ matrix.target }} --bundles dmg,app
+        run: |
+          if [ "$HAS_SIGNING_KEY" = "true" ]; then
+            pnpm tauri build --target ${{ matrix.target }} --bundles dmg,app
+          else
+            echo "::warning::No TAURI_SIGNING_PRIVATE_KEY for this event — building without updater signature artifacts"
+            pnpm tauri build --target ${{ matrix.target }} --bundles dmg,app --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          fi
 
       - name: Collect signature & updater archives
         run: |
@@ -225,8 +290,29 @@ jobs:
         run: echo "TAURI_SIGNING_PRIVATE_KEY already set via workflow env"
         shell: bash
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: |
+          STORE_DIR="${RUNNER_TEMP//\\//}/.pnpm-store"
+          pnpm config set store-dir "$STORE_DIR"
+          echo "store-dir=$STORE_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.store-dir }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
       - name: Install frontend deps
-        run: npm install -g pnpm@9 && pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
         shell: bash
 
       - name: Type-check frontend
@@ -234,7 +320,13 @@ jobs:
         shell: bash
 
       - name: Build Tauri
-        run: pnpm tauri build --bundles msi,nsis
+        run: |
+          if [ "$HAS_SIGNING_KEY" = "true" ]; then
+            pnpm tauri build --bundles msi,nsis
+          else
+            echo "::warning::No TAURI_SIGNING_PRIVATE_KEY for this event — building without updater signature artifacts"
+            pnpm tauri build --bundles msi,nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          fi
         shell: bash
 
       - name: Collect signature & updater archives
