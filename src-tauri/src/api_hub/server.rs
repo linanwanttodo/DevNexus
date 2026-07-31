@@ -306,7 +306,10 @@ async fn handle_streaming(
     let headers = resp.headers().clone();
 
     // Determine if we need format conversion
-    let direction = determine_stream_direction(client, route.provider.protocol);
+    let direction = match determine_stream_direction(client, route.provider.protocol) {
+        Ok(d) => d,
+        Err(e) => return error_response(501, &e),
+    };
 
     // 在上游字节流上包一层 usage 捕获：流结束后回填 token 用量到日志
     let byte_stream = capture_usage_stream(resp.bytes_stream(), state.clone(), log_id);
@@ -351,11 +354,13 @@ async fn handle_streaming(
 }
 
 /// Determine if cross-protocol stream conversion is needed.
-/// Returns None if same protocol (passthrough), Some(direction) if conversion needed.
+/// Returns Ok(None) if same protocol (passthrough), Ok(Some(direction)) if conversion needed,
+/// Err(reason) if the requested cross-protocol streaming conversion is not supported
+/// (explicit error instead of silent degradation).
 fn determine_stream_direction(
     client: ClientFormat,
     provider_protocol: ApiProtocol,
-) -> Option<StreamDirection> {
+) -> Result<Option<StreamDirection>, String> {
     let client_protocol = match client {
         ClientFormat::OpenAIChat => ApiProtocol::OpenAIChat,
         ClientFormat::OpenAIResponses => ApiProtocol::OpenAIResponses,
@@ -363,7 +368,7 @@ fn determine_stream_direction(
     };
 
     if client_protocol == provider_protocol {
-        return None; // Same protocol, passthrough
+        return Ok(None); // Same protocol, passthrough
     }
 
     // Provider produces in its protocol format; we need to convert to client format.
@@ -373,33 +378,39 @@ fn determine_stream_direction(
     match (provider_protocol, client_protocol) {
         // Provider is OpenAI Chat, Client wants Anthropic
         (ApiProtocol::OpenAIChat, ApiProtocol::Anthropic) => {
-            Some(StreamDirection::OpenAIChatToAnthropic)
+            Ok(Some(StreamDirection::OpenAIChatToAnthropic))
         }
         // Provider is OpenAI Chat, Client wants Responses
         (ApiProtocol::OpenAIChat, ApiProtocol::OpenAIResponses) => {
-            Some(StreamDirection::OpenAIChatToResponses)
+            Ok(Some(StreamDirection::OpenAIChatToResponses))
         }
         // Provider is Anthropic, Client wants OpenAI Chat
         (ApiProtocol::Anthropic, ApiProtocol::OpenAIChat) => {
-            Some(StreamDirection::AnthropicToOpenAIChat)
+            Ok(Some(StreamDirection::AnthropicToOpenAIChat))
         }
         // Provider is Anthropic, Client wants Responses
-        // Two-step: Anthropic → OpenAI Chat → Responses
-        // For simplicity, use Anthropic → OpenAI Chat (client gets OpenAI Chat which is close enough)
-        (ApiProtocol::Anthropic, ApiProtocol::OpenAIResponses) => {
-            // Convert to OpenAI Chat first (closest available)
-            Some(StreamDirection::AnthropicToOpenAIChat)
-        }
+        // 需要的级联转换（Anthropic → OpenAI Chat → Responses）未实现；此前降级为
+        // Anthropic → OpenAI Chat 会让客户端收到 chat.completion.chunk 流，破坏
+        // Responses 协议契约，因此显式报错而不是静默降级。
+        (ApiProtocol::Anthropic, ApiProtocol::OpenAIResponses) => Err(format!(
+            "Streaming conversion {} -> {} is not supported",
+            provider_protocol.as_str(),
+            client_protocol.as_str()
+        )),
         // Provider is Responses, Client wants OpenAI Chat
         (ApiProtocol::OpenAIResponses, ApiProtocol::OpenAIChat) => {
-            Some(StreamDirection::ResponsesToOpenAIChat)
+            Ok(Some(StreamDirection::ResponsesToOpenAIChat))
         }
         // Provider is Responses, Client wants Anthropic
-        (ApiProtocol::OpenAIResponses, ApiProtocol::Anthropic) => {
-            // Convert to OpenAI Chat first
-            Some(StreamDirection::ResponsesToOpenAIChat)
-        }
-        _ => None,
+        // 需要的级联转换（Responses → OpenAI Chat → Anthropic）未实现；此前降级为
+        // Responses → OpenAI Chat 会让客户端收到 chat.completion.chunk 流，破坏
+        // Anthropic 协议契约，因此显式报错而不是静默降级。
+        (ApiProtocol::OpenAIResponses, ApiProtocol::Anthropic) => Err(format!(
+            "Streaming conversion {} -> {} is not supported",
+            provider_protocol.as_str(),
+            client_protocol.as_str()
+        )),
+        _ => Ok(None),
     }
 }
 
