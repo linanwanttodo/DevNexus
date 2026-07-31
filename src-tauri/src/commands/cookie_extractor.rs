@@ -156,7 +156,7 @@ mod tests {
         plaintext.extend_from_slice(&hash);
         plaintext.extend_from_slice(payload);
 
-        let mut enc = Aes128CbcEnc::new_from_slices(&key, &iv).unwrap();
+        let enc = Aes128CbcEnc::new_from_slices(&key, &iv).unwrap();
         let mut out_buf = vec![0u8; plaintext.len() + 16];
         let ciphertext = enc
             .encrypt_padded_b2b_mut::<aes::cipher::block_padding::Pkcs7>(
@@ -173,7 +173,7 @@ mod tests {
         // 篡改: 明文前 32 字节哈希被改 → Err("Integrity check failed")
         let mut tampered = plaintext.clone();
         tampered[0] ^= 0xff;
-        let mut enc2 = Aes128CbcEnc::new_from_slices(&key, &iv).unwrap();
+        let enc2 = Aes128CbcEnc::new_from_slices(&key, &iv).unwrap();
         let mut tampered_buf = vec![0u8; tampered.len() + 16];
         let tampered_ciphertext = enc2
             .encrypt_padded_b2b_mut::<aes::cipher::block_padding::Pkcs7>(
@@ -610,7 +610,7 @@ fn map_chrome_cookie_row(
                 rusqlite::Error::FromSqlConversionFailure(
                     1,
                     rusqlite::types::Type::Blob,
-                    Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)),
+                    Box::new(std::io::Error::other(e)),
                 )
             })?,
         domain: host_key,
@@ -754,36 +754,36 @@ fn read_cookies(
     if table == "moz_cookies" {
         let map_fn = map_firefox_cookie_row;
         if let Some(ref p) = param {
-            let mut rows = stmt
+            let rows = stmt
                 .query_map([p.as_str()], map_fn)
                 .map_err(|e| format!("Query failed: {}", e))?;
-            while let Some(row) = rows.next() {
+            for row in rows {
                 cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
             }
         } else {
-            let mut rows = stmt
+            let rows = stmt
                 .query_map([], map_fn)
                 .map_err(|e| format!("Query failed: {}", e))?;
-            while let Some(row) = rows.next() {
+            for row in rows {
                 cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
             }
         }
     } else {
         // Chrome/Edge — 传递 has_integrity_check 到 map 闭包
         if let Some(ref p) = param {
-            let mut rows = stmt
+            let rows = stmt
                 .query_map([p.as_str()], |row| {
                     map_chrome_cookie_row(row, has_integrity_check)
                 })
                 .map_err(|e| format!("Query failed: {}", e))?;
-            while let Some(row) = rows.next() {
+            for row in rows {
                 cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
             }
         } else {
-            let mut rows = stmt
+            let rows = stmt
                 .query_map([], |row| map_chrome_cookie_row(row, has_integrity_check))
                 .map_err(|e| format!("Query failed: {}", e))?;
-            while let Some(row) = rows.next() {
+            for row in rows {
                 cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
             }
         }

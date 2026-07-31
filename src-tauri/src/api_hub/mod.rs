@@ -38,7 +38,7 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
     // 从数据库加载已保存的 Provider
     let providers = conn
         .as_ref()
-        .map(|c| provider::load_providers_from_db_sync(c))
+        .map(provider::load_providers_from_db_sync)
         .unwrap_or_default();
 
     // 清理过期日志，并恢复最近日志到内存（重启后统计/日志不丢失）
