@@ -50,13 +50,16 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
         })
         .unwrap_or_default();
 
-    // 创建全局 HTTP Client（复用连接池）
+    // 创建全局 HTTP Client（复用连接池）；构建失败时降级到默认 Client，避免启动 panic
     let http_client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(60))
         .pool_max_idle_per_host(10)
         .build()
-        .expect("Failed to create HTTP client");
+        .unwrap_or_else(|e| {
+            eprintln!("[API Hub] Failed to build HTTP client, using default: {}", e);
+            reqwest::Client::new()
+        });
 
     AppState {
         providers: Arc::new(tokio::sync::RwLock::new(providers)),

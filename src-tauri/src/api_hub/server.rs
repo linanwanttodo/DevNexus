@@ -143,15 +143,17 @@ async fn handle_unified(
         .unwrap_or(false);
 
     // 1. 客户端格式 → 内部 OpenAIChat 格式
+    //    转换失败源于客户端输入（请求体非法/格式不支持）→ 400，而非 5xx
     let internal_req = match client_request_to_internal(client, &body) {
         Ok(b) => b,
-        Err(e) => return error_response(500, &e),
+        Err(e) => return error_response(400, &e),
     };
 
     // 2. 内部格式 → Provider 协议格式
+    //    转换失败源于客户端输入解析（如非法 OpenAI 请求）→ 400
     let upstream_body = match internal_request_to_provider(&internal_req, &route) {
         Ok(b) => b,
-        Err(e) => return error_response(500, &e),
+        Err(e) => return error_response(400, &e),
     };
 
     let endpoint = route.provider.protocol.endpoint();
@@ -306,9 +308,10 @@ async fn handle_streaming(
     let headers = resp.headers().clone();
 
     // Determine if we need format conversion
+    // 跨协议流式转换不受支持属于「请求无法处理」→ 422，而非 5xx
     let direction = match determine_stream_direction(client, route.provider.protocol) {
         Ok(d) => d,
-        Err(e) => return error_response(501, &e),
+        Err(e) => return error_response(422, &e),
     };
 
     // 在上游字节流上包一层 usage 捕获：流结束后回填 token 用量到日志
