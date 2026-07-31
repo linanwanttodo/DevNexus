@@ -21,7 +21,6 @@
 
 DevNexus 是一个**跨平台桌面应用**，将开发者日常需要的环境管理操作整合到一个轻量级 GUI 中：
 
-- **下载管理器** — IDM 风格多线程下载引擎，支持断点续传、实时速度、GitHub 镜像加速、浏览器 Cookie
 - **软件中心** — 可视化管理系统包（brew / apt / winget / choco / pip / npm）
 - **环境管理器** — 编辑 PATH、环境变量、dotfile 配置
 - **容器管理** — Docker/Podman 容器、镜像、卷、网络一站式管理
@@ -42,7 +41,6 @@ DevNexus 是一个**跨平台桌面应用**，将开发者日常需要的环境�
 |------|------|
 | [架构总览](docs/architecture.md) | 模块依赖关系、数据流、安全边界 |
 | [开发指南](docs/dev-guide.md) | 环境搭建、编码规范、构建发布、调试技巧 |
-| [下载管理器](docs/modules/12-download.md) | IDM 风格多线程引擎、工作队列、实时进度、镜像加速 |
 | [系统仪表板](docs/modules/01-system.md) | sysinfo + OnceLock 磁盘缓存 |
 | [软件中心](docs/modules/02-software.md) | 37 款工具、9 种包管理器、跨平台偏移 |
 | [环境管理](docs/modules/03-environment.md) | 运行时检测、Unix/Windows PATH 编辑 |
@@ -174,7 +172,6 @@ devnexus/
 │   │   └── ru.json
 │   ├── routes/                   # 页面路由
 │   │   ├── Dashboard.svelte      # 系统仪表板
-│   │   ├── DownloadManager.svelte # 下载管理器
 │   │   ├── EnvironmentManager.svelte
 │   │   ├── SoftwareCenter.svelte
 │   │   ├── ContainerManager.svelte # 容器管理
@@ -196,7 +193,6 @@ devnexus/
 │   ├── lib/
 │   │   ├── stores.svelte.js
 │   │   ├── i18n.svelte.js
-│   │   ├── downloads.svelte.js   # 下载管理器前端逻辑
 │   │   ├── toast.svelte.js
 │   │   └── confirm.svelte.js
 │   ├── App.svelte
@@ -211,7 +207,6 @@ devnexus/
 │   │   │   ├── software.rs       # 软件包管理
 │   │   │   ├── container.rs      # Docker/Podman 管理
 │   │   │   ├── api_hub/          # API Hub 模块
-│   │   │   ├── download_manager.rs # 下载管理器命令
 │   │   │   ├── mirror.rs         # 镜像源
 │   │   │   ├── port_manager.rs   # 端口/进程管理
 │   │   │   ├── scheduler.rs      # 任务调度
@@ -221,15 +216,6 @@ devnexus/
 │   │   │   ├── migration.rs      # 环境迁移
 │   │   │   ├── updater.rs        # 自动更新
 │   │   │   └── mod.rs
-│   │   ├── download/             # 下载引擎模块
-│   │   │   ├── mod.rs
-│   │   │   ├── manager.rs        # 工作队列 + 动态负载均衡
-│   │   │   ├── chunk.rs          # 分块下载 + 流式进度
-│   │   │   ├── config.rs         # 下载配置 + GitHub 镜像
-│   │   │   ├── task.rs           # 任务/分块数据结构
-│   │   │   ├── progress.rs       # 进度推送
-│   │   │   ├── storage.rs        # SQLite 持久化
-│   │   │   └── changelog.rs      # 双语更新日志
 │   │   └── ...
 │   ├── icons/
 │   ├── Cargo.toml
@@ -282,9 +268,6 @@ pnpm tauri build
 
 ### 已完成
 
-- [x] 下载管理器（IDM 风格多线程引擎、断点续传、实时速度、分段进度条）
-- [x] 下载镜像加速（GitHub 自动检测、可配置镜像站列表、Xget 集成）
-- [x] 浏览器环境模拟（完整请求头、Cookie 支持、native-tls）
 - [x] Docker/Podman 容器管理（容器、镜像、卷、网络、Compose）
 - [x] API Hub（本地 AI 统一网关，多协议转换，流式支持）
 - [x] 环境迁移系统（配置文件导入/导出）

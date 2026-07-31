@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Removed the built-in download manager (use mature download tools instead)
 - Docker / Podman container management (planned)
 - Cloud service credential management (AWS / GCP CLI) (planned)
 

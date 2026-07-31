@@ -21,7 +21,6 @@
 
 DevNexus is a **cross-platform desktop application** that integrates everyday developer environment management tasks into a lightweight GUI:
 
-- **Download Manager** — IDM-style multi-threaded engine, resume support, real-time speed, segmented progress bar, GitHub mirror acceleration, browser cookies
 - **Software Center** — Visual management of system packages (brew / apt / winget / choco / pip / npm)
 - **Environment Manager** — Edit PATH, environment variables, dotfile configurations
 - **Container Manager** — Docker/Podman containers, images, volumes, networks management
@@ -42,7 +41,6 @@ Detailed module design, cross-platform implementation, and development guide are
 |----------|-------------|
 | [Architecture Overview](docs/architecture.md) | Module dependencies, data flow, security boundaries |
 | [Development Guide](docs/dev-guide.md) | Setup, coding standards, build, debugging |
-| [Download Manager](docs/modules/12-download.md) | IDM-style engine, work queue, real-time progress, mirror |
 | [System Dashboard](docs/modules/01-system.md) | sysinfo + OnceLock disk caching |
 | [Software Center](docs/modules/02-software.md) | 37 tools, 9 package managers, cross-platform mapping |
 | [Environment Manager](docs/modules/03-environment.md) | Runtime detection, Unix/Windows PATH editing |
@@ -167,7 +165,6 @@ devnexus/
 │   ├── lib/
 │   │   ├── stores.svelte.js      # Router & search state
 │   │   ├── i18n.svelte.js        # i18n (zh/en/ru)
-│   │   ├── downloads.svelte.js   # Download manager frontend logic
 │   │   ├── toast.svelte.js
 │   │   └── confirm.svelte.js
 │   ├── locales/                  # Translation files
@@ -176,7 +173,6 @@ devnexus/
 │   │   └── ru.json
 │   ├── routes/                   # Page routes
 │   │   ├── Dashboard.svelte      # System dashboard
-│   │   ├── DownloadManager.svelte # Download manager
 │   │   ├── EnvironmentManager.svelte
 │   │   ├── SoftwareCenter.svelte
 │   │   ├── ContainerManager.svelte # Container management
@@ -207,7 +203,6 @@ devnexus/
 │   │   │   ├── software.rs       # Package management
 │   │   │   ├── container.rs      # Docker/Podman management
 │   │   │   ├── api_hub/          # API Hub module
-│   │   │   ├── download_manager.rs # Download manager commands
 │   │   │   ├── mirror.rs         # Mirror sources
 │   │   │   ├── port_manager.rs   # Process/port management
 │   │   │   ├── scheduler.rs      # Task scheduling
@@ -217,15 +212,6 @@ devnexus/
 │   │   │   ├── migration.rs      # Environment migration
 │   │   │   ├── updater.rs        # Auto update
 │   │   │   └── mod.rs
-│   │   ├── download/             # Download engine module
-│   │   │   ├── mod.rs
-│   │   │   ├── manager.rs        # Work queue + dynamic load balancing
-│   │   │   ├── chunk.rs          # Chunk download + streaming progress
-│   │   │   ├── config.rs         # Download config + GitHub mirrors
-│   │   │   ├── task.rs           # Task/chunk data structures
-│   │   │   ├── progress.rs       # Progress events
-│   │   │   ├── storage.rs        # SQLite persistence
-│   │   │   └── changelog.rs      # Bilingual changelog
 │   │   └── ...
 │   ├── icons/
 │   ├── Cargo.toml
@@ -278,9 +264,6 @@ Build artifacts:
 
 ### Completed
 
-- [x] Download manager (IDM-style engine, resume, real-time speed, segmented bar)
-- [x] Download mirror acceleration (GitHub auto-detect, configurable mirrors, Xget)
-- [x] Browser environment emulation (full headers, cookies, native-tls)
 - [x] Docker/Podman container management
 - [x] API Hub (local AI gateway, multi-protocol streaming)
 - [x] Environment migration system
