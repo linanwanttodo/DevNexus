@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
 
 // ── Data structures ──────────────────────────────────────────────
 
@@ -49,11 +48,51 @@ pub struct DockerStatus {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-/// Run a docker command and return stdout, stderr separately.
+const DOCKER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Container actions allowed through `container_action`. Anything else
+/// (e.g. `--privileged`, `rm -rf /`, `pull`) is rejected.
+const ALLOWED_ACTIONS: &[&str] = &[
+    "start", "stop", "restart", "pause", "unpause", "kill", "rm", "rename",
+];
+
+/// Validate a container id/name. Rejects empty/oversized values, option
+/// injection (`-...`) and shell metacharacters.
+fn validate_container_id(id: &str) -> Result<(), String> {
+    if id.is_empty() || id.len() > 128 {
+        return Err("Invalid container id".to_string());
+    }
+    if id.starts_with('-') || id.chars().any(|c| c.is_whitespace() || ";|&$`\'\"\\".contains(c)) {
+        return Err("Invalid container id".to_string());
+    }
+    Ok(())
+}
+
+/// Validate a command string passed to `sh -c` inside a container. Rejects
+/// shell metacharacters (`; | & $ ` "`) and newlines to prevent command
+/// chaining / injection while allowing normal single commands.
+fn validate_exec_command(command: &str) -> Result<(), String> {
+    if command.is_empty() {
+        return Err("Empty exec command".to_string());
+    }
+    let forbidden = ";|&$`\"\n\r";
+    if command.chars().any(|c| forbidden.contains(c)) {
+        return Err("Invalid exec command: shell metacharacters are not allowed".to_string());
+    }
+    Ok(())
+}
+
+/// Run a docker command and return stdout, stderr separately. Times out after 120s.
 fn run_docker(args: &[&str]) -> Result<(String, String), String> {
-    let output = Command::new("docker")
-        .args(args)
-        .output()
+    let (tx, rx) = std::sync::mpsc::channel();
+    let args_owned: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+    std::thread::spawn(move || {
+        let output = std::process::Command::new("docker").args(&args_owned).output();
+        let _ = tx.send(output);
+    });
+    let output = rx
+        .recv_timeout(DOCKER_TIMEOUT)
+        .map_err(|_| format!("docker command timed out after {}s", DOCKER_TIMEOUT.as_secs()))?
         .map_err(|e| format!("Failed to execute docker: {}", e))?;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -173,6 +212,10 @@ pub fn list_containers(all: bool) -> Result<Vec<ContainerInfo>, String> {
 
 #[tauri::command]
 pub fn container_action(name: String, action: String) -> Result<String, String> {
+    if !ALLOWED_ACTIONS.contains(&action.as_str()) {
+        return Err(format!("Unsupported container action: {}", action));
+    }
+    validate_container_id(&name)?;
     let (stdout, _) = run_docker(&[&action, &name])?;
     Ok(stdout.trim().to_string())
 }
@@ -192,6 +235,8 @@ pub fn get_container_logs(name: String, tail: Option<u32>) -> Result<String, Str
 
 #[tauri::command]
 pub fn exec_in_container(name: String, command: String) -> Result<String, String> {
+    validate_container_id(&name)?;
+    validate_exec_command(&command)?;
     let (stdout, stderr) = run_docker(&["exec", &name, "sh", "-c", &command])?;
     let combined = if stderr.is_empty() {
         stdout
@@ -500,4 +545,25 @@ pub fn compose_logs(
         format!("{}{}", stdout, stderr)
     };
     Ok(combined)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ALLOWED_ACTIONS, validate_container_id};
+
+    #[test]
+    fn test_container_action_whitelist() {
+        assert!(ALLOWED_ACTIONS.contains(&"start"));
+        assert!(ALLOWED_ACTIONS.contains(&"restart"));
+        assert!(!ALLOWED_ACTIONS.contains(&"--privileged"));
+        assert!(!ALLOWED_ACTIONS.contains(&"rm -rf /"));
+    }
+
+    #[test]
+    fn test_validate_container_id() {
+        assert!(validate_container_id("abc123").is_ok());
+        assert!(validate_container_id("-evil").is_err());
+        assert!(validate_container_id("a; rm -rf /").is_err());
+        assert!(validate_container_id("").is_err());
+    }
 }
