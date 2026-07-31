@@ -644,3 +644,123 @@ async fn e2e_provider_duplicate_name_rejected_and_not_persisted() {
     assert_eq!(reloaded.len(), 1, "no duplicate after simulated restart");
     assert_eq!(reloaded[0].name, "OpenAI");
 }
+
+/// 构造一个使用内存 SQLite 的 AppState（与 e2e_provider_duplicate_name_rejected_and_not_persisted 一致）
+fn provider_test_state() -> AppState {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    provider::init_db_sync(&conn).unwrap();
+
+    let http_client = reqwest::Client::new();
+    AppState {
+        providers: Arc::new(tokio::sync::RwLock::new(vec![])),
+        request_logs: Arc::new(tokio::sync::RwLock::new(VecDeque::new())),
+        db: Arc::new(tokio::sync::Mutex::new(Some(conn))),
+        http_client,
+        running: Arc::new(AtomicBool::new(false)),
+    }
+}
+
+#[tokio::test]
+async fn e2e_provider_update_empty_key_keeps_original() {
+    // 回归测试（C6）：更新 Provider 时传空 api_key 或脱敏掩码，必须保留原 key，
+    // 覆盖内存与 DB 两侧，避免误把真实 key 覆盖为空串。
+    let state = provider_test_state();
+
+    // 1) add provider with key "secret123"
+    let mut p = Provider {
+        id: String::new(), // add_provider 会自动生成 UUID
+        name: "KeyKeeper".into(),
+        protocol: ApiProtocol::OpenAIChat,
+        base_url: "http://127.0.0.1:1".into(),
+        api_key: "secret123".into(),
+        models: vec!["mock-gpt".into()],
+        model_aliases: Default::default(),
+        model_context_lengths: Default::default(),
+        enabled: true,
+        created_at: 0,
+    };
+    super::provider::add_provider(&state, p.clone())
+        .await
+        .expect("add should succeed");
+    let id = state.providers.read().await[0].id.clone();
+
+    // 2) update 传空 api_key → 内存与 DB 中 key 均保留为 "secret123"
+    p.id = id.clone();
+    p.api_key = String::new();
+    super::provider::update_provider(&state, &id, p)
+        .await
+        .expect("update with empty api_key should succeed");
+    assert_eq!(
+        state.providers.read().await[0].api_key,
+        "secret123",
+        "empty api_key must not overwrite the stored key"
+    );
+
+    // 3) update 传脱敏掩码 → 同样保留原 key
+    let p = {
+        let stored = state.providers.read().await[0].clone();
+        Provider {
+            api_key: "••••".to_string(),
+            ..stored
+        }
+    };
+    super::provider::update_provider(&state, &id, p)
+        .await
+        .expect("update with masked api_key should succeed");
+    assert_eq!(
+        state.providers.read().await[0].api_key,
+        "secret123",
+        "masked api_key must not overwrite the stored key"
+    );
+
+    // 4) 模拟重启：重新从 DB 加载，key 仍为 "secret123"
+    let reloaded = {
+        let db = state.db.lock().await;
+        provider::load_providers_from_db_sync(db.as_ref().unwrap())
+    };
+    assert_eq!(reloaded.len(), 1);
+    assert_eq!(reloaded[0].api_key, "secret123", "DB must keep the original key");
+}
+
+#[tokio::test]
+async fn e2e_provider_update_missing_id_returns_not_found() {
+    // 回归测试（C6）：更新不存在的 id 必须返回 Err（含 "not found"），不再静默成功。
+    let state = provider_test_state();
+
+    let p = Provider {
+        id: "does-not-exist".into(),
+        name: "Ghost".into(),
+        protocol: ApiProtocol::OpenAIChat,
+        base_url: "http://127.0.0.1:1".into(),
+        api_key: "sk-test".into(),
+        models: vec!["mock-gpt".into()],
+        model_aliases: Default::default(),
+        model_context_lengths: Default::default(),
+        enabled: true,
+        created_at: 0,
+    };
+
+    let err = super::provider::update_provider(&state, "does-not-exist", p)
+        .await
+        .expect_err("updating a non-existent id must fail");
+    assert!(
+        err.to_lowercase().contains("not found"),
+        "error should mention 'not found', got: {:?}",
+        err
+    );
+
+    // 内存与 DB 均未被改动
+    assert!(state.providers.read().await.is_empty());
+    let count = {
+        let db = state.db.lock().await;
+        db.as_ref()
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM providers",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap()
+    };
+    assert_eq!(count, 0, "no row should be inserted for a missing id");
+}
