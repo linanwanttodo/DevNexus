@@ -6,7 +6,23 @@ use std::process::Command;
 /// 静态软件数据（下载 URL 表 / GUI 应用名单 / 软件定义表 / 包名映射）已拆出到 software_data 模块
 #[path = "software_data.rs"]
 mod software_data;
-use software_data::{build_software_defs, get_download_url, GUI_APPS, map_package_name};
+use software_data::{build_software_defs, get_download_url, GUI_APPS};
+
+/// 包管理器安装/卸载执行体已拆出到 software_pm 模块
+#[path = "software_pm.rs"]
+pub(crate) mod software_pm;
+
+/// 安装软件（跨平台，多包管理器支持）——执行体在 software_pm::install_software_exec
+#[tauri::command]
+pub async fn install_software(package_name: String) -> Result<String, String> {
+    software_pm::install_software_exec(package_name).await
+}
+
+/// 卸载软件（跨平台，多包管理器支持）——执行体在 software_pm::uninstall_software_exec
+#[tauri::command]
+pub async fn uninstall_software(package_name: String) -> Result<String, String> {
+    software_pm::uninstall_software_exec(package_name).await
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Software {
@@ -19,8 +35,6 @@ pub struct Software {
     pub available_versions: Vec<String>,
     pub download_supported: bool,
 }
-
-
 
 /// 安全获取软件版本：对 GUI 应用跳过，避免启动它们
 /// 仅在真正超时时返回 "timeout"；其余失败返回具体错误，避免误报
@@ -64,7 +78,6 @@ async fn safe_get_version(cmd: &str) -> String {
     }
 }
 
-
 #[tauri::command]
 pub async fn list_software() -> Vec<Software> {
     let defs = build_software_defs();
@@ -107,17 +120,7 @@ pub async fn list_software() -> Vec<Software> {
     list
 }
 
-
 // ==================== 包管理器检测与包名映射 ====================
-
-#[derive(Debug, Clone)]
-struct PackageManager {
-    name: &'static str,
-    binary: &'static str,
-    needs_sudo: bool,
-    install_args: &'static [&'static str],   // 不含包名
-    uninstall_args: &'static [&'static str], // 不含包名
-}
 
 #[derive(Serialize, Clone)]
 pub struct PackageManagerInfo {
@@ -129,7 +132,7 @@ pub struct PackageManagerInfo {
 /// 列出系统上检测到的可用包管理器（前端用于展示引导提示）
 #[tauri::command]
 pub fn list_package_managers() -> Vec<PackageManagerInfo> {
-    let managers = detect_package_managers();
+    let managers = software_pm::detect_package_managers();
     managers
         .into_iter()
         .map(|pm| PackageManagerInfo {
@@ -140,244 +143,6 @@ pub fn list_package_managers() -> Vec<PackageManagerInfo> {
         .collect()
 }
 
-/// 检测系统可用的包管理器（按优先级排列）
-fn detect_package_managers() -> Vec<PackageManager> {
-    let mut managers = Vec::new();
-
-    #[cfg(target_os = "macos")]
-    {
-        if which::which("brew").is_ok() {
-            managers.push(PackageManager {
-                name: "Homebrew",
-                binary: "brew",
-                needs_sudo: false,
-                install_args: &["install"],
-                uninstall_args: &["uninstall"],
-            });
-        }
-        if which::which("port").is_ok() {
-            managers.push(PackageManager {
-                name: "MacPorts",
-                binary: "port",
-                needs_sudo: true,
-                install_args: &["install"],
-                uninstall_args: &["uninstall"],
-            });
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        // 优先级: apt → dnf → pacman → zypper → apk
-        if which::which("apt").is_ok() {
-            managers.push(PackageManager {
-                name: "apt",
-                binary: "apt",
-                needs_sudo: true,
-                install_args: &["install", "-y"],
-                uninstall_args: &["remove", "-y"],
-            });
-        }
-        if which::which("dnf").is_ok() {
-            managers.push(PackageManager {
-                name: "dnf",
-                binary: "dnf",
-                needs_sudo: true,
-                install_args: &["install", "-y"],
-                uninstall_args: &["remove", "-y"],
-            });
-        }
-        if which::which("pacman").is_ok() {
-            managers.push(PackageManager {
-                name: "pacman",
-                binary: "pacman",
-                needs_sudo: true,
-                install_args: &["-S", "--noconfirm"],
-                uninstall_args: &["-R", "--noconfirm"],
-            });
-        }
-        if which::which("zypper").is_ok() {
-            managers.push(PackageManager {
-                name: "zypper",
-                binary: "zypper",
-                needs_sudo: true,
-                install_args: &["install", "-y"],
-                uninstall_args: &["remove", "-y"],
-            });
-        }
-        if which::which("apk").is_ok() {
-            managers.push(PackageManager {
-                name: "apk",
-                binary: "apk",
-                needs_sudo: true,
-                install_args: &["add"],
-                uninstall_args: &["del"],
-            });
-        }
-        if which::which("snap").is_ok() {
-            managers.push(PackageManager {
-                name: "snap",
-                binary: "snap",
-                needs_sudo: true,
-                install_args: &["install"],
-                uninstall_args: &["remove"],
-            });
-        }
-        if which::which("flatpak").is_ok() {
-            managers.push(PackageManager {
-                name: "flatpak",
-                binary: "flatpak",
-                needs_sudo: false,
-                install_args: &["install", "-y"],
-                uninstall_args: &["uninstall", "-y"],
-            });
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if which::which("winget").is_ok() {
-            managers.push(PackageManager {
-                name: "winget",
-                binary: "winget",
-                needs_sudo: false,
-                install_args: &["install", "--silent"],
-                uninstall_args: &["uninstall", "--silent"],
-            });
-        }
-        if which::which("choco").is_ok() {
-            managers.push(PackageManager {
-                name: "chocolatey",
-                binary: "choco",
-                needs_sudo: false,
-                install_args: &["install", "-y"],
-                uninstall_args: &["uninstall", "-y"],
-            });
-        }
-    }
-
-    managers
-}
-
-/// 将通用包名映射为目标包管理器的实际包名
-
-#[cfg(target_os = "macos")]
-mod elevated {
-    pub(super) fn run(binary: &str, args: &[&str]) -> Result<std::process::Output, String> {
-        let mut script = String::from("do shell script \"");
-        script.push_str(&shell_escape(binary));
-        for a in args {
-            script.push(' ');
-            script.push_str(&shell_escape(a));
-        }
-        script.push_str("\" with administrator privileges");
-
-        std::process::Command::new("osascript")
-            .args(["-e", &script])
-            .output()
-            .map_err(|e| format!("Failed to execute osascript: {}", e))
-    }
-
-    fn shell_escape(s: &str) -> String {
-        let mut out = String::with_capacity(s.len() + 2);
-        out.push('"');
-        for c in s.chars() {
-            match c {
-                '\\' => out.push_str("\\\\"),
-                '"' => out.push_str("\\\""),
-                '$' => out.push_str("\\$"),
-                '`' => out.push_str("\\`"),
-                '\n' => out.push_str("\\n"),
-                '\r' => out.push_str("\\r"),
-                other => out.push(other),
-            }
-        }
-        out.push('"');
-        out
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn run_elevated(binary: &str, args: &[&str]) -> Result<std::process::Output, String> {
-    elevated::run(binary, args)
-}
-
-#[cfg(target_os = "linux")]
-fn run_elevated(binary: &str, args: &[&str]) -> Result<std::process::Output, String> {
-    let mut cmd = std::process::Command::new("pkexec");
-    cmd.arg(binary);
-    cmd.args(args);
-    cmd.output()
-        .map_err(|e| format!("Failed to execute pkexec: {}", e))
-}
-
-#[cfg(target_os = "windows")]
-fn run_elevated(binary: &str, args: &[&str]) -> Result<std::process::Output, String> {
-    // Windows 包管理器 (winget, choco) 的 needs_sudo 均为 false，
-    // 此函数仅用于编译通过，实际不会被调用。
-    std::process::Command::new(binary)
-        .args(args)
-        .output()
-        .map_err(|e| format!("Failed to execute {}: {}", binary, e))
-}
-
-/// 安装软件（跨平台，多包管理器支持）
-#[tauri::command]
-pub async fn install_software(package_name: String) -> Result<String, String> {
-    let managers = detect_package_managers();
-
-    if managers.is_empty() {
-        return Err("No supported package manager found on this system.\n\nTo use the Software Center, please install a package manager:\n- macOS: Install Homebrew -> https://brew.sh/\n- Linux: Your distro likely has apt/dnf/pacman/zypper/apk pre-installed\n- Windows: winget comes built-in with Win 11 / Win 10 1809+. Chocolatey: https://chocolatey.org/install".to_string());
-    }
-
-    let managers_clone: Vec<_> = managers
-        .iter()
-        .map(|pm| PackageManager {
-            name: pm.name,
-            binary: pm.binary,
-            needs_sudo: pm.needs_sudo,
-            install_args: pm.install_args,
-            uninstall_args: pm.uninstall_args,
-        })
-        .collect();
-    let pkg_name = package_name.clone();
-
-    tokio::task::spawn_blocking(move || {
-        let mut last_error = String::new();
-
-        for pm in &managers_clone {
-            let pkg = map_package_name(&pkg_name, pm.name);
-            let mut args: Vec<&str> = pm.install_args.to_vec();
-            args.push(pkg);
-
-            let output = if pm.needs_sudo {
-                run_elevated(pm.binary, &args)?
-            } else {
-                Command::new(pm.binary)
-                    .args(&args)
-                    .output()
-                    .map_err(|e| format!("Failed to execute {}: {}", pm.binary, e))?
-            };
-
-            if output.status.success() {
-                return Ok(format!(
-                    "Successfully installed {} via {}",
-                    pkg_name, pm.name
-                ));
-            }
-            last_error = String::from_utf8_lossy(&output.stderr).to_string();
-        }
-
-        Err(format!(
-            "Failed to install {} with all package managers. Last error: {}",
-            pkg_name,
-            last_error.trim()
-        ))
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?
-}
-
 /// 深度卸载：先执行标准卸载，再清理残留的配置文件、缓存和数据目录
 #[tauri::command]
 pub async fn uninstall_software_deep(
@@ -385,7 +150,7 @@ pub async fn uninstall_software_deep(
     app_name: String,
 ) -> Result<String, String> {
     // (a) 先执行标准卸载
-    let result = uninstall_software(package_name.clone()).await;
+    let result = software_pm::uninstall_software_exec(package_name.clone()).await;
 
     // (b) 获取所有可能的清理路径（复用 residue_scanner::known_paths 单一数据源）
     let home = std::env::var("HOME")
@@ -434,63 +199,6 @@ pub async fn uninstall_software_deep(
         return result; // 完全没有做任何清理，返回原始错误
     }
     Ok(message)
-}
-
-/// 卸载软件（跨平台，多包管理器支持）
-#[tauri::command]
-pub async fn uninstall_software(package_name: String) -> Result<String, String> {
-    let managers = detect_package_managers();
-
-    if managers.is_empty() {
-        return Err("No supported package manager found on this system.\n\nTo use the Software Center, please install a package manager:\n- macOS: Install Homebrew -> https://brew.sh/\n- Linux: Your distro likely has apt/dnf/pacman/zypper/apk pre-installed\n- Windows: winget comes built-in with Win 11 / Win 10 1809+. Chocolatey: https://chocolatey.org/install".to_string());
-    }
-
-    let managers_clone: Vec<_> = managers
-        .iter()
-        .map(|pm| PackageManager {
-            name: pm.name,
-            binary: pm.binary,
-            needs_sudo: pm.needs_sudo,
-            install_args: pm.install_args,
-            uninstall_args: pm.uninstall_args,
-        })
-        .collect();
-    let pkg_name = package_name.clone();
-
-    tokio::task::spawn_blocking(move || {
-        let mut last_error = String::new();
-
-        for pm in &managers_clone {
-            let pkg = map_package_name(&pkg_name, pm.name);
-            let mut args: Vec<&str> = pm.uninstall_args.to_vec();
-            args.push(pkg);
-
-            let output = if pm.needs_sudo {
-                run_elevated(pm.binary, &args)?
-            } else {
-                Command::new(pm.binary)
-                    .args(&args)
-                    .output()
-                    .map_err(|e| format!("Failed to execute {}: {}", pm.binary, e))?
-            };
-
-            if output.status.success() {
-                return Ok(format!(
-                    "Successfully uninstalled {} via {}",
-                    pkg_name, pm.name
-                ));
-            }
-            last_error = String::from_utf8_lossy(&output.stderr).to_string();
-        }
-
-        Err(format!(
-            "Failed to uninstall {} with all package managers. Last error: {}",
-            pkg_name,
-            last_error.trim()
-        ))
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// 已安装的系统应用（用于应用卸载管理器）
@@ -756,7 +464,7 @@ fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
 /// 用于"应用卸载管理器"模块
 #[tauri::command]
 pub async fn list_installed_apps() -> Result<Vec<InstalledApp>, String> {
-    let managers = detect_package_managers();
+    let managers = software_pm::detect_package_managers();
     if managers.is_empty() {
         return Err("未检测到支持的包管理器。请先安装包管理器。".to_string());
     }
@@ -1220,7 +928,7 @@ pub async fn force_uninstall_software(
     }
 
     // 2) 包管理器强制卸载
-    let uninstall_result = uninstall_software(package_name.clone()).await;
+    let uninstall_result = software_pm::uninstall_software_exec(package_name.clone()).await;
     match &uninstall_result {
         Ok(msg) => messages.push(msg.clone()),
         Err(e) => messages.push(format!("Package manager removal: {}", e)),
@@ -1421,6 +1129,7 @@ fn kill_processes_by_name(name_lower: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::software_data::map_package_name;
 
     // ============ parse_pm_list_output ============
 
