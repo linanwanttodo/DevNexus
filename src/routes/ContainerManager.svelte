@@ -75,13 +75,13 @@
 
   let search = $state("");
 
-  const tabs = [
+  const tabs = $derived([
     { id: "containers", label: t("docker.tab_containers"), icon: "container" },
     { id: "images", label: t("docker.tab_images"), icon: "image" },
     { id: "volumes", label: t("docker.tab_volumes"), icon: "volume" },
     { id: "networks", label: t("docker.tab_networks"), icon: "network" },
     { id: "compose", label: t("docker.tab_compose"), icon: "compose" },
-  ];
+  ]);
 
   onMount(() => { checkDocker(); });
 

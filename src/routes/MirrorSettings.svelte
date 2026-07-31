@@ -12,7 +12,7 @@
   let testingGroup = $state(null);
   let selectedCountry = $state("all");
 
-  const countries = [
+  const countries = $derived([
     { id: "all", label: t("mirrors.country_all") },
     { id: "CN", label: t("mirrors.country_cn") },
     { id: "RU", label: t("mirrors.country_ru") },
@@ -20,7 +20,7 @@
     { id: "EU", label: t("mirrors.country_eu") },
     { id: "JP", label: t("mirrors.country_jp") },
     { id: "AU", label: t("mirrors.country_au") },
-  ];
+  ]);
 
   async function loadMirrors() {
     try {
