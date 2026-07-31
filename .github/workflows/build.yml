@@ -13,7 +13,7 @@ concurrency:
 
 # 在仓库 Settings → Secrets and variables → Actions 中添加：
 #   TAURI_SIGNING_PRIVATE_KEY: tauri-signing-key 文件的原始内容（minisign 格式）
-#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: devnexus-updater
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: 私钥口令（仅存于 Secrets，禁止写入仓库任何文件）
 
 env:
   TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
@@ -54,6 +54,9 @@ jobs:
         run: |
           cargo fmt --check
           cargo clippy -- -D warnings
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Setup Tauri signing key
         if: env.TAURI_SIGNING_PRIVATE_KEY != ''
@@ -139,6 +142,9 @@ jobs:
           cargo fmt --check --manifest-path src-tauri/Cargo.toml
           cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
@@ -208,6 +214,10 @@ jobs:
         run: |
           cargo fmt --check --manifest-path src-tauri/Cargo.toml
           cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+        shell: bash
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
         shell: bash
 
       - name: Setup Tauri signing key

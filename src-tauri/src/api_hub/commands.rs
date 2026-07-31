@@ -6,10 +6,28 @@ use tauri::State;
 
 // ── Provider Management ───────────────────────────────────────
 
+/// 对 api_key 脱敏：保留首尾各 4 位，中间用掩码替代（前端不接触明文 key）
+fn mask_api_key(key: &str) -> String {
+    if key.is_empty() {
+        return String::new();
+    }
+    if key.len() > 12 && key.is_ascii() {
+        format!("{}••••{}", &key[..4], &key[key.len() - 4..])
+    } else {
+        "••••".to_string()
+    }
+}
+
 #[tauri::command]
 pub async fn api_hub_list_providers(state: State<'_, AppState>) -> Result<Vec<Provider>, String> {
     let providers = state.providers.read().await;
-    Ok(providers.clone())
+    Ok(providers
+        .iter()
+        .map(|p| Provider {
+            api_key: mask_api_key(&p.api_key),
+            ..p.clone()
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -67,11 +85,26 @@ pub fn api_hub_status(state: State<'_, AppState>) -> serde_json::Value {
 
 #[tauri::command]
 pub async fn api_hub_fetch_models(
+    state: State<'_, AppState>,
     base_url: String,
     api_key: String,
     protocol: String,
+    provider_id: Option<String>,
 ) -> Result<Vec<FetchedModel>, String> {
     let pt = super::types::ApiProtocol::from_protocol_str(&protocol)
         .ok_or_else(|| format!("Unknown protocol: '{}'. Supported: openai_chat, openai_responses, anthropic", protocol))?;
+
+    // 编辑已有 Provider 时前端持有的是脱敏 key，此处解析回已存储的真实 key
+    let api_key = if api_key.contains("••••") {
+        let providers = state.providers.read().await;
+        provider_id
+            .as_deref()
+            .and_then(|id| providers.iter().find(|p| p.id == id))
+            .map(|p| p.api_key.clone())
+            .unwrap_or_default()
+    } else {
+        api_key
+    };
+
     super::fetch_models::fetch_models_from_provider(&base_url, &api_key, &pt).await
 }

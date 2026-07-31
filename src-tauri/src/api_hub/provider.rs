@@ -64,6 +64,22 @@ pub async fn delete_provider(state: &AppState, id: &str) -> Result<(), String> {
 
 /// 更新 Provider（先写 DB，成功后更新内存）
 pub async fn update_provider(state: &AppState, id: &str, provider: Provider) -> Result<(), String> {
+    // 前端列表中的 api_key 已脱敏；若传回的仍是掩码，则保留原 key
+    let provider = if provider.api_key.contains("••••") {
+        let providers = state.providers.read().await;
+        let old_key = providers
+            .iter()
+            .find(|p| p.id == id)
+            .map(|p| p.api_key.clone())
+            .unwrap_or_default();
+        Provider {
+            api_key: old_key,
+            ..provider
+        }
+    } else {
+        provider
+    };
+
     // 先持久化到数据库
     {
         let db = state.db.lock().await;
@@ -182,7 +198,8 @@ pub fn init_db_sync(conn: &rusqlite::Connection) -> Result<(), String> {
             timestamp INTEGER NOT NULL,
             is_streaming INTEGER DEFAULT 0
         );
-        CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON request_logs(timestamp);",
+        CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON request_logs(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_logs_model ON request_logs(model);",
     )
     .map_err(|e| format!("Failed to create request_logs table: {}", e))?;
 
