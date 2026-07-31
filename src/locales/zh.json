@@ -538,5 +538,121 @@
     "empty_file": "文件为空或格式无效",
     "meta_os": "系统",
     "meta_host": "主机"
+  },
+  "apiHub": {
+    "title": "API Hub",
+    "tabs": {
+      "stats": "使用统计",
+      "providers": "Provider",
+      "logs": "请求日志"
+    },
+    "gateway": {
+      "title": "聚合网关",
+      "desc": "统一入口 · 按模型名路由并在 OpenAI / Anthropic / Gemini 间转换",
+      "copyTooltip": "点击复制端点",
+      "copied": "已复制网关端点",
+      "copyFailed": "复制失败"
+    },
+    "addProvider": "添加 Provider",
+    "addFirstProvider": "添加第一个 Provider",
+    "editProvider": "编辑 Provider",
+    "deleteProvider": "删除 Provider",
+    "name": "名称",
+    "protocolLabel": "API 协议",
+    "baseUrl": "Base URL",
+    "apiKey": "API Key",
+    "optional": "（可选）",
+    "maskedHint": "（已脱敏显示，保持不变则沿用原 Key）",
+    "apiKeyReplacePlaceholder": "输入新 Key 以替换",
+    "fetching": "正在获取...",
+    "fetchModels": "获取模型列表",
+    "refreshModels": "刷新模型",
+    "manualAdd": "手动添加模型",
+    "manualAddHint": "或手动添加模型",
+    "modelIdPlaceholder": "输入模型 ID，如 gpt-4o",
+    "confirm": "确认",
+    "cancel": "取消",
+    "update": "更新",
+    "add": "添加",
+    "selectAll": "全选",
+    "deselectAll": "全不选",
+    "alias": "别名",
+    "edit": "编辑",
+    "delete": "删除",
+    "custom": "自定义",
+    "confirmDelete": "确定删除 Provider“{name}”？",
+    "providerCount": "{count} 个 Provider",
+    "protocol": {
+      "openai_chat": {
+        "label": "OpenAI Chat Completions",
+        "desc": "通用 OpenAI 格式，兼容大多数工具"
+      },
+      "openai_responses": {
+        "label": "OpenAI Responses",
+        "desc": "OpenAI 新格式，Codex/OpenCode 使用"
+      },
+      "anthropic": {
+        "label": "Anthropic Messages",
+        "desc": "Claude 原生格式，Anthropic SDK 直接使用"
+      }
+    },
+    "models": {
+      "fetched": "已获取 {count} 个模型，已选 {selected}",
+      "selected": "已选",
+      "existing": "当前已有 {count} 个模型（点击上方按钮刷新）",
+      "fetchHint": "点击上方按钮从 API 获取可用模型",
+      "countBadge": "模型",
+      "usageRanking": "模型用量排行",
+      "requestsSuffix": "次",
+      "onlyTop15": "共 {count} 个模型，仅显示前 15 名",
+      "tokens": "tokens"
+    },
+    "metrics": {
+      "tokens": "Tokens 用量",
+      "requests": "总请求数",
+      "successRate": "成功率",
+      "avgLatency": "平均延迟"
+    },
+    "heatmap": {
+      "title": "活跃热力图",
+      "less": "少",
+      "more": "多",
+      "requestTitle": "{date}: {count} 请求"
+    },
+    "status": {
+      "active": "活跃",
+      "disabled": "禁用"
+    },
+    "toast": {
+      "updated": "已更新",
+      "added": "已添加",
+      "deleted": "已删除",
+      "error": "错误: {error}",
+      "deleteFailed": "删除失败: {error}",
+      "fetchedModels": "获取到 {count} 个模型",
+      "fetchFailed": "获取失败: {error}",
+      "modelExists": "模型 {id} 已存在",
+      "modelAdded": "已添加模型 {id}"
+    },
+    "errors": {
+      "selectModel": "请至少选择一个模型",
+      "fillBaseUrl": "请先填写 Base URL 和协议"
+    },
+    "empty": {
+      "noData": "暂无数据",
+      "waiting": "等待数据...",
+      "noProviders": "还没有配置 Provider",
+      "addHint": "添加一个 AI API Provider 来开始使用 API Hub"
+    },
+    "logs": {
+      "time": "时间",
+      "model": "模型",
+      "provider": "Provider",
+      "tokens": "Tokens",
+      "latency": "延迟",
+      "status": "状态",
+      "streaming": "流式请求",
+      "empty": "暂无请求日志"
+    }
   }
 }
