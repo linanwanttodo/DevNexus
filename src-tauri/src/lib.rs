@@ -1,6 +1,5 @@
 pub mod api_hub;
 pub mod commands;
-pub mod download;
 mod residue_scanner;
 mod utils;
 
@@ -9,7 +8,7 @@ use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{TrayIconBuilder},
-    Emitter, Manager,
+    Manager,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,13 +19,6 @@ pub fn run() {
     // 初始化 API Hub
     let api_hub_state = api_hub::init(&crate::utils::data_dir());
 
-    // 初始化下载管理器
-    let data_dir = crate::utils::data_dir();
-    let db_path = format!("{}/downloads.db", data_dir.display());
-    let download_manager =
-        download::DownloadManager::new(download::DownloadConfig::default(), &db_path)
-            .expect("Failed to create download manager");
-
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
@@ -35,7 +27,6 @@ pub fn run() {
         .manage(password_manager)
         .manage(version_cache)
         .manage(api_hub_state)
-        .manage(download_manager)
         .setup(move |app| {
             // 启动 API Hub 后台服务
             let state = app.state::<api_hub::types::AppState>();
@@ -44,15 +35,6 @@ pub fn run() {
                 api_hub::start(hub).await;
             });
 
-            // 桥接下载进度到前端事件
-            let dm = app.state::<download::DownloadManager>();
-            let mut progress_rx = dm.subscribe_progress();
-            let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                while let Ok(progress) = progress_rx.recv().await {
-                    let _ = app_handle.emit("download-progress", &progress);
-                }
-            });
             let show = MenuItemBuilder::with_id("show", "Show DevNexus").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
@@ -176,19 +158,6 @@ pub fn run() {
             api_hub::commands::api_hub_get_usage_stats,
             api_hub::commands::api_hub_status,
             api_hub::commands::api_hub_fetch_models,
-            commands::download_manager::create_download,
-            commands::download_manager::start_download,
-            commands::download_manager::pause_download,
-            commands::download_manager::resume_download,
-            commands::download_manager::cancel_download,
-            commands::download_manager::delete_download,
-            commands::download_manager::get_downloads,
-            commands::download_manager::get_download,
-            commands::download_manager::get_download_config,
-            commands::download_manager::set_download_config,
-            commands::download_manager::get_github_mirrors,
-            commands::download_manager::save_github_mirrors,
-            commands::download_manager::get_changelog,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevNexus");
