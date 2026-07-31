@@ -25,6 +25,9 @@ pub struct StreamState {
     pub started: bool,
     /// Whether content block has been opened (Anthropic)
     pub content_block_opened: bool,
+    /// Whether message_delta (finish_reason) + message_stop have been emitted (Anthropic),
+    /// so a trailing [DONE] doesn't emit a duplicate stop sequence.
+    pub stop_sent: bool,
     /// Accumulated model name from first chunk
     pub model: String,
     /// Accumulated response id
@@ -58,6 +61,11 @@ fn openai_chat_to_anthropic(line: &str, state: &mut StreamState) -> Vec<String> 
     };
 
     if data == "[DONE]" {
+        // If finish_reason chunk already emitted message_delta + message_stop,
+        // don't emit a duplicate stop sequence — just consume the [DONE].
+        if state.stop_sent {
+            return vec![];
+        }
         // Emit content_block_stop + message_delta + message_stop
         let mut out = vec![];
         if state.content_block_opened {
@@ -75,6 +83,7 @@ fn openai_chat_to_anthropic(line: &str, state: &mut StreamState) -> Vec<String> 
         out.push("event: message_stop".to_string());
         out.push(format!("data: {}", serde_json::json!({"type": "message_stop"})));
         out.push(String::new());
+        state.stop_sent = true;
         return out;
     }
 
@@ -144,22 +153,25 @@ fn openai_chat_to_anthropic(line: &str, state: &mut StreamState) -> Vec<String> 
             "tool_calls" => "tool_use",
             _ => "end_turn",
         };
-        if state.content_block_opened {
-            out.push("event: content_block_stop".to_string());
-            out.push(format!("data: {}", serde_json::json!({"type": "content_block_stop", "index": 0})));
+        if !state.stop_sent {
+            if state.content_block_opened {
+                out.push("event: content_block_stop".to_string());
+                out.push(format!("data: {}", serde_json::json!({"type": "content_block_stop", "index": 0})));
+                out.push(String::new());
+                state.content_block_opened = false;
+            }
+            out.push("event: message_delta".to_string());
+            out.push(format!("data: {}", serde_json::json!({
+                "type": "message_delta",
+                "delta": {"stop_reason": stop_reason},
+                "usage": {"output_tokens": 0}
+            })));
             out.push(String::new());
-            state.content_block_opened = false;
+            out.push("event: message_stop".to_string());
+            out.push(format!("data: {}", serde_json::json!({"type": "message_stop"})));
+            out.push(String::new());
+            state.stop_sent = true;
         }
-        out.push("event: message_delta".to_string());
-        out.push(format!("data: {}", serde_json::json!({
-            "type": "message_delta",
-            "delta": {"stop_reason": stop_reason},
-            "usage": {"output_tokens": 0}
-        })));
-        out.push(String::new());
-        out.push("event: message_stop".to_string());
-        out.push(format!("data: {}", serde_json::json!({"type": "message_stop"})));
-        out.push(String::new());
     }
 
     out
@@ -483,5 +495,54 @@ mod tests {
         let mut state = StreamState { started: true, content_block_opened: true, ..Default::default() };
         let out = transform_sse_line(StreamDirection::OpenAIChatToAnthropic, "data: [DONE]", &mut state);
         assert!(out.iter().any(|l| l.contains("message_stop")));
+    }
+
+    #[test]
+    fn test_openai_to_anthropic_no_duplicate_stop() {
+        // Regression (C4): when a finish_reason chunk already emits
+        // message_delta + message_stop, the trailing [DONE] must not emit them again.
+        let mut state = StreamState::default();
+
+        // Content chunk
+        let c1 = r#"data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"gpt-4o","choices":[{"index":0,"delta":{"role":"assistant","content":"Hi"},"finish_reason":null}]}"#;
+        // Finish reason chunk
+        let c2 = r#"data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#;
+        let done = "data: [DONE]";
+
+        let mut all: Vec<String> = vec![];
+        for line in [c1, c2, done] {
+            all.extend(transform_sse_line(StreamDirection::OpenAIChatToAnthropic, line, &mut state));
+        }
+
+        // message_stop must appear exactly once
+        let stop_count = all.iter().filter(|l| l.contains("event: message_stop")).count();
+        assert_eq!(
+            stop_count, 1,
+            "message_stop must appear exactly once, got {:?}",
+            all
+        );
+
+        // message_delta (carrying the finish/stop reason) must appear exactly once
+        let delta_event_count = all.iter().filter(|l| l.contains("event: message_delta")).count();
+        assert_eq!(
+            delta_event_count, 1,
+            "message_delta must appear exactly once, got {:?}",
+            all
+        );
+        let delta_payloads: Vec<&String> = all
+            .iter()
+            .filter(|l| l.starts_with("data: ") && l.contains("\"type\":\"message_delta\""))
+            .collect();
+        assert_eq!(
+            delta_payloads.len(),
+            1,
+            "message_delta data payload must appear exactly once, got {:?}",
+            all
+        );
+        assert!(
+            delta_payloads[0].contains("stop_reason"),
+            "message_delta must carry stop_reason, got: {}",
+            delta_payloads[0]
+        );
     }
 }
