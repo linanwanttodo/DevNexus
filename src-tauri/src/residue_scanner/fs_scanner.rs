@@ -90,7 +90,9 @@ pub fn scan_by_keywords(app_name: &str, home: &str) -> (Vec<ResidueItem>, Vec<Re
                         path: p_str,
                         size,
                         category: category.into(),
-                        is_safe_to_delete: true,
+                        // 关键词扫描结果仅作建议列出，不可自动删除
+                        // （删除需用户二次确认后经 clean_specific_residues 单独执行）
+                        is_safe_to_delete: false,
                         description: String::new(),
                     };
                     if path.is_dir() {
@@ -172,15 +174,42 @@ fn build_keywords(app_name: &str) -> Vec<String> {
 }
 
 fn matches_keywords(fname: &str, keywords: &[String]) -> bool {
-    // 精确匹配
     for kw in keywords {
+        if kw.len() < 4 {
+            continue; // 拒绝过短关键词，避免误伤（如 "go" 命中 mongodb）
+        }
         if fname == kw {
             return true;
         }
-        // 包含匹配
-        if fname.contains(kw) {
+        if fname
+            .split(['/', '\\'])
+            .any(|seg| {
+                seg == kw
+                    || seg.starts_with(&format!("{}-", kw))
+                    || seg.starts_with(&format!("{}_", kw))
+            })
+        {
             return true;
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_matches_keywords_boundary() {
+        assert!(matches_keywords("/opt/golang/bin", &["golang".to_string()]));
+        assert!(!matches_keywords("/opt/mongodb", &["go".to_string()])); // 短关键词被拒绝
+        assert!(matches_keywords(
+            "/home/u/.config/google-chrome",
+            &["google-chrome".to_string()]
+        ));
+        assert!(!matches_keywords(
+            "/home/u/.config/vscode-other",
+            &["code".to_string()]
+        ));
+    }
 }
