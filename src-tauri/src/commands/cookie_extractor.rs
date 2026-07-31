@@ -132,6 +132,56 @@ mod tests {
         assert_eq!(entry.expires, 1000);
         assert!(!entry.secure);
     }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_try_aes_128_cbc_integrity_check() {
+        use aes::cipher::{BlockEncryptMut, KeyIvInit};
+        type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
+
+        let key = [0x42u8; 16];
+        let iv = [0x24u8; 16];
+        let host_key = "https://example.com";
+        let payload = b"session_token_123";
+
+        // 构造明文: [sha256(host_key) 32B | payload]
+        let hash = Sha256::digest(host_key.as_bytes());
+        let mut plaintext = Vec::new();
+        plaintext.extend_from_slice(&hash);
+        plaintext.extend_from_slice(payload);
+
+        let mut enc = Aes128CbcEnc::new_from_slices(&key, &iv).unwrap();
+        let mut out_buf = vec![0u8; plaintext.len() + 16];
+        let ciphertext = enc
+            .encrypt_padded_b2b_mut::<aes::cipher::block_padding::Pkcs7>(
+                &plaintext,
+                &mut out_buf,
+            )
+            .unwrap()
+            .to_vec();
+
+        // 正常: 哈希匹配 → Ok(payload)
+        let result = try_aes_128_cbc(&key, &iv, &ciphertext, host_key, true);
+        assert_eq!(result, Ok("session_token_123".to_string()));
+
+        // 篡改: 明文前 32 字节哈希被改 → Err("Integrity check failed")
+        let mut tampered = plaintext.clone();
+        tampered[0] ^= 0xff;
+        let mut enc2 = Aes128CbcEnc::new_from_slices(&key, &iv).unwrap();
+        let mut tampered_buf = vec![0u8; tampered.len() + 16];
+        let tampered_ciphertext = enc2
+            .encrypt_padded_b2b_mut::<aes::cipher::block_padding::Pkcs7>(
+                &tampered,
+                &mut tampered_buf,
+            )
+            .unwrap()
+            .to_vec();
+        let result = try_aes_128_cbc(&key, &iv, &tampered_ciphertext, host_key, true);
+        assert!(result.is_err());
+
+        // 空密文 → Err
+        assert!(try_aes_128_cbc(&key, &iv, &[], host_key, true).is_err());
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -505,7 +555,14 @@ fn map_chrome_cookie_row(
     };
     Ok(CookieEntry {
         name: row.get(0)?,
-        value: decrypt_cookie_value(&encrypted_value, &host_key, has_integrity_check),
+        value: decrypt_cookie_value(&encrypted_value, &host_key, has_integrity_check)
+            .map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    1,
+                    rusqlite::types::Type::Blob,
+                    Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)),
+                )
+            })?,
         domain: host_key,
         path: row.get(3)?,
         expires,
@@ -613,15 +670,15 @@ fn read_cookies(
             let mut rows = stmt
                 .query_map([p.as_str()], map_fn)
                 .map_err(|e| format!("Query failed: {}", e))?;
-            while let Some(Ok(c)) = rows.next() {
-                cookies.push(c);
+            while let Some(row) = rows.next() {
+                cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
             }
         } else {
             let mut rows = stmt
                 .query_map([], map_fn)
                 .map_err(|e| format!("Query failed: {}", e))?;
-            while let Some(Ok(c)) = rows.next() {
-                cookies.push(c);
+            while let Some(row) = rows.next() {
+                cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
             }
         }
     } else {
@@ -632,15 +689,15 @@ fn read_cookies(
                     map_chrome_cookie_row(row, has_integrity_check)
                 })
                 .map_err(|e| format!("Query failed: {}", e))?;
-            while let Some(Ok(c)) = rows.next() {
-                cookies.push(c);
+            while let Some(row) = rows.next() {
+                cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
             }
         } else {
             let mut rows = stmt
                 .query_map([], |row| map_chrome_cookie_row(row, has_integrity_check))
                 .map_err(|e| format!("Query failed: {}", e))?;
-            while let Some(Ok(c)) = rows.next() {
-                cookies.push(c);
+            while let Some(row) = rows.next() {
+                cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
             }
         }
     }
@@ -657,9 +714,13 @@ fn read_cookies(
 /// - AES-128-CBC 加密，IV = 16个空格（0x20）
 /// - 密钥: PBKDF2(SecretService 密码, "saltysalt", 1, 16)
 /// - v11 + DB version >= 24: 密文解密后前32字节是 SHA256(host) 完整性校验
-fn decrypt_cookie_value(encrypted: &[u8], host_key: &str, has_integrity_check: bool) -> String {
+fn decrypt_cookie_value(
+    encrypted: &[u8],
+    host_key: &str,
+    has_integrity_check: bool,
+) -> Result<String, String> {
     if encrypted.len() < 3 {
-        return String::from_utf8_lossy(encrypted).to_string();
+        return Ok(String::from_utf8_lossy(encrypted).to_string());
     }
 
     if &encrypted[0..3] == b"v10" || &encrypted[0..3] == b"v11" {
@@ -667,12 +728,16 @@ fn decrypt_cookie_value(encrypted: &[u8], host_key: &str, has_integrity_check: b
     }
 
     // 未加密（旧版本或非 Chrome 浏览器）
-    String::from_utf8_lossy(encrypted).to_string()
+    Ok(String::from_utf8_lossy(encrypted).to_string())
 }
 
 /// Chrome v10+ 解密（AES-256-GCM 或 AES-128-CBC，取决于平台）
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn decrypt_chrome_v10(encrypted_data: &[u8], _host_key: &str, has_integrity_check: bool) -> String {
+fn decrypt_chrome_v10(
+    encrypted_data: &[u8],
+    _host_key: &str,
+    has_integrity_check: bool,
+) -> Result<String, String> {
     use aes_gcm::{
         aead::{Aead, KeyInit},
         Aes256Gcm, Nonce,
@@ -680,12 +745,12 @@ fn decrypt_chrome_v10(encrypted_data: &[u8], _host_key: &str, has_integrity_chec
 
     let key32 = match get_chrome_encryption_key_v10() {
         Some(k) => k,
-        None => return "[Failed to get Chrome encryption key]".to_string(),
+        None => return Err("[Failed to get Chrome encryption key]".to_string()),
     };
 
     let cipher = match Aes256Gcm::new_from_slice(&key32) {
         Ok(c) => c,
-        Err(_) => return "[Invalid key]".to_string(),
+        Err(_) => return Err("[Invalid key]".to_string()),
     };
 
     // v11 格式前面有 16 字节认证标签/header，需要跳过
@@ -693,15 +758,15 @@ fn decrypt_chrome_v10(encrypted_data: &[u8], _host_key: &str, has_integrity_chec
 
     // AES-256-GCM: nonce 12 字节 + tag 至少 16 字节
     if encrypted_data.len() < offset + 12 + 16 {
-        return String::from_utf8_lossy(encrypted_data).to_string();
+        return Ok(String::from_utf8_lossy(encrypted_data).to_string());
     }
 
     let nonce = Nonce::from_slice(&encrypted_data[offset..offset + 12]);
     let ciphertext = &encrypted_data[offset + 12..];
 
     match cipher.decrypt(nonce, ciphertext) {
-        Ok(pt) => String::from_utf8_lossy(&pt).to_string(),
-        Err(_) => "[Cookie decryption failed]".to_string(),
+        Ok(pt) => Ok(String::from_utf8_lossy(&pt).to_string()),
+        Err(_) => Err("[Cookie decryption failed]".to_string()),
     }
 }
 
@@ -714,46 +779,45 @@ fn decrypt_chrome_v10(encrypted_data: &[u8], _host_key: &str, has_integrity_chec
 ///
 /// 密钥通过 Secret Service (D-Bus) 获取后由 PBKDF2 派生
 #[cfg(target_os = "linux")]
-fn decrypt_chrome_v10(encrypted_data: &[u8], host_key: &str, has_integrity_check: bool) -> String {
+fn decrypt_chrome_v10(
+    encrypted_data: &[u8],
+    host_key: &str,
+    has_integrity_check: bool,
+) -> Result<String, String> {
     let v11_key = match get_chrome_encryption_key_v10() {
         Some(k) => k,
         None => {
-            return decrypt_chrome_v10_fallback(encrypted_data);
+            return Ok(decrypt_chrome_v10_fallback(encrypted_data));
         }
     };
 
     // 需要至少 48 字节: 16(auth) + 16(IV) + 16(最小密文)
     if encrypted_data.len() < 48 {
-        return String::from_utf8_lossy(encrypted_data).to_string();
+        return Ok(String::from_utf8_lossy(encrypted_data).to_string());
     }
 
     // 标准格式: auth_tag[16] + iv[16] + ciphertext
-    let result1 = try_aes_128_cbc(
+    if let Ok(v) = try_aes_128_cbc(
         &v11_key,
         &encrypted_data[16..32],
         &encrypted_data[32..],
         host_key,
         has_integrity_check,
-    );
-    if !result1.starts_with('[') {
-        return result1;
+    ) {
+        return Ok(v);
     }
-
-    // 回退: 固定 IV (16个空格)，整个数据作为密文
+    // 回退: 固定 IV
     let fixed_iv = [0x20u8; 16];
-    let result2 = try_aes_128_cbc(
+    if let Ok(v) = try_aes_128_cbc(
         &v11_key,
         &fixed_iv,
         encrypted_data,
         host_key,
         has_integrity_check,
-    );
-    if !result2.starts_with('[') {
-        return result2;
+    ) {
+        return Ok(v);
     }
-
-    // 所有解密尝试都失败，返回第一个错误（更简洁的反馈）
-    result1
+    Err("Cookie decryption failed".to_string())
 }
 
 /// 尝试 AES-128-CBC 解密
@@ -764,35 +828,35 @@ fn try_aes_128_cbc(
     ciphertext: &[u8],
     host_key: &str,
     has_integrity_check: bool,
-) -> String {
+) -> Result<String, String> {
     use aes::cipher::{BlockDecryptMut, KeyIvInit};
     type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 
     if ciphertext.is_empty() {
-        return "[Empty ciphertext]".to_string();
+        return Err("Empty ciphertext".to_string());
     }
 
-    let dec = match Aes128CbcDec::new_from_slices(key, iv) {
-        Ok(d) => d,
-        Err(e) => return format!("[CBC init error: {}]", e),
-    };
+    let dec = Aes128CbcDec::new_from_slices(key, iv)
+        .map_err(|e| format!("CBC init error: {}", e))?;
 
     let mut buf = ciphertext.to_vec();
-    dec.decrypt_padded_mut::<aes::cipher::block_padding::Pkcs7>(&mut buf)
-        .map(|plaintext| {
-            if has_integrity_check {
-                if plaintext.len() > 32 {
-                    let _integrity_hash = &plaintext[..32];
-                    let _expected_hash = Sha256::digest(host_key.as_bytes());
-                    String::from_utf8_lossy(&plaintext[32..]).to_string()
-                } else {
-                    String::from_utf8_lossy(plaintext).to_string()
-                }
-            } else {
-                String::from_utf8_lossy(plaintext).to_string()
-            }
-        })
-        .unwrap_or_else(|e| format!("[Decrypt fail: {}]", e))
+    let plaintext = dec
+        .decrypt_padded_mut::<aes::cipher::block_padding::Pkcs7>(&mut buf)
+        .map_err(|e| format!("Decrypt fail: {}", e))?;
+
+    if has_integrity_check {
+        if plaintext.len() <= 32 {
+            return Err("Ciphertext too short for integrity check".to_string());
+        }
+        let integrity_hash = &plaintext[..32];
+        let expected_hash = Sha256::digest(host_key.as_bytes());
+        if integrity_hash != expected_hash.as_slice() {
+            return Err("Integrity check failed".to_string());
+        }
+        Ok(String::from_utf8_lossy(&plaintext[32..]).to_string())
+    } else {
+        Ok(String::from_utf8_lossy(plaintext).to_string())
+    }
 }
 
 /// Linux 回退：尝试用 AES-256-GCM 解密（旧版 Chrome < v127）
