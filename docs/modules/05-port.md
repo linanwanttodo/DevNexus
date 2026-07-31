@@ -6,8 +6,8 @@
 
 **通信链路**:
 ```
-PortManager.svelte ──→ invoke("list_ports")  ──→ port_manager.rs
-                  ──→ invoke("kill_port")    ──→ port_manager.rs
+ProcessManager.svelte ──→ invoke("list_ports")  ──→ process_ports.rs
+                  ──→ invoke("kill_port")    ──→ process_ports.rs
 ```
 
 ---
@@ -25,7 +25,7 @@ pub struct PortEntry {
 }
 ```
 
-**前端对应** (`routes/PortManager.svelte`):
+**前端对应** (`routes/ProcessManager.svelte`):
 
 ```javascript
 let ports = $state([]);

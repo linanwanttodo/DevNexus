@@ -22,7 +22,7 @@ DevNexus 的跨平台策略分为三层:
 ├─────────────────────────────────────┤
 │ Layer 2: 通用逻辑                       │
 │   system.rs, environment.rs,         │
-│   mirror.rs, scheduler.rs            │ ← 数据结构和非平台逻辑复用
+│   mirror.rs, password_manager.rs     │ ← 数据结构和非平台逻辑复用
 ├─────────────────────────────────────┤
 │ Layer 1: 平台相关实现                   │
 │   #[cfg(...)] 条件编译                │ ← 每平台独立实现，三选一
@@ -202,7 +202,6 @@ Windows 没有等价的优雅/强制区分，`taskkill /F` 即为强制结束；
 | environment | 1 | 1 | 1 | 2 | 90% |
 | mirror | 2 | 1 | 1 | 0 | 85% |
 | port | 0 | 0 | 0 | 2 | 80% |
-| scheduler | 0 | 0 | 0 | 1 | 95% |
 | password | 0 | 0 | 0 | 0 | 100% |
 | cookie | 2 | 2 | 2 | 0 | 40% |
 | residue | 1 | 1 | 1 | 1 | 30% |
@@ -211,7 +210,7 @@ Windows 没有等价的优雅/强制区分，`taskkill /F` 即为强制结束；
 **分析**:
 - **最高 (100%)**: system, password — 纯算法/数据结构，不涉及外部命令
 - **最低 (30%)**: residue (应用卸载残留) — 每个平台残留路径完全不同
-- **中等 (70-90%)**: software, env, mirror, scheduler — 少量平台特定配置
+- **中等 (70-90%)**: software, env, mirror — 少量平台特定配置
 - **复杂 (40%)**: cookie — 每个浏览器在每个平台的加密机制和存储路径都不同
 
 ---
@@ -224,9 +223,8 @@ Windows 没有等价的优雅/强制区分，`taskkill /F` 即为强制结束；
 |---------|------|---------|
 | 包管理器检测 | `software.rs` | `detect_package_managers` 中添加新平台包管理器 |
 | 软件残留路径 | `software.rs` / `residue` | 每个软件添加新平台的残留路径 |
-| 端口枚举 | `port_manager.rs` | 添加新平台的端口列表命令解析 |
-| 系统操作 | `scheduler.rs` | 关机/休眠/重启的命令 |
-| 浏览器 Cookie | `cookie_manager.rs` | 浏览器安装路径和加密机制 |
+| 端口枚举 | `process_ports.rs` | 添加新平台的端口列表命令解析 |
+| 浏览器 Cookie | `cookie_extractor.rs` | 浏览器安装路径和加密机制 |
 | Docker 配置 | `mirror.rs` | Docker daemon 配置文件路径 |
 | 用户数据 | `utils.rs` | `data_dir()` 的实现 |
 

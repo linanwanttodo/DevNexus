@@ -63,10 +63,9 @@ devnexus/
 │       ├── SoftwareCenter.svelte # 软件中心
 │       ├── EnvironmentManager.svelte # 环境管理
 │       ├── MirrorSettings.svelte # 镜像设置
-│       ├── PortManager.svelte    # 端口管理
-│       ├── TaskScheduler.svelte  # 任务调度
+│       ├── ProcessManager.svelte # 进程/端口管理
 │       ├── PasswordManager.svelte# 密码管理器
-│       ├── CookieViewer.svelte   # Cookie 提取
+│       ├── CookieExtractor.svelte# Cookie 提取
 │       └── Settings.svelte       # 设置页
 ├── src-tauri/                    # 后端 (Rust)
 │   ├── src/
@@ -75,11 +74,10 @@ devnexus/
 │   │   ├── utils.rs              # 通用工具函数
 │   │   ├── system.rs             # 系统仪表板
 │   │   ├── environment.rs        # 环境管理器
-│   │   ├── port_manager.rs       # 端口管理
-│   │   ├── scheduler.rs          # 任务调度
+│   │   ├── process_ports.rs     # 端口管理
 │   │   ├── version_manager.rs    # 版本管理器
 │   │   ├── password_manager.rs   # 密码管理器
-│   │   ├── cookie_manager.rs     # Cookie 提取
+│   │   ├── cookie_extractor.rs  # Cookie 提取
 │   │   └── residue_scanner.rs    # 残留扫描
 │   ├── commands/
 │   │   ├── mod.rs                # 命令模块导出
@@ -87,9 +85,8 @@ devnexus/
 │   │   ├── software.rs           # 软件中心命令
 │   │   ├── environment.rs        # 环境管理命令
 │   │   ├── mirror.rs             # 镜像设置命令
-│   │   ├── scheduler.rs          # 任务调度命令
 │   │   ├── password_manager.rs   # 密码管理命令
-│   │   ├── cookie_manager.rs     # Cookie 提取命令
+│   │   ├── cookie_extractor.rs  # Cookie 提取命令
 │   │   └── version_manager.rs    # 版本管理命令
 │   ├── Cargo.toml                # Rust 依赖
 │   └── tauri.conf.json           # Tauri 配置
@@ -105,7 +102,6 @@ devnexus/
     │   ├── 03-environment.md
     │   ├── 04-mirror.md
     │   ├── 05-port.md
-    │   ├── 06-scheduler.md
     │   ├── 07-password.md
     │   ├── 08-cookie.md
     │   ├── 09-uninstall.md

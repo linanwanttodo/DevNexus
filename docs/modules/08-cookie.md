@@ -6,9 +6,9 @@
 
 **通信链路**:
 ```
-CookieViewer.svelte ──→ invoke("list_cookies")      ──→ cookie_manager.rs
-                   ──→ invoke("export_cookies")     ──→ cookie_manager.rs
-                   ──→ invoke("list_browsers")      ──→ cookie_manager.rs
+CookieExtractor.svelte ──→ invoke("list_cookies")      ──→ cookie_extractor.rs
+                   ──→ invoke("export_cookies")     ──→ cookie_extractor.rs
+                   ──→ invoke("list_browsers")      ──→ cookie_extractor.rs
 ```
 
 ---
@@ -43,7 +43,7 @@ pub enum CookieExportFormat {
 }
 ```
 
-**前端对应** (`routes/CookieViewer.svelte`):
+**前端对应** (`routes/CookieExtractor.svelte`):
 
 ```javascript
 let browsers = $state([]);
