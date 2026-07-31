@@ -1930,8 +1930,12 @@ pub async fn force_uninstall_software(
     let mut cleaned = Vec::new();
     let mut failed = Vec::new();
 
-    // 删除文件
+    // 删除文件（仅删除标记为安全的）
     for item in &scan.files {
+        if !item.is_safe_to_delete {
+            failed.push(format!("{} (not marked safe to delete)", item.path));
+            continue;
+        }
         if let Err(e) = std::fs::remove_file(&item.path) {
             failed.push(format!("{} ({})", item.path, e));
         } else {
@@ -1939,8 +1943,12 @@ pub async fn force_uninstall_software(
         }
     }
 
-    // 删除目录
+    // 删除目录（仅删除标记为安全的）
     for item in &scan.directories {
+        if !item.is_safe_to_delete {
+            failed.push(format!("{} (not marked safe to delete)", item.path));
+            continue;
+        }
         if let Err(e) = std::fs::remove_dir_all(&item.path) {
             failed.push(format!("{} ({})", item.path, e));
         } else {
