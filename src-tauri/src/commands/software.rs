@@ -1666,12 +1666,23 @@ fn find_binary_in_dir(dir: &std::path::Path, name: &str) -> Option<PathBuf> {
     None
 }
 
+fn is_valid_version(v: &str) -> bool {
+    !v.is_empty()
+        && v.len() <= 128
+        && v
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
+}
+
 /// 从官方源下载并安装指定版本的软件
 #[tauri::command]
 pub async fn install_software_from_url(
     package_name: String,
     version: String,
 ) -> Result<String, String> {
+    if !is_valid_version(&version) {
+        return Err(format!("Invalid version string: {}", version));
+    }
     let defs = build_software_defs();
     let def = defs
         .iter()
@@ -2265,5 +2276,16 @@ mod tests {
             Some(&["list", "--local-only"] as &[&str])
         );
         assert_eq!(get_pm_list_args("unknown"), None);
+    }
+
+    #[test]
+    fn test_version_rejects_path_traversal() {
+        assert!(is_valid_version("1.2.3"));
+        assert!(is_valid_version("v24.2.1"));
+        assert!(!is_valid_version("../evil"));
+        assert!(!is_valid_version("1.2.3/../../etc"));
+        assert!(!is_valid_version("a;b"));
+        assert!(!is_valid_version(""));
+        assert!(!is_valid_version(&"v".repeat(200)));
     }
 }
