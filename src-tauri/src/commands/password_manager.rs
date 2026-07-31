@@ -745,8 +745,8 @@ fn escape_csv(field: &str) -> String {
     }
 }
 
-// PBKDF2 迭代次数（100,000 次，平衡安全与性能）
-const PBKDF2_ITERATIONS: u32 = 100_000;
+// PBKDF2 迭代次数（600,000 次，OWASP 推荐下限，平衡安全与性能；文件格式自带迭代数，老文件仍可读）
+const PBKDF2_ITERATIONS: u32 = 600_000;
 
 fn derive_key(password: &str, salt: &[u8]) -> [u8; 32] {
     use pbkdf2::pbkdf2_hmac;
@@ -822,6 +822,11 @@ mod tests {
     #[test]
     fn test_escape_csv_empty() {
         assert_eq!(escape_csv(""), "");
+    }
+
+    #[test]
+    fn test_default_iterations_meets_owasp() {
+        assert!(PBKDF2_ITERATIONS >= 600_000, "PBKDF2 iterations too low");
     }
 
     #[test]
