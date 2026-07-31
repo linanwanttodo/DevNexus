@@ -16,6 +16,8 @@ dist/
 .sisyphus/
 .zcode/
 .agents/
+.qoder/
+.agent-cache/
 
 # OS
 .DS_Store
