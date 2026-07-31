@@ -17,7 +17,6 @@
   import ContainerManager from "./routes/ContainerManager.svelte";
   import ApiHub from "./routes/ApiHub.svelte";
   import Migration from "./routes/Migration.svelte";
-  import DownloadManager from "./routes/DownloadManager.svelte";
 
   let page = $derived(getRoute());
 </script>
@@ -54,8 +53,6 @@
           <ApiHub />
         {:else if page === "/migration"}
           <Migration />
-        {:else if page === "/downloads"}
-          <DownloadManager />
         {/if}
       </main>
     </div>
