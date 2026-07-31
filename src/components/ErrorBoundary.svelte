@@ -6,15 +6,12 @@
 
   let errorInfo = $state(null);
 
-  onMount(() => {
-    // Check for stored errors periodically (store updates won't trigger reactivity here)
-    const checkError = () => {
-      const err = getError();
-      if (err && err.timestamp !== errorInfo?.timestamp) {
-        errorInfo = err;
-      }
-    };
+  // Reactively track stored errors ($state in error.svelte.js is tracked by $effect)
+  $effect(() => {
+    errorInfo = getError();
+  });
 
+  onMount(() => {
     // Global error handler for uncaught errors
     const handleError = (event) => {
       const err = event.error || new Error(String(event.error));
@@ -44,13 +41,9 @@
     window.addEventListener("error", handleError);
     window.addEventListener("unhandledrejection", handleRejection);
 
-    // Check for errors periodically
-    const interval = setInterval(checkError, 500);
-
     return () => {
       window.removeEventListener("error", handleError);
       window.removeEventListener("unhandledrejection", handleRejection);
-      clearInterval(interval);
     };
   });
 

@@ -3,14 +3,13 @@
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
-  import { getSearchQuery, setSearchQuery } from "../lib/stores.svelte.js";
   import { t, tFormat } from "../lib/i18n.svelte.js";
   import { friendlyError } from "../lib/errors.svelte.js";
 
   let apps = $state([]);
   let loading = $state(true);
   let error = $state(null);
-  let search = $derived(getSearchQuery());
+  let search = $state("");
 
   // Uninstall state
   let uninstalling = $state(null);  // app name being uninstalled
@@ -244,12 +243,12 @@
         type="text"
         placeholder={t("uninstall_mgr.search")}
         value={search}
-        oninput={(e) => { setSearchQuery(e.currentTarget.value); }}
+        oninput={(e) => { search = e.currentTarget.value; }}
       />
       {#if search}
         <button
           class="nx-search-clear material-symbols-outlined cursor-pointer"
-          onclick={() => { setSearchQuery(""); }}
+          onclick={() => { search = ""; }}
         >
           close
         </button>

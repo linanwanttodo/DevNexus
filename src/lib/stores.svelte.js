@@ -1,6 +1,5 @@
 let initialHash = (typeof window !== 'undefined' ? window.location.hash.slice(1) : "") || "/dashboard";
 let route = $state(initialHash);
-let searchQuery = $state("");
 
 export function getRoute() {
   return route;
@@ -20,12 +19,4 @@ if (typeof window !== 'undefined') {
       route = hash;
     }
   });
-}
-
-export function getSearchQuery() {
-  return searchQuery;
-}
-
-export function setSearchQuery(q) {
-  searchQuery = q;
 }

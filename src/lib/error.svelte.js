@@ -24,12 +24,3 @@ export function captureError(err, componentStack) {
 
   console.error("[ErrorBoundary] Caught error:", err, componentStack);
 }
-
-// Export as reactive state for derived
-export const errorStore = {
-  get value() { return errorInfo; },
-  subscribe(fn) {
-    fn(errorInfo);
-    return () => {};
-  }
-};

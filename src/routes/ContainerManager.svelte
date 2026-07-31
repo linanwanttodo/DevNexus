@@ -3,7 +3,7 @@
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
-  import { getSearchQuery, setSearchQuery, navigate } from "../lib/stores.svelte.js";
+  import { navigate } from "../lib/stores.svelte.js";
   import { t } from "../lib/i18n.svelte.js";
   import { friendlyError } from "../lib/errors.svelte.js";
   import ContainerIcons from "../icons/ContainerIcons.svelte";
@@ -73,7 +73,7 @@
 
   let actionLoading = $state("");
 
-  let search = $derived(getSearchQuery());
+  let search = $state("");
 
   const tabs = [
     { id: "containers", label: t("docker.tab_containers"), icon: "container" },
@@ -108,7 +108,7 @@
 
   async function onTabChange(tab) {
     activeTab = tab;
-    setSearchQuery("");
+    search = "";
     if (dockerStatus.installed && dockerStatus.running) await loadTabData(tab);
   }
 
@@ -476,10 +476,10 @@
           <div class="relative mb-4">
             <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-nx-text-muted text-sm pointer-events-none">search</span>
             <input type="text" placeholder={t("docker.search_containers")}
-              value={search} oninput={(e) => setSearchQuery(e.currentTarget.value)}
+              value={search} oninput={(e) => search = e.currentTarget.value}
               class="nx-input w-full pl-9 pr-8 h-9 text-sm" />
             {#if search}
-              <button class="absolute right-2 top-1/2 -translate-y-1/2 text-nx-text-muted" onclick={() => setSearchQuery("")}>
+              <button class="absolute right-2 top-1/2 -translate-y-1/2 text-nx-text-muted" onclick={() => search = ""}>
                 <span class="material-symbols-outlined text-sm">close</span>
               </button>
             {/if}
@@ -581,10 +581,10 @@
           <div class="relative mb-4">
             <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-nx-text-muted text-sm pointer-events-none">search</span>
             <input type="text" placeholder={t("docker.search_images")}
-              value={search} oninput={(e) => setSearchQuery(e.currentTarget.value)}
+              value={search} oninput={(e) => search = e.currentTarget.value}
               class="nx-input w-full pl-9 pr-8 h-9 text-sm" />
             {#if search}
-              <button class="absolute right-2 top-1/2 -translate-y-1/2 text-nx-text-muted" onclick={() => setSearchQuery("")}>
+              <button class="absolute right-2 top-1/2 -translate-y-1/2 text-nx-text-muted" onclick={() => search = ""}>
                 <span class="material-symbols-outlined text-sm">close</span>
               </button>
             {/if}
