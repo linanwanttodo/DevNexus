@@ -68,10 +68,16 @@
     "language": "Язык",
     "language_desc": "Выберите язык интерфейса"
   },
+  "titleBar": {
+    "minimize": "Свернуть",
+    "maximize": "Развернуть",
+    "close": "Закрыть"
+  },
   "dashboard": {
     "title": "Панель",
     "new_environment": "Новое окружение",
     "overview": "Обзор",
+    "status_at_a_glance": "Состояние системы с первого взгляда",
     "cpu_cores": "Ядра ЦП",
     "memory": "Память",
     "disk": "Диск",
@@ -135,6 +141,11 @@
     "remove_from_path": "Удалить из PATH",
     "view_config": "Просмотр конфига",
     "no_config": "Файл конфигурации не найден",
+    "remove_from_path_confirm": "Удалить {name} из PATH?",
+    "config_file": "Файл конфигурации: {path}",
+    "name_placeholder": "например, Node.js v20",
+    "path_placeholder": "например, /usr/local/bin",
+    "page_indicator": "{current} из {total}",
     "count": "{count} окружений настроено",
     "no_data": "Нет настроенных окружений",
     "name": "Имя",
@@ -297,7 +308,8 @@
     "security_understand": "Я понимаю риск, продолжить",
     "copy_single_ok": "Cookie copied to clipboard",
     "copy_all_ok": "All cookies copied to clipboard",
-    "cookies_extracted": "cookies extracted"
+    "cookies_extracted": "cookies extracted",
+    "display_limit": "Показаны только первые {count} cookie. Используйте фильтр по домену или экспорт для получения полных данных."
   },
   "docker": {
     "tab_containers": "Контейнеры",
@@ -448,9 +460,14 @@
     "clean_selected": "Очистить выбранное",
     "nothing_selected": "Ничего не выбрано",
     "confirm_clean": "Очистить {count} выбранных элементов?",
+    "residues_count": "остатков",
+    "total_size": "Всего",
     "caution": "Осторожно",
     "success": "Uninstalled successfully",
     "failed": "Uninstallation failed: {error}",
+    "force_failed": "Не удалось принудительно удалить: {error}",
+    "scan_failed": "Ошибка сканирования: {error}",
+    "clean_failed": "Не удалось очистить: {error}",
     "deep": "Deep Uninstall",
     "deep_short": "Deep",
     "deep_clean": "Deep Clean",
