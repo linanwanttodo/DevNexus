@@ -3,7 +3,6 @@
   import { onMount, onDestroy } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
-  import { getSearchQuery, setSearchQuery } from "../lib/stores.svelte.js";
   import { t } from "../lib/i18n.svelte.js";
   import { friendlyError } from "../lib/errors.svelte.js";
 
@@ -11,7 +10,7 @@
   let total = $state(0);
   let loading = $state(true);
   let error = $state(null);
-  let search = $derived(getSearchQuery());
+  let search = $state("");
   let sortBy = $state("memory"); // memory | cpu | name | count
   let sortAsc = $state(false);
   let autoRefresh = $state(false);
@@ -219,12 +218,12 @@
         type="text"
         placeholder={t("process.search_placeholder")}
         value={search}
-        oninput={(e) => { setSearchQuery(e.currentTarget.value); }}
+        oninput={(e) => { search = e.currentTarget.value; }}
       />
       {#if search}
         <button
           class="nx-search-clear material-symbols-outlined"
-          onclick={() => { setSearchQuery(""); }}
+          onclick={() => { search = ""; }}
         >
           close
         </button>
