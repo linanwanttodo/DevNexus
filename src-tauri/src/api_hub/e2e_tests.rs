@@ -470,3 +470,57 @@ async fn e2e_unmatched_model_returns_404() {
     // 不再兜底路由，未匹配模型应返回 404
     assert_eq!(status, 404);
 }
+
+#[tokio::test]
+async fn e2e_streaming_log_tokens_backfilled() {
+    // 回归测试（C1）：流式请求结束后，token 用量必须回填到请求日志。
+    // 此前 log_request 的 INSERT 是 fire-and-forget，UPDATE 可能先于 INSERT 提交，
+    // 导致匹配 0 行、流式 token 永久丢失。
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let state_check = state.clone();
+    let (hub, _h) = spawn_hub(state).await;
+
+    // Anthropic mock 的 SSE 自带 usage（input_tokens=5, output_tokens=2），
+    // 走跨协议流式路径以触发 usage 捕获
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://{}/v1/chat/completions", hub))
+        .json(&serde_json::json!({
+            "model": "mock-claude",
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": true
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 200);
+    let body = resp.text().await.unwrap_or_default();
+    assert!(
+        body.contains("data: [DONE]"),
+        "SSE should end with [DONE], got: {}",
+        &body[..body.len().min(200)]
+    );
+
+    // 流结束后 update_log_tokens 在后台异步执行，轮询等待回填完成
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let (input, output) = loop {
+        let logs = super::usage::get_logs(&state_check, 50, 0).await;
+        let streamed = logs.iter().find(|l| l.is_streaming && l.model == "mock-claude");
+        if let Some(l) = streamed {
+            if l.output_tokens > 0 {
+                break (l.input_tokens, l.output_tokens);
+            }
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "streaming log tokens never backfilled: {:?}",
+            logs
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    };
+
+    // Anthropic mock 的 usage：input_tokens=5, output_tokens=2
+    assert_eq!(input, 5, "input_tokens should be backfilled from Anthropic mock");
+    assert_eq!(output, 2, "output_tokens should be backfilled from Anthropic mock");
+}

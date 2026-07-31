@@ -32,12 +32,13 @@ pub async fn log_request(state: &AppState, mut log: RequestLog) {
         logs.push_back(log.clone());
     }
 
-    // 异步持久化到 SQLite（fire-and-forget via spawn_blocking）
+    // 异步持久化到 SQLite（await 确保 INSERT 提交后再返回，避免流式结束后
+    // update_log_tokens 的 UPDATE 先于 INSERT 执行导致 token 统计丢失）
     let db = state.db.clone();
-    tokio::task::spawn_blocking(move || {
+    let _ = tokio::task::spawn_blocking(move || {
         let db_guard = db.blocking_lock();
         if let Some(ref conn) = *db_guard {
-            let _ = conn.execute(
+            if let Err(e) = conn.execute(
                 "INSERT INTO request_logs (id, provider_id, provider_name, model, request_model,
                  input_tokens, output_tokens, latency_ms, status_code, error_message, timestamp, is_streaming)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
@@ -55,9 +56,12 @@ pub async fn log_request(state: &AppState, mut log: RequestLog) {
                     log.timestamp,
                     log.is_streaming as i32,
                 ],
-            );
+            ) {
+                eprintln!("[API Hub] Failed to insert request log: {}", e);
+            }
         }
-    });
+    })
+    .await;
 }
 
 /// 回填流式请求的 token 用量（流结束后调用）
@@ -75,18 +79,21 @@ pub async fn update_log_tokens(state: &AppState, log_id: &str, input: u64, outpu
         }
     }
 
-    // 更新数据库
+    // 更新数据库（await 确保 UPDATE 提交后再返回，且此时 INSERT 已提交，保证匹配到行）
     let db = state.db.clone();
     let id = log_id.to_string();
-    tokio::task::spawn_blocking(move || {
+    let _ = tokio::task::spawn_blocking(move || {
         let db_guard = db.blocking_lock();
         if let Some(ref conn) = *db_guard {
-            let _ = conn.execute(
+            if let Err(e) = conn.execute(
                 "UPDATE request_logs SET input_tokens = ?1, output_tokens = ?2 WHERE id = ?3",
                 rusqlite::params![input as i64, output as i64, id],
-            );
+            ) {
+                eprintln!("[API Hub] Failed to update request log tokens: {}", e);
+            }
         }
-    });
+    })
+    .await;
 }
 
 /// 获取请求日志列表（优先查 SQLite，DB 不可用时回退内存）
