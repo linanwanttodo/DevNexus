@@ -12,9 +12,9 @@ const MAX_DISPLAY_COOKIES: usize = 500;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     #[cfg(target_os = "linux")]
     use super::cookie_crypto::try_aes_128_cbc;
+    use super::*;
     #[cfg(target_os = "linux")]
     use sha2::{Digest, Sha256};
 
@@ -159,10 +159,7 @@ mod tests {
         let enc = Aes128CbcEnc::new_from_slices(&key, &iv).unwrap();
         let mut out_buf = vec![0u8; plaintext.len() + 16];
         let ciphertext = enc
-            .encrypt_padded_b2b_mut::<aes::cipher::block_padding::Pkcs7>(
-                &plaintext,
-                &mut out_buf,
-            )
+            .encrypt_padded_b2b_mut::<aes::cipher::block_padding::Pkcs7>(&plaintext, &mut out_buf)
             .unwrap()
             .to_vec();
 
@@ -605,14 +602,18 @@ fn map_chrome_cookie_row(
     };
     Ok(CookieEntry {
         name: row.get(0)?,
-        value: cookie_crypto::decrypt_cookie_value(&encrypted_value, &host_key, has_integrity_check)
-            .map_err(|e| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    1,
-                    rusqlite::types::Type::Blob,
-                    Box::new(std::io::Error::other(e)),
-                )
-            })?,
+        value: cookie_crypto::decrypt_cookie_value(
+            &encrypted_value,
+            &host_key,
+            has_integrity_check,
+        )
+        .map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(
+                1,
+                rusqlite::types::Type::Blob,
+                Box::new(std::io::Error::other(e)),
+            )
+        })?,
         domain: host_key,
         path: row.get(3)?,
         expires,
@@ -791,4 +792,3 @@ fn read_cookies(
 
     Ok(cookies)
 }
-

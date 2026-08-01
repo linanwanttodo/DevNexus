@@ -62,7 +62,10 @@ mod tests {
     #[test]
     fn test_first_line_or_unknown() {
         // 多行输出取第一行作为版本号
-        assert_eq!(first_line_or_unknown("Python 3.11.0\nmore"), "Python 3.11.0");
+        assert_eq!(
+            first_line_or_unknown("Python 3.11.0\nmore"),
+            "Python 3.11.0"
+        );
         assert_eq!(first_line_or_unknown("go1.21.0"), "go1.21.0");
         // 空 / 纯换行输出（lines 返回空串而非 None）
         assert_eq!(first_line_or_unknown(""), "unknown");

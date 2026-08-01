@@ -481,4 +481,3 @@ pub(super) fn map_package_name<'a>(generic: &'a str, pm_name: &str) -> &'a str {
         _ => generic,
     }
 }
-

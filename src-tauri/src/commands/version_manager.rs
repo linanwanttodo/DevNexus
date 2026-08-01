@@ -1251,7 +1251,10 @@ mod tests {
         // 带 "=" 的变体
         assert_eq!(extract_version_string("openjdk version=21.0.2"), "21.0.2");
         // 无 "version" 关键词时回退为第一行
-        assert_eq!(extract_version_string("some random output"), "some random output");
+        assert_eq!(
+            extract_version_string("some random output"),
+            "some random output"
+        );
         assert_eq!(extract_version_string("foo\nbar"), "foo");
         // 空输出
         assert_eq!(extract_version_string(""), "");
@@ -1262,7 +1265,10 @@ mod tests {
         assert_eq!(extract_java_version_from_dir("java-11-openjdk-amd64"), "11");
         assert_eq!(extract_java_version_from_dir("jdk1.8.0_202"), "1.8.0_202");
         assert_eq!(extract_java_version_from_dir("jdk-17.0.9+9"), "17.0.9+9");
-        assert_eq!(extract_java_version_from_dir("zulu17.50.19-ca-jdk17.0.9"), "17.50.19");
+        assert_eq!(
+            extract_java_version_from_dir("zulu17.50.19-ca-jdk17.0.9"),
+            "17.50.19"
+        );
         assert_eq!(extract_java_version_from_dir("11.0.2"), "11.0.2");
         assert_eq!(extract_java_version_from_dir("temurin-21-jdk"), "21");
         // 提取不出版本号时原样返回目录名
@@ -1272,7 +1278,8 @@ mod tests {
 
     #[test]
     fn test_parse_nvm_list_output() {
-        let output = "       v16.20.0\n       v18.17.0\n->       v20.11.0\ndefault -> v18.17.0\nsystem\n";
+        let output =
+            "       v16.20.0\n       v18.17.0\n->       v20.11.0\ndefault -> v18.17.0\nsystem\n";
         let versions = parse_nvm_list_output(output, "v20.11.0");
         assert_eq!(versions.len(), 4);
         assert_eq!(versions[0].version, "v16.20.0");

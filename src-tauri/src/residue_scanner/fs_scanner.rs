@@ -173,14 +173,11 @@ fn matches_keywords(fname: &str, keywords: &[String]) -> bool {
         if fname == kw {
             return true;
         }
-        if fname
-            .split(['/', '\\'])
-            .any(|seg| {
-                seg == kw
-                    || seg.starts_with(&format!("{}-", kw))
-                    || seg.starts_with(&format!("{}_", kw))
-            })
-        {
+        if fname.split(['/', '\\']).any(|seg| {
+            seg == kw
+                || seg.starts_with(&format!("{}-", kw))
+                || seg.starts_with(&format!("{}_", kw))
+        }) {
             return true;
         }
     }
@@ -256,8 +253,7 @@ mod tests {
         assert_eq!(go, vec!["go".to_string()]);
         // 结果去重
         let firefox = build_keywords("Mozilla Firefox");
-        let unique: std::collections::HashSet<String> =
-            firefox.iter().cloned().collect();
+        let unique: std::collections::HashSet<String> = firefox.iter().cloned().collect();
         assert_eq!(unique.len(), firefox.len());
         // 关键词过短会被 matches_keywords 拒绝（例如空串）
         assert!(!matches_keywords("anything", &go));
