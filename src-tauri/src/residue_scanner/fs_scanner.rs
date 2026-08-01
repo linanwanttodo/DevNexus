@@ -77,15 +77,7 @@ pub fn scan_by_keywords(app_name: &str, home: &str) -> (Vec<ResidueItem>, Vec<Re
                     } else {
                         path.metadata().map(|m| m.len()).unwrap_or(0)
                     };
-                    let category = if fname.contains("cache") || fname.contains("缓存") {
-                        "cache"
-                    } else if fname.contains("config") || fname.contains("pref") {
-                        "config"
-                    } else if fname.contains("log") {
-                        "log"
-                    } else {
-                        "data"
-                    };
+                    let category = classify_category(&fname);
                     let item = ResidueItem {
                         path: p_str,
                         size,
@@ -195,6 +187,19 @@ fn matches_keywords(fname: &str, keywords: &[String]) -> bool {
     false
 }
 
+/// 按文件名分类残留类型（纯函数，便于单测）
+fn classify_category(fname: &str) -> &'static str {
+    if fname.contains("cache") || fname.contains("缓存") {
+        "cache"
+    } else if fname.contains("config") || fname.contains("pref") {
+        "config"
+    } else if fname.contains("log") {
+        "log"
+    } else {
+        "data"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -211,5 +216,50 @@ mod tests {
             "/home/u/.config/vscode-other",
             &["code".to_string()]
         ));
+    }
+
+    #[test]
+    fn test_classify_category() {
+        assert_eq!(classify_category("app-cache-dir"), "cache");
+        assert_eq!(classify_category("缓存目录"), "cache");
+        assert_eq!(classify_category("com.apple.preferences.plist"), "config");
+        assert_eq!(classify_category(".config/devnexus/config.json"), "config");
+        // 大小写敏感：大写 "Preferences" 不命中小写 "pref"
+        assert_eq!(classify_category("com.apple.Preferences.plist"), "data");
+        assert_eq!(classify_category("application.log"), "log");
+        assert_eq!(classify_category("logs/stderr"), "log");
+        assert_eq!(classify_category("data.db"), "data");
+        assert_eq!(classify_category("bin"), "data");
+        // 优先级：cache > config > log（"cache.log" 命中 cache）
+        assert_eq!(classify_category("cache.log"), "cache");
+    }
+
+    #[test]
+    fn test_build_keywords() {
+        // 常见工具别名
+        let vscode = build_keywords("Visual Studio Code");
+        for kw in ["visual studio code", "vscode", "visual", "studio", "code"] {
+            assert!(vscode.contains(&kw.to_string()), "missing `{}`", kw);
+        }
+        let docker = build_keywords("Docker Desktop");
+        assert!(docker.contains(&"docker".to_string()));
+        let py = build_keywords("Python");
+        for kw in ["python", "pip", "conda"] {
+            assert!(py.contains(&kw.to_string()), "missing `{}`", kw);
+        }
+        let node = build_keywords("Node.js");
+        for kw in ["node.js", "node", "nodejs", "npm"] {
+            assert!(node.contains(&kw.to_string()), "missing `{}`", kw);
+        }
+        // 分割出的短词（<3 字符）被剔除，避免误伤
+        let go = build_keywords("Go");
+        assert_eq!(go, vec!["go".to_string()]);
+        // 结果去重
+        let firefox = build_keywords("Mozilla Firefox");
+        let unique: std::collections::HashSet<String> =
+            firefox.iter().cloned().collect();
+        assert_eq!(unique.len(), firefox.len());
+        // 关键词过短会被 matches_keywords 拒绝（例如空串）
+        assert!(!matches_keywords("anything", &go));
     }
 }

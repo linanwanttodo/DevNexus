@@ -221,4 +221,85 @@ mod tests {
     fn test_parse_empty_fails() {
         assert!(parse_migration_manifest("".into()).is_err());
     }
+
+    #[test]
+    fn test_parse_valid_manifest_fields() {
+        let json = r#"{
+            "meta": {
+                "exported_at": "2026-01-01T10:00:00Z",
+                "devnexus_version": "1.2.0",
+                "source_os": "macos",
+                "hostname": "mbp-local"
+            },
+            "environments": [
+                {
+                    "name": "Python",
+                    "lang_type": "python",
+                    "version": "Python 3.12.1",
+                    "path": "/usr/local/bin/python3",
+                    "shell_config": "~/.zshrc"
+                },
+                {
+                    "name": "Go",
+                    "lang_type": "go",
+                    "version": "go1.22.0",
+                    "path": "/usr/local/go/bin/go",
+                    "shell_config": null
+                }
+            ],
+            "versions": [
+                {"lang_type": "python", "version": "3.12.1"},
+                {"lang_type": "node", "version": "v20.11.0"}
+            ]
+        }"#;
+        let m = parse_migration_manifest(json.to_string()).unwrap();
+        // meta 字段
+        assert_eq!(m.meta.exported_at, "2026-01-01T10:00:00Z");
+        assert_eq!(m.meta.devnexus_version, "1.2.0");
+        assert_eq!(m.meta.source_os, "macos");
+        assert_eq!(m.meta.hostname, "mbp-local");
+        // environments 字段（含 shell_config Some/None）
+        assert_eq!(m.environments.len(), 2);
+        let py = &m.environments[0];
+        assert_eq!(py.name, "Python");
+        assert_eq!(py.lang_type, "python");
+        assert_eq!(py.version, "Python 3.12.1");
+        assert_eq!(py.path, "/usr/local/bin/python3");
+        assert_eq!(py.shell_config.as_deref(), Some("~/.zshrc"));
+        assert_eq!(m.environments[1].shell_config, None);
+        // versions 字段
+        assert_eq!(m.versions.len(), 2);
+        assert_eq!(m.versions[0].lang_type, "python");
+        assert_eq!(m.versions[0].version, "3.12.1");
+        assert_eq!(m.versions[1].lang_type, "node");
+        assert_eq!(m.versions[1].version, "v20.11.0");
+    }
+
+    #[test]
+    fn test_parse_invalid_json_fails() {
+        assert!(parse_migration_manifest("not json at all".into()).is_err());
+        assert!(parse_migration_manifest("{".into()).is_err());
+        assert!(parse_migration_manifest("[]".into()).is_err()); // 数组而非对象
+    }
+
+    #[test]
+    fn test_parse_missing_required_field_fails() {
+        // 缺少 meta
+        let no_meta = r#"{"environments": [], "versions": []}"#;
+        assert!(parse_migration_manifest(no_meta.into()).is_err());
+        // 缺少 versions
+        let no_versions = r#"{"meta": {"exported_at": "x", "devnexus_version": "1", "source_os": "linux", "hostname": "h"}, "environments": []}"#;
+        assert!(parse_migration_manifest(no_versions.into()).is_err());
+        // 缺少 environments
+        let no_envs = r#"{"meta": {"exported_at": "x", "devnexus_version": "1", "source_os": "linux", "hostname": "h"}, "versions": []}"#;
+        assert!(parse_migration_manifest(no_envs.into()).is_err());
+        // meta 内部字段缺失
+        let partial_meta = r#"{"meta": {"exported_at": "x"}, "environments": [], "versions": []}"#;
+        assert!(parse_migration_manifest(partial_meta.into()).is_err());
+    }
+
+    #[test]
+    fn test_parse_whitespace_fails() {
+        assert!(parse_migration_manifest("   \n\t  ".into()).is_err());
+    }
 }

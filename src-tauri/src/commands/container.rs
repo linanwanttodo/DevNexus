@@ -529,7 +529,15 @@ pub fn compose_logs(
 
 #[cfg(test)]
 mod tests {
-    use super::{ALLOWED_ACTIONS, validate_container_id};
+    use super::{
+        ALLOWED_ACTIONS, parse_json_lines, validate_container_id, validate_exec_command,
+    };
+
+    #[derive(serde::Deserialize, Debug, PartialEq)]
+    struct SampleLine {
+        id: u32,
+        name: String,
+    }
 
     #[test]
     fn test_container_action_whitelist() {
@@ -545,5 +553,102 @@ mod tests {
         assert!(validate_container_id("-evil").is_err());
         assert!(validate_container_id("a; rm -rf /").is_err());
         assert!(validate_container_id("").is_err());
+    }
+
+    #[test]
+    fn test_validate_container_id_boundaries() {
+        // 64 字符 / 128 字符：合法上限边界
+        let id64 = "a".repeat(64);
+        let id128 = "a".repeat(128);
+        assert!(validate_container_id(&id64).is_ok());
+        assert!(validate_container_id(&id128).is_ok());
+        // 超长拒绝
+        assert!(validate_container_id(&"a".repeat(129)).is_err());
+        // 空串 / 纯空白
+        assert!(validate_container_id("").is_err());
+        assert!(validate_container_id("   ").is_err());
+        // 特殊字符集合全部拒绝
+        for bad in [";", "|", "&", "$", "`", "'", "\"", "\\"] {
+            assert!(
+                validate_container_id(&format!("ab{}cd", bad)).is_err(),
+                "should reject container id containing `{}`",
+                bad
+            );
+        }
+        // 空白（空格/制表/换行）拒绝
+        for bad in [' ', '\t', '\n'] {
+            assert!(validate_container_id(&format!("ab{}cd", bad)).is_err());
+        }
+        // 正常字符（数字、字母、点、横线）接受
+        for good in ["abc123", "web.nginx.prod", "my-container-01", "ABC_123"] {
+            assert!(validate_container_id(good).is_ok());
+        }
+    }
+
+    #[test]
+    fn test_validate_exec_command() {
+        // 合法普通命令
+        assert!(validate_exec_command("ls -la").is_ok());
+        assert!(validate_exec_command("cat /etc/hosts").is_ok());
+        assert!(validate_exec_command("echo 'hello'").is_ok());
+        // 空命令拒绝
+        assert!(validate_exec_command("").is_err());
+        // 命令链接 / 注入元字符拒绝
+        for bad in [";", "|", "&", "$", "`", "\"", "\n", "\r"] {
+            assert!(
+                validate_exec_command(&format!("ls{} rm -rf /", bad)).is_err(),
+                "should reject exec command containing `{:?}`",
+                bad
+            );
+        }
+        assert!(validate_exec_command("ls; rm -rf /").is_err());
+        assert!(validate_exec_command("echo hi | grep x").is_err());
+        assert!(validate_exec_command("cmd1 && cmd2").is_err());
+        assert!(validate_exec_command("echo $HOME").is_err());
+    }
+
+    #[test]
+    fn test_parse_json_lines_valid() {
+        let out = format!(
+            "{}\n{}\n{}\n",
+            serde_json::json!({"id": 1, "name": "a"}),
+            serde_json::json!({"id": 2, "name": "b"}),
+            serde_json::json!({"id": 3, "name": "c"}),
+        );
+        let parsed: Vec<SampleLine> = parse_json_lines(&out);
+        assert_eq!(parsed.len(), 3);
+        assert_eq!(parsed[0], SampleLine { id: 1, name: "a".into() });
+        assert_eq!(parsed[2], SampleLine { id: 3, name: "c".into() });
+    }
+
+    #[test]
+    fn test_parse_json_lines_skips_invalid_and_empty() {
+        let out = format!(
+            "{}\nnot-json\n{}\n\n   \n{}\n",
+            serde_json::json!({"id": 1, "name": "a"}),
+            serde_json::json!({"id": 2, "name": "b"}),
+            serde_json::json!({"id": 3, "name": "c"}),
+        );
+        let parsed: Vec<SampleLine> = parse_json_lines(&out);
+        assert_eq!(parsed.len(), 3);
+        assert_eq!(parsed[0].id, 1);
+        assert_eq!(parsed[1].id, 2);
+        assert_eq!(parsed[2].id, 3);
+    }
+
+    #[test]
+    fn test_parse_json_lines_skips_wrong_shape() {
+        // 合法 JSON 但字段不匹配 -> 被跳过
+        let out = format!("{}\n", serde_json::json!({"foo": "bar"}));
+        let parsed: Vec<SampleLine> = parse_json_lines(&out);
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn test_parse_json_lines_empty_input() {
+        let parsed: Vec<SampleLine> = parse_json_lines("");
+        assert!(parsed.is_empty());
+        let parsed: Vec<SampleLine> = parse_json_lines("\n\n\n");
+        assert!(parsed.is_empty());
     }
 }

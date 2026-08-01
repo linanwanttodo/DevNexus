@@ -269,36 +269,42 @@ fn nvm_list_versions() -> Vec<VersionInfo> {
             .unwrap_or_default()
             .trim()
             .to_string();
-        return output
-            .lines()
-            .filter_map(|line| {
-                let trimmed = line.trim();
-                if trimmed.is_empty() || trimmed.contains("->") || trimmed.contains("default") {
-                    // nvm uses "-> v18.17.0" for current
-                    let parts: Vec<&str> = trimmed.split("->").collect();
-                    if parts.len() >= 2 {
-                        let v = parts[1].trim().trim_end_matches(" (currently in use)");
-                        return Some(VersionInfo {
-                            version: v.to_string(),
-                            path: String::new(),
-                            is_active: true,
-                        });
-                    }
-                    return None;
-                }
-                if trimmed.starts_with("v") || trimmed.starts_with(" ") {
-                    let v = trimmed.trim();
+        return parse_nvm_list_output(&output, &current);
+    }
+    vec![]
+}
+
+/// 解析 `nvm ls --no-colors` 的输出为版本列表（纯函数，便于单测）。
+/// `current` 是 `node --version` 的结果，用于标记非当前版本行的活跃状态。
+fn parse_nvm_list_output(output: &str, current: &str) -> Vec<VersionInfo> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.contains("->") || trimmed.contains("default") {
+                // nvm uses "-> v18.17.0" for current
+                let parts: Vec<&str> = trimmed.split("->").collect();
+                if parts.len() >= 2 {
+                    let v = parts[1].trim().trim_end_matches(" (currently in use)");
                     return Some(VersionInfo {
                         version: v.to_string(),
                         path: String::new(),
-                        is_active: v == current,
+                        is_active: true,
                     });
                 }
-                None
-            })
-            .collect();
-    }
-    vec![]
+                return None;
+            }
+            if trimmed.starts_with("v") || trimmed.starts_with(" ") {
+                let v = trimmed.trim();
+                return Some(VersionInfo {
+                    version: v.to_string(),
+                    path: String::new(),
+                    is_active: v == current,
+                });
+            }
+            None
+        })
+        .collect()
 }
 
 fn switch_node_version(version: &str) -> Result<String, String> {
@@ -1204,5 +1210,97 @@ mod tests {
         assert!(switch_node_version(&"v".repeat(100)).is_err());
         // 合法输入不 panic（环境无 fnm/nvm 时返回 Err 也允许，但绝不 panic）
         let _ = switch_node_version("v18.17.0");
+    }
+
+    #[test]
+    fn test_fuzzy_match_version() {
+        // 完全相等
+        assert!(fuzzy_match_version("21.0.2", "21.0.2"));
+        assert!(fuzzy_match_version("25", "25"));
+        // 前段匹配（"25" ≈ "25.0.1"）
+        assert!(fuzzy_match_version("25", "25.0.1"));
+        assert!(fuzzy_match_version("25.0.1", "25"));
+        assert!(fuzzy_match_version("17.0.9", "17"));
+        assert!(fuzzy_match_version("1.8", "1.8.0_202"));
+        // 不匹配
+        assert!(!fuzzy_match_version("21.0.2", "25"));
+        assert!(!fuzzy_match_version("25.0.1", "21.0.2"));
+        assert!(!fuzzy_match_version("1.8", "11.0.2"));
+        assert!(!fuzzy_match_version("11.0.2", "1.8"));
+        // 空串场景（一侧为空视为不匹配；完全匹配仅当双方都为空）
+        assert!(!fuzzy_match_version("", "21"));
+        assert!(!fuzzy_match_version("21", ""));
+        assert!(!fuzzy_match_version("", "21.0.1"));
+        assert!(fuzzy_match_version("", ""));
+    }
+
+    #[test]
+    fn test_extract_version_string() {
+        assert_eq!(
+            extract_version_string("openjdk version \"17.0.9\" 2023-10-17"),
+            "17.0.9"
+        );
+        assert_eq!(
+            extract_version_string("java version \"1.8.0_202\""),
+            "1.8.0_202"
+        );
+        assert_eq!(
+            extract_version_string("openjdk version \"11.0.2\" 2019-01-15\nExtra line"),
+            "11.0.2"
+        );
+        // 带 "=" 的变体
+        assert_eq!(extract_version_string("openjdk version=21.0.2"), "21.0.2");
+        // 无 "version" 关键词时回退为第一行
+        assert_eq!(extract_version_string("some random output"), "some random output");
+        assert_eq!(extract_version_string("foo\nbar"), "foo");
+        // 空输出
+        assert_eq!(extract_version_string(""), "");
+    }
+
+    #[test]
+    fn test_extract_java_version_from_dir() {
+        assert_eq!(extract_java_version_from_dir("java-11-openjdk-amd64"), "11");
+        assert_eq!(extract_java_version_from_dir("jdk1.8.0_202"), "1.8.0_202");
+        assert_eq!(extract_java_version_from_dir("jdk-17.0.9+9"), "17.0.9+9");
+        assert_eq!(extract_java_version_from_dir("zulu17.50.19-ca-jdk17.0.9"), "17.50.19");
+        assert_eq!(extract_java_version_from_dir("11.0.2"), "11.0.2");
+        assert_eq!(extract_java_version_from_dir("temurin-21-jdk"), "21");
+        // 提取不出版本号时原样返回目录名
+        assert_eq!(extract_java_version_from_dir("foo"), "foo");
+        assert_eq!(extract_java_version_from_dir("jdk"), "jdk");
+    }
+
+    #[test]
+    fn test_parse_nvm_list_output() {
+        let output = "       v16.20.0\n       v18.17.0\n->       v20.11.0\ndefault -> v18.17.0\nsystem\n";
+        let versions = parse_nvm_list_output(output, "v20.11.0");
+        assert_eq!(versions.len(), 4);
+        assert_eq!(versions[0].version, "v16.20.0");
+        assert!(!versions[0].is_active);
+        assert_eq!(versions[1].version, "v18.17.0");
+        assert!(!versions[1].is_active);
+        // 当前标记行强制 is_active
+        assert_eq!(versions[2].version, "v20.11.0");
+        assert!(versions[2].is_active);
+        // "default -> x" 行解析到箭头右侧
+        assert_eq!(versions[3].version, "v18.17.0");
+        assert!(versions[3].is_active);
+    }
+
+    #[test]
+    fn test_parse_nvm_list_output_current_in_use_suffix() {
+        let output = "-> v20.11.0 (currently in use)\n";
+        let versions = parse_nvm_list_output(output, "");
+        assert_eq!(versions.len(), 1);
+        assert_eq!(versions[0].version, "v20.11.0");
+        assert!(versions[0].is_active);
+    }
+
+    #[test]
+    fn test_parse_nvm_list_output_empty_and_junk() {
+        // 空输出 / 全空行 / 不可解析行 -> 空列表
+        assert!(parse_nvm_list_output("", "v20.11.0").is_empty());
+        assert!(parse_nvm_list_output("\n\n  \n", "v20.11.0").is_empty());
+        assert!(parse_nvm_list_output("system\niojs\n", "v20.11.0").is_empty());
     }
 }
