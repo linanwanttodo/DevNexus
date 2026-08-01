@@ -28,6 +28,10 @@
   /* ── Borders (ZCode: ultra subtle) ── */
   --nx-border: rgba(255, 255, 255, 0.10);
   --nx-border-light: rgba(255, 255, 255, 0.16);
+
+  /* ── Skeleton loading (dark theme: clearly visible on #161616) ── */
+  --nx-skeleton-bg: rgba(255, 255, 255, 0.10);
+  --nx-skeleton-shine: rgba(255, 255, 255, 0.18);
   --nx-border-hover: rgba(255, 255, 255, 0.18);
   --nx-border-active: rgba(255, 255, 255, 0.25);
 
@@ -112,6 +116,10 @@
   --nx-border-light: rgba(0, 0, 0, 0.14);
   --nx-border-hover: rgba(0, 0, 0, 0.18);
   --nx-border-active: rgba(0, 0, 0, 0.22);
+
+  /* ── Skeleton loading (light theme) ── */
+  --nx-skeleton-bg: rgba(0, 0, 0, 0.08);
+  --nx-skeleton-shine: rgba(255, 255, 255, 0.60);
 
   --color-border: rgba(0, 0, 0, 0.10);
   --color-border-hover: rgba(0, 0, 0, 0.18);
@@ -801,7 +809,7 @@ input[type="radio"]:focus-visible {
 .nx-skeleton {
   position: relative;
   overflow: hidden;
-  background: var(--nx-skeleton-bg, rgba(255, 255, 255, 0.06));
+  background: var(--nx-skeleton-bg);
   border-radius: 6px;
 }
 .nx-skeleton::after {
@@ -812,7 +820,7 @@ input[type="radio"]:focus-visible {
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(255, 255, 255, 0.08),
+    var(--nx-skeleton-shine),
     transparent
   );
   animation: nx-shimmer 1.4s infinite;
