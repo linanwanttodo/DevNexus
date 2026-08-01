@@ -1,5 +1,6 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
+  import LoadingIndicator from "../components/LoadingIndicator.svelte";
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
@@ -188,9 +189,7 @@
   {/if}
 
   {#if loading && !providers.length}
-    <div class="flex items-center justify-center py-20">
-      <span class="material-symbols-outlined nx-animate-spin text-2xl text-nx-text-muted">progress_activity</span>
-    </div>
+    <LoadingIndicator padding="py-20" />
 
   <!-- ════════════════════════════════════════════════════
        STATS TAB

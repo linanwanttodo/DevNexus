@@ -1,5 +1,6 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
+  import LoadingIndicator from "../components/LoadingIndicator.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
@@ -198,9 +199,7 @@
 
     <div class="nx-section">
       {#if loading}
-        <div class="flex items-center justify-center py-12">
-          <span class="material-symbols-outlined nx-animate-spin text-nx-text-muted text-3xl">progress_activity</span>
-        </div>
+        <LoadingIndicator padding="py-12" />
       {:else if error}
         <div class="nx-empty">
           <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>

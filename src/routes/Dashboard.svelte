@@ -1,5 +1,6 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
+  import LoadingIndicator from "../components/LoadingIndicator.svelte";
   import { onMount } from "svelte";
   import { t } from "../lib/i18n.svelte.js";
   import { navigate } from "../lib/stores.svelte.js";
@@ -182,9 +183,7 @@
       </div>
       <div class="p-4 space-y-4">
         {#if loading}
-          <div class="flex items-center justify-center py-8">
-            <span class="material-symbols-outlined nx-animate-spin text-nx-text-muted">progress_activity</span>
-          </div>
+          <LoadingIndicator padding="py-8" />
         {:else if error}
           <div class="text-xs text-nx-text-muted">{error}</div>
         {:else if systemInfo && resourceUsage}
