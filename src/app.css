@@ -40,13 +40,13 @@
 
   /* ── Text hierarchy (ZCode: neutral-200 based) ── */
   --nx-text: rgba(235, 235, 235, 0.87);
-  --nx-text-secondary: rgba(200, 200, 200, 0.60);
-  --nx-text-muted: rgba(200, 200, 200, 0.34);
+  --nx-text-secondary: rgba(200, 200, 200, 0.65);
+  --nx-text-muted: rgba(200, 200, 200, 0.60);
 
   --color-foreground: rgba(235, 235, 235, 0.87);
-  --color-foreground-subtle: rgba(200, 200, 200, 0.60);
-  --color-foreground-subtlest: rgba(200, 200, 200, 0.34);
-  --color-muted-foreground: rgba(200, 200, 200, 0.60);
+  --color-foreground-subtle: rgba(200, 200, 200, 0.65);
+  --color-foreground-subtlest: rgba(200, 200, 200, 0.60);
+  --color-muted-foreground: rgba(200, 200, 200, 0.65);
 
   /* ── Semantic colors (ZCode exact) ── */
   --nx-accent: #4099ff;
@@ -125,13 +125,13 @@
   --color-border-hover: rgba(0, 0, 0, 0.18);
 
   --nx-text: rgba(0, 0, 0, 0.87);
-  --nx-text-secondary: rgba(64, 64, 64, 0.60);
-  --nx-text-muted: rgba(64, 64, 64, 0.34);
+  --nx-text-secondary: rgba(64, 64, 64, 0.80);
+  --nx-text-muted: rgba(64, 64, 64, 0.75);
 
   --color-foreground: rgba(0, 0, 0, 0.87);
-  --color-foreground-subtle: rgba(64, 64, 64, 0.60);
-  --color-foreground-subtlest: rgba(64, 64, 64, 0.34);
-  --color-muted-foreground: rgba(64, 64, 64, 0.60);
+  --color-foreground-subtle: rgba(64, 64, 64, 0.80);
+  --color-foreground-subtlest: rgba(64, 64, 64, 0.75);
+  --color-muted-foreground: rgba(64, 64, 64, 0.80);
 
   --nx-accent: #0b7fff;
   --nx-accent-hover: #338fff;
