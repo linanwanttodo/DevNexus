@@ -259,6 +259,8 @@ mod tests {
             app_name: "TestApp".into(),
             directories: vec![],
             files: vec![],
+            #[cfg(target_os = "windows")]
+            registry_keys: vec![],
             services: vec![],
             shortcuts: vec![],
             total_size: 0,

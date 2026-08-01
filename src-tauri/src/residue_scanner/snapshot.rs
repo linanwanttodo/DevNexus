@@ -235,6 +235,8 @@ mod tests {
             timestamp: "2024-01-01T00:00:00Z".into(),
             directories: vec!["/tmp/dir".into()],
             files: vec![],
+            #[cfg(target_os = "windows")]
+            registry_keys: vec![],
             total_size_before: 1000,
             total_size_after: 0,
             cleaned_items: vec!["/tmp/dir".into()],
