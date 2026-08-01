@@ -58,6 +58,37 @@ mod tests {
         #[cfg(unix)]
         assert!(home.starts_with('/'));
     }
+
+    #[test]
+    fn test_first_line_or_unknown() {
+        // 多行输出取第一行作为版本号
+        assert_eq!(first_line_or_unknown("Python 3.11.0\nmore"), "Python 3.11.0");
+        assert_eq!(first_line_or_unknown("go1.21.0"), "go1.21.0");
+        // 空 / 纯换行输出（lines 返回空串而非 None）
+        assert_eq!(first_line_or_unknown(""), "unknown");
+        assert_eq!(first_line_or_unknown("\n\n"), "");
+    }
+
+    #[test]
+    fn test_resolve_config_path() {
+        // "~/..." 前缀展开为 home 目录
+        assert_eq!(
+            resolve_config_path("~/.zshrc", "/home/test"),
+            "/home/test/.zshrc"
+        );
+        assert_eq!(
+            resolve_config_path("~/.cargo/env", "/home/t"),
+            "/home/t/.cargo/env"
+        );
+        // 无 "~/" 前缀时原样返回
+        assert_eq!(
+            resolve_config_path("/etc/profile", "/home/test"),
+            "/etc/profile"
+        );
+        // 纯文件名 + 空 home
+        assert_eq!(resolve_config_path(".zshrc", ""), ".zshrc");
+        assert_eq!(resolve_config_path("~/.zshrc", ""), "/.zshrc");
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -76,12 +107,26 @@ fn get_version(cmd: &str, args: &[&str]) -> String {
         Ok(output) => {
             if output.status.success() {
                 let version = String::from_utf8_lossy(&output.stdout);
-                version.lines().next().unwrap_or("unknown").to_string()
+                first_line_or_unknown(&version)
             } else {
                 "unknown".to_string()
             }
         }
         Err(_) => "not found".to_string(),
+    }
+}
+
+/// 取命令输出第一行作为版本号；空输出回退为 "unknown"（纯函数，便于单测）
+fn first_line_or_unknown(output: &str) -> String {
+    output.lines().next().unwrap_or("unknown").to_string()
+}
+
+/// 解析 shell 配置路径：`~/` 前缀展开为 home 目录，其余原样返回（纯函数）
+fn resolve_config_path(file: &str, home: &str) -> String {
+    if let Some(stripped) = file.strip_prefix("~/") {
+        format!("{}/{}", home, stripped)
+    } else {
+        file.to_string()
     }
 }
 
@@ -99,11 +144,7 @@ fn detect_environment(
         let shell_config = config_files
             .iter()
             .find(|&file| {
-                let resolved = if let Some(stripped) = file.strip_prefix("~/") {
-                    format!("{}/{}", home, stripped)
-                } else {
-                    file.to_string()
-                };
+                let resolved = resolve_config_path(file, &home);
                 std::path::Path::new(&resolved).exists()
             })
             .map(|s| s.to_string());
