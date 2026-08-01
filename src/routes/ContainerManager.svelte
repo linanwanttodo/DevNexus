@@ -8,56 +8,51 @@
   import { friendlyError } from "../lib/errors.svelte.js";
   import ContainerIcons from "../icons/ContainerIcons.svelte";
   import ContainerDialog from "../components/containers/ContainerDialog.svelte";
+  import ContainersTab from "../components/containers/ContainersTab.svelte";
+  import ImagesTab from "../components/containers/ImagesTab.svelte";
+  import VolumesTab from "../components/containers/VolumesTab.svelte";
+  import NetworksTab from "../components/containers/NetworksTab.svelte";
+  import ComposeTab from "../components/containers/ComposeTab.svelte";
 
   // ── State ──
   let activeTab = $state("containers");
   let dockerStatus = $state({ installed: false, version: "", running: false });
   let checking = $state(true);
-
   let containers = $state([]);
   let containersLoading = $state(false);
   let containerError = $state(null);
   let showAll = $state(false);
-
   let images = $state([]);
   let imagesLoading = $state(false);
   let imageError = $state(null);
-
   let volumes = $state([]);
   let volumesLoading = $state(false);
   let volumeError = $state(null);
-
   let networks = $state([]);
   let networksLoading = $state(false);
   let networkError = $state(null);
-
   let composeFile = $state("");
   let composeProject = $state("");
   let composeContainers = $state([]);
   let composeLoading = $state(false);
   let composeLogs = $state("");
   let composeError = $state(null);
-
   let showLogs = $state(false);
   let logContainer = $state("");
   let logContent = $state("");
   let logLoading = $state(false);
-
   let showTerminal = $state(false);
   let termContainer = $state("");
   let termCommand = $state("");
   let termOutput = $state("");
   let termLoading = $state(false);
-
   let showPull = $state(false);
   let pullImageName = $state("");
   let pullLoading = $state(false);
-
   let showBuild = $state(false);
   let buildTag = $state("");
   let buildPath = $state("");
   let buildLoading = $state(false);
-
   let showPush = $state(false);
   let pushTarget = $state("");
   let pushLoading = $state(false);
@@ -65,14 +60,11 @@
   let tagValue = $state("");
   let tagImageId = $state("");
   let tagLoading = $state(false);
-
   let showCreateVolume = $state(false);
   let newVolumeName = $state("");
   let showCreateNetwork = $state(false);
   let newNetworkName = $state("");
-
   let actionLoading = $state("");
-
   let search = $state("");
 
   const tabs = $derived([
@@ -80,8 +72,7 @@
     { id: "images", label: t("docker.tab_images"), icon: "image" },
     { id: "volumes", label: t("docker.tab_volumes"), icon: "volume" },
     { id: "networks", label: t("docker.tab_networks"), icon: "network" },
-    { id: "compose", label: t("docker.tab_compose"), icon: "compose" },
-  ]);
+    { id: "compose", label: t("docker.tab_compose"), icon: "compose" }]);
 
   onMount(() => { checkDocker(); });
 
@@ -92,9 +83,7 @@
       if (dockerStatus.installed && dockerStatus.running) loadTabData("containers");
     } catch {
       dockerStatus = { installed: false, version: "", running: false };
-    } finally {
-      checking = false;
-    }
+    } finally { checking = false; }
   }
 
   async function loadTabData(tab) {
@@ -153,14 +142,9 @@
     finally { termLoading = false; }
   }
 
-  let filteredContainers = $derived(
-    search.trim()
-      ? containers.filter(c =>
-          c.name.toLowerCase().includes(search.toLowerCase()) ||
-          c.image.toLowerCase().includes(search.toLowerCase()) ||
-          c.id.toLowerCase().includes(search.toLowerCase()))
-      : containers
-  );
+  let filteredContainers = $derived(search.trim()
+    ? containers.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.image.toLowerCase().includes(search.toLowerCase()) || c.id.toLowerCase().includes(search.toLowerCase()))
+    : containers);
 
   async function loadImages() {
     imagesLoading = true; imageError = null;
@@ -204,10 +188,7 @@
     } finally { buildLoading = false; }
   }
 
-  async function openPush(img) {
-    pushTarget = `${img.repository}:${img.tag}`;
-    showPush = true;
-  }
+  async function openPush(img) { pushTarget = `${img.repository}:${img.tag}`; showPush = true; }
   async function pushImageAction() {
     if (!pushTarget.trim()) return;
     pushLoading = true;
@@ -220,11 +201,7 @@
     } finally { pushLoading = false; }
   }
 
-  async function openTag(img) {
-    tagImageId = img.id;
-    tagValue = "";
-    showTag = true;
-  }
+  async function openTag(img) { tagImageId = img.id; tagValue = ""; showTag = true; }
   async function tagImageAction() {
     if (!tagValue.trim()) return;
     tagLoading = true;
@@ -238,14 +215,9 @@
     } finally { tagLoading = false; }
   }
 
-  let filteredImages = $derived(
-    search.trim()
-      ? images.filter(i =>
-          i.repository.toLowerCase().includes(search.toLowerCase()) ||
-          i.tag.toLowerCase().includes(search.toLowerCase()) ||
-          i.id.toLowerCase().includes(search.toLowerCase()))
-      : images
-  );
+  let filteredImages = $derived(search.trim()
+    ? images.filter(i => i.repository.toLowerCase().includes(search.toLowerCase()) || i.tag.toLowerCase().includes(search.toLowerCase()) || i.id.toLowerCase().includes(search.toLowerCase()))
+    : images);
 
   async function loadVolumes() {
     volumesLoading = true; volumeError = null;
@@ -334,70 +306,34 @@
     finally { composeLoading = false; }
   }
 
-  function statusLabel(status) {
-    const map = {
-      running: t("docker.status_running"), exited: t("docker.status_exited"),
-      paused: t("docker.status_paused"), created: t("docker.status_created"),
-    };
-    return map[status] || status;
-  }
-
-  function shortId(id) { return id ? id.substring(0, 12) : ""; }
-  function formatCreated(created) { return created || "-"; }
-  function formatSize(size) { return size || "-"; }
-
   // ── Dialog configs ──
-  let pullConfig = $derived({
-    title: t("docker.pull_image"), icon: "download", width: "max-w-[300px]",
+  let pullConfig = $derived({ title: t("docker.pull_image"), icon: "download", width: "max-w-[300px]",
     fields: [{ id: "pull-image", placeholder: "nginx:latest", value: pullImageName, onInput: (v) => pullImageName = v }],
     loading: pullLoading, submitLabel: t("docker.pull"), loadingLabel: t("docker.pulling"),
-    canSubmit: pullImageName.trim() !== "",
-    onSubmit: pullImageAction,
-    onClose: () => { showPull = false; pullImageName = ""; },
-  });
-  let buildConfig = $derived({
-    title: t("docker.build_image"), icon: "construction", width: "max-w-[300px]",
+    canSubmit: pullImageName.trim() !== "", onSubmit: pullImageAction, onClose: () => { showPull = false; pullImageName = ""; } });
+  let buildConfig = $derived({ title: t("docker.build_image"), icon: "construction", width: "max-w-[300px]",
     fields: [
       { id: "build-tag", placeholder: `${t("docker.build_tag")} (myapp:latest)`, value: buildTag, onInput: (v) => buildTag = v, enterSubmit: false },
       { id: "build-path", placeholder: `${t("docker.build_path")} (.)`, value: buildPath, onInput: (v) => buildPath = v, enterSubmit: false },
     ],
     loading: buildLoading, submitLabel: t("docker.build"), loadingLabel: t("docker.building"),
-    canSubmit: buildTag.trim() !== "" && buildPath.trim() !== "",
-    onSubmit: buildImageAction,
-    onClose: () => { showBuild = false; buildTag = ""; buildPath = ""; },
-  });
-  let pushConfig = $derived({
-    title: t("docker.push_image"), icon: "upload", width: "max-w-[300px]",
+    canSubmit: buildTag.trim() !== "" && buildPath.trim() !== "", onSubmit: buildImageAction, onClose: () => { showBuild = false; buildTag = ""; buildPath = ""; } });
+  let pushConfig = $derived({ title: t("docker.push_image"), icon: "upload", width: "max-w-[300px]",
     fields: [{ id: "push-target", placeholder: "registry/user/repo:tag", value: pushTarget, onInput: (v) => pushTarget = v }],
     loading: pushLoading, submitLabel: t("docker.push"), loadingLabel: t("docker.pushing"),
-    canSubmit: pushTarget.trim() !== "",
-    onSubmit: pushImageAction,
-    onClose: () => { showPush = false; pushTarget = ""; },
-  });
-  let tagConfig = $derived({
-    title: t("docker.tag_image"), icon: "sell", width: "max-w-[300px]",
+    canSubmit: pushTarget.trim() !== "", onSubmit: pushImageAction, onClose: () => { showPush = false; pushTarget = ""; } });
+  let tagConfig = $derived({ title: t("docker.tag_image"), icon: "sell", width: "max-w-[300px]",
     fields: [{ id: "tag-value", placeholder: "registry/user/repo:tag", value: tagValue, onInput: (v) => tagValue = v }],
     loading: tagLoading, submitLabel: t("docker.tag"), loadingLabel: t("docker.tagging"),
-    canSubmit: tagValue.trim() !== "",
-    onSubmit: tagImageAction,
-    onClose: () => { showTag = false; tagValue = ""; },
-  });
-  let createVolumeConfig = $derived({
-    title: t("docker.create_volume"), icon: "add", width: "max-w-[300px]",
+    canSubmit: tagValue.trim() !== "", onSubmit: tagImageAction, onClose: () => { showTag = false; tagValue = ""; } });
+  let createVolumeConfig = $derived({ title: t("docker.create_volume"), icon: "add", width: "max-w-[300px]",
     fields: [{ id: "volume-name", placeholder: "my_volume", value: newVolumeName, onInput: (v) => newVolumeName = v }],
     loading: false, submitLabel: t("docker.create"), loadingLabel: t("docker.create"),
-    canSubmit: newVolumeName.trim() !== "",
-    onSubmit: createVolume,
-    onClose: () => { showCreateVolume = false; newVolumeName = ""; },
-  });
-  let createNetworkConfig = $derived({
-    title: t("docker.create_network"), icon: "add", width: "max-w-[300px]",
+    canSubmit: newVolumeName.trim() !== "", onSubmit: createVolume, onClose: () => { showCreateVolume = false; newVolumeName = ""; } });
+  let createNetworkConfig = $derived({ title: t("docker.create_network"), icon: "add", width: "max-w-[300px]",
     fields: [{ id: "network-name", placeholder: "my_network", value: newNetworkName, onInput: (v) => newNetworkName = v }],
     loading: false, submitLabel: t("docker.create"), loadingLabel: t("docker.create"),
-    canSubmit: newNetworkName.trim() !== "",
-    onSubmit: createNetwork,
-    onClose: () => { showCreateNetwork = false; newNetworkName = ""; },
-  });
+    canSubmit: newNetworkName.trim() !== "", onSubmit: createNetwork, onClose: () => { showCreateNetwork = false; newNetworkName = ""; } });
 </script>
 
 <div class="flex h-full flex-col">
@@ -455,403 +391,37 @@
         <div class="mt-4 text-xs text-nx-text-muted">{dockerStatus.version}</div>
       </div>
     {:else}
+      <!-- Search -->
+      {#if activeTab === "containers" || activeTab === "images"}
+        <div class="relative mb-4">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-nx-text-muted text-sm pointer-events-none">search</span>
+          <input type="text" placeholder={activeTab === "containers" ? t("docker.search_containers") : t("docker.search_images")}
+            value={search} oninput={(e) => search = e.currentTarget.value}
+            class="nx-input w-full pl-9 pr-8 h-9 text-sm" />
+          {#if search}
+            <button class="absolute right-2 top-1/2 -translate-y-1/2 text-nx-text-muted" onclick={() => search = ""}>
+              <span class="material-symbols-outlined text-sm">close</span>
+            </button>
+          {/if}
+        </div>
+      {/if}
 
-      <!-- ── CONTAINERS ── -->
       {#if activeTab === "containers"}
-        <div>
-          <div class="mb-4 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <label class="flex items-center gap-1.5 text-xs text-nx-text-muted cursor-pointer select-none">
-                <input type="checkbox" bind:checked={showAll} onchange={loadContainers} class="rounded border-nx-border bg-nx-bg" />
-                {t("docker.show_all")}
-              </label>
-            </div>
-            <button class="nx-btn nx-btn-ghost px-2 py-1 text-xs" onclick={loadContainers} disabled={containersLoading}>
-              <span class="material-symbols-outlined text-sm {containersLoading ? 'animate-spin' : ''}">refresh</span>
-              {t("common.refresh")}
-            </button>
-          </div>
-
-          <!-- Search -->
-          <div class="relative mb-4">
-            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-nx-text-muted text-sm pointer-events-none">search</span>
-            <input type="text" placeholder={t("docker.search_containers")}
-              value={search} oninput={(e) => search = e.currentTarget.value}
-              class="nx-input w-full pl-9 pr-8 h-9 text-sm" />
-            {#if search}
-              <button class="absolute right-2 top-1/2 -translate-y-1/2 text-nx-text-muted" onclick={() => search = ""}>
-                <span class="material-symbols-outlined text-sm">close</span>
-              </button>
-            {/if}
-          </div>
-
-          <div class="nx-section">
-            {#if containersLoading && containers.length === 0}
-              <div class="flex items-center justify-center py-12">
-                <span class="material-symbols-outlined animate-spin text-nx-text-muted text-3xl">progress_activity</span>
-              </div>
-            {:else if containerError}
-              <div class="p-6 text-center">
-                <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
-                <div class="mt-2 text-sm text-nx-danger">{containerError}</div>
-                <button class="nx-btn nx-btn-primary mt-4" onclick={loadContainers}>{t("common.retry")}</button>
-              </div>
-            {:else if filteredContainers.length === 0}
-              <div class="p-12 text-center">
-                <ContainerIcons name="container" size={36} class="mx-auto text-nx-text-muted" />
-                <div class="mt-3 text-sm text-nx-text-muted">{search ? t("docker.no_matching") : t("docker.no_containers")}</div>
-              </div>
-            {:else}
-              <table class="nx-table">
-                <thead>
-                  <tr>
-                    <th class="w-4"></th>
-                    <th>{t("docker.name")}</th>
-                    <th>{t("docker.image")}</th>
-                    <th>{t("docker.ports")}</th>
-                    <th class="w-28">{t("docker.created")}</th>
-                    <th class="text-right w-80">{t("docker.actions")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each filteredContainers as c (c.id)}
-                    <tr>
-                      <td class="!pr-0">
-                        {#if c.status === "running"}
-                          <ContainerIcons name="container-running" size={16} />
-                        {:else if c.status === "paused"}
-                          <ContainerIcons name="container-paused" size={16} />
-                        {:else}
-                          <ContainerIcons name="container-exited" size={16} />
-                        {/if}
-                      </td>
-                      <td>
-                        <div class="flex flex-col">
-                          <span class="text-sm font-medium text-nx-text">{c.name}</span>
-                          <span class="font-mono text-xs text-nx-text-muted">{shortId(c.id)}</span>
-                        </div>
-                      </td>
-                      <td class="font-mono text-xs text-nx-text-secondary">{c.image}</td>
-                      <td class="font-mono text-xs text-nx-text-muted max-w-[180px] truncate">{c.ports || "-"}</td>
-                      <td class="text-xs text-nx-text-muted">{formatCreated(c.created)}</td>
-                      <td class="text-right">
-                        <span class="flex items-center justify-end gap-1">
-                          {#if c.status === "running"}
-                            <button class="nx-btn text-xs h-7 px-2 text-nx-warning" onclick={() => containerAction(c.name, "pause")} disabled={actionLoading === c.name}>{t("docker.pause")}</button>
-                            <button class="nx-btn text-xs h-7 px-2 text-nx-danger" onclick={() => containerAction(c.name, "stop")} disabled={actionLoading === c.name}>{t("docker.stop")}</button>
-                          {:else if c.status === "paused"}
-                            <button class="nx-btn text-xs h-7 px-2" onclick={() => containerAction(c.name, "unpause")} disabled={actionLoading === c.name}>{t("docker.unpause")}</button>
-                          {:else}
-                            <button class="nx-btn text-xs h-7 px-2 text-nx-success" onclick={() => containerAction(c.name, "start")} disabled={actionLoading === c.name}>{t("docker.start")}</button>
-                          {/if}
-                          <button class="nx-btn text-xs h-7 px-2" onclick={() => containerAction(c.name, "restart")} disabled={actionLoading === c.name}>{t("docker.restart")}</button>
-                          <button class="nx-btn text-xs h-7 px-2" onclick={() => openLogs(c.name)}><span class="material-symbols-outlined text-sm">list_alt</span></button>
-                          <button class="nx-btn text-xs h-7 px-2" onclick={() => openTerminal(c.name)}><span class="material-symbols-outlined text-sm">terminal</span></button>
-                          <button class="nx-btn text-xs h-7 px-2 text-nx-danger" onclick={() => containerAction(c.name, "rm")} disabled={actionLoading === c.name}>{t("docker.delete")}</button>
-                        </span>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-              <div class="flex items-center justify-between border-t border-nx-border px-4 py-2">
-                <span class="text-xs text-nx-text-muted">{filteredContainers.length} {t("docker.containers_count")}</span>
-              </div>
-            {/if}
-          </div>
-        </div>
-
+        <ContainersTab items={filteredContainers} loading={containersLoading} error={containerError} search={search} showAll={showAll} actionLoading={actionLoading}
+          onShowAllChange={(c) => { showAll = c; loadContainers(); }} onRefresh={loadContainers} onAction={containerAction} onLogs={openLogs} onTerminal={openTerminal} />
       {:else if activeTab === "images"}
-        <div>
-          <div class="mb-4 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <button class="nx-btn text-xs h-7" onclick={() => { showPull = true; }}>
-                <span class="material-symbols-outlined text-sm">download</span>{t("docker.pull")}
-              </button>
-              <button class="nx-btn text-xs h-7" onclick={() => { showBuild = true; }}>
-                <span class="material-symbols-outlined text-sm">construction</span>{t("docker.build")}
-              </button>
-            </div>
-            <button class="nx-btn nx-btn-ghost px-2 text-xs h-7" onclick={loadImages} disabled={imagesLoading}>
-              <span class="material-symbols-outlined text-sm {imagesLoading ? 'animate-spin' : ''}">refresh</span>
-              {t("common.refresh")}
-            </button>
-          </div>
-
-          <div class="relative mb-4">
-            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-nx-text-muted text-sm pointer-events-none">search</span>
-            <input type="text" placeholder={t("docker.search_images")}
-              value={search} oninput={(e) => search = e.currentTarget.value}
-              class="nx-input w-full pl-9 pr-8 h-9 text-sm" />
-            {#if search}
-              <button class="absolute right-2 top-1/2 -translate-y-1/2 text-nx-text-muted" onclick={() => search = ""}>
-                <span class="material-symbols-outlined text-sm">close</span>
-              </button>
-            {/if}
-          </div>
-
-          <div class="nx-section">
-            {#if imagesLoading && images.length === 0}
-              <div class="flex items-center justify-center py-12">
-                <span class="material-symbols-outlined animate-spin text-nx-text-muted text-3xl">progress_activity</span>
-              </div>
-            {:else if imageError}
-              <div class="p-6 text-center">
-                <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
-                <div class="mt-2 text-sm text-nx-danger">{imageError}</div>
-                <button class="nx-btn nx-btn-primary mt-4" onclick={loadImages}>{t("common.retry")}</button>
-              </div>
-            {:else if filteredImages.length === 0}
-              <div class="p-12 text-center">
-                <ContainerIcons name="image" size={36} class="mx-auto text-nx-text-muted" />
-                <div class="mt-3 text-sm text-nx-text-muted">{search ? t("docker.no_matching") : t("docker.no_images")}</div>
-              </div>
-            {:else}
-              <table class="nx-table">
-                <thead>
-                  <tr>
-                    <th>{t("docker.repository")}</th>
-                    <th>{t("docker.tag")}</th>
-                    <th>{t("docker.image_id")}</th>
-                    <th>{t("docker.created")}</th>
-                    <th class="text-right">{t("docker.size")}</th>
-                    <th class="text-right w-24">{t("docker.actions")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each filteredImages as img (img.id)}
-                    <tr>
-                      <td class="text-sm font-medium text-nx-text">{img.repository}</td>
-                      <td><span class="nx-pill font-mono text-[10px]">{img.tag}</span></td>
-                      <td class="font-mono text-xs text-nx-text-muted">{shortId(img.id)}</td>
-                      <td class="text-xs text-nx-text-muted">{formatCreated(img.created)}</td>
-                      <td class="text-right text-xs text-nx-text-secondary">{formatSize(img.size)}</td>
-                      <td class="text-right">
-                        <span class="flex items-center justify-end gap-1">
-                          <button class="nx-btn text-xs h-7 px-2" onclick={() => openPush(img)}>{t("docker.push")}</button>
-                          <button class="nx-btn text-xs h-7 px-2" onclick={() => openTag(img)}>{t("docker.tag")}</button>
-                          <button class="nx-btn text-xs h-7 px-2 text-nx-danger"
-                            onclick={() => removeImageAction(img.id, `${img.repository}:${img.tag}`)} disabled={actionLoading === img.id}>
-                            {t("docker.delete")}
-                          </button>
-                        </span>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-              <div class="flex items-center justify-between border-t border-nx-border px-4 py-2">
-                <span class="text-xs text-nx-text-muted">{filteredImages.length} {t("docker.images_count")}</span>
-              </div>
-            {/if}
-          </div>
-        </div>
-
+        <ImagesTab items={filteredImages} loading={imagesLoading} error={imageError} search={search} actionLoading={actionLoading}
+          onPull={() => { showPull = true; }} onBuild={() => { showBuild = true; }} onRefresh={loadImages} onPush={openPush} onTag={openTag} onRemove={removeImageAction} />
       {:else if activeTab === "volumes"}
-        <div>
-          <div class="mb-4 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <button class="nx-btn text-xs h-7" onclick={() => { showCreateVolume = true; }}>
-                <span class="material-symbols-outlined text-sm">add</span>{t("docker.create")}
-              </button>
-            </div>
-            <button class="nx-btn nx-btn-ghost px-2 text-xs h-7" onclick={loadVolumes} disabled={volumesLoading}>
-              <span class="material-symbols-outlined text-sm {volumesLoading ? 'animate-spin' : ''}">refresh</span>
-              {t("common.refresh")}
-            </button>
-          </div>
-
-          <div class="nx-section">
-            {#if volumesLoading && volumes.length === 0}
-              <div class="flex items-center justify-center py-12">
-                <span class="material-symbols-outlined animate-spin text-nx-text-muted text-3xl">progress_activity</span>
-              </div>
-            {:else if volumeError}
-              <div class="p-6 text-center">
-                <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
-                <div class="mt-2 text-sm text-nx-danger">{volumeError}</div>
-                <button class="nx-btn nx-btn-primary mt-4" onclick={loadVolumes}>{t("common.retry")}</button>
-              </div>
-            {:else if volumes.length === 0}
-              <div class="p-12 text-center">
-                <ContainerIcons name="volume" size={36} class="mx-auto text-nx-text-muted" />
-                <div class="mt-3 text-sm text-nx-text-muted">{t("docker.no_volumes")}</div>
-              </div>
-            {:else}
-              <table class="nx-table">
-                <thead>
-                  <tr>
-                    <th>{t("docker.name")}</th>
-                    <th>{t("docker.driver")}</th>
-                    <th>{t("docker.mountpoint")}</th>
-                    <th>{t("docker.created")}</th>
-                    <th class="text-right w-24">{t("docker.actions")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each volumes as v (v.name)}
-                    <tr>
-                      <td class="text-sm font-medium text-nx-text">{v.name}</td>
-                      <td class="text-xs text-nx-text-secondary">{v.driver}</td>
-                      <td class="font-mono text-xs text-nx-text-muted max-w-[280px] truncate" title={v.mountpoint}>{v.mountpoint}</td>
-                      <td class="text-xs text-nx-text-muted">{formatCreated(v.created)}</td>
-                      <td class="text-right">
-                        <button class="nx-btn text-xs h-7 px-2 text-nx-danger"
-                          onclick={() => removeVolume(v.name)} disabled={actionLoading === v.name}>
-                          {t("docker.delete")}
-                        </button>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            {/if}
-          </div>
-        </div>
-
+        <VolumesTab items={volumes} loading={volumesLoading} error={volumeError} actionLoading={actionLoading}
+          onCreate={() => { showCreateVolume = true; }} onRefresh={loadVolumes} onRemove={removeVolume} />
       {:else if activeTab === "networks"}
-        <div>
-          <div class="mb-4 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <button class="nx-btn text-xs h-7" onclick={() => { showCreateNetwork = true; }}>
-                <span class="material-symbols-outlined text-sm">add</span>{t("docker.create")}
-              </button>
-            </div>
-            <button class="nx-btn nx-btn-ghost px-2 text-xs h-7" onclick={loadNetworks} disabled={networksLoading}>
-              <span class="material-symbols-outlined text-sm {networksLoading ? 'animate-spin' : ''}">refresh</span>
-              {t("common.refresh")}
-            </button>
-          </div>
-
-          <div class="nx-section">
-            {#if networksLoading && networks.length === 0}
-              <div class="flex items-center justify-center py-12">
-                <span class="material-symbols-outlined animate-spin text-nx-text-muted text-3xl">progress_activity</span>
-              </div>
-            {:else if networkError}
-              <div class="p-6 text-center">
-                <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
-                <div class="mt-2 text-sm text-nx-danger">{networkError}</div>
-                <button class="nx-btn nx-btn-primary mt-4" onclick={loadNetworks}>{t("common.retry")}</button>
-              </div>
-            {:else if networks.length === 0}
-              <div class="p-12 text-center">
-                <ContainerIcons name="network" size={36} class="mx-auto text-nx-text-muted" />
-                <div class="mt-3 text-sm text-nx-text-muted">{t("docker.no_networks")}</div>
-              </div>
-            {:else}
-              <table class="nx-table">
-                <thead>
-                  <tr>
-                    <th>{t("docker.name")}</th>
-                    <th>{t("docker.driver")}</th>
-                    <th>{t("docker.scope")}</th>
-                    <th class="text-right w-24">{t("docker.actions")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each networks as n (n.name)}
-                    <tr>
-                      <td class="text-sm font-medium text-nx-text">{n.name}</td>
-                      <td class="text-xs text-nx-text-secondary">{n.driver}</td>
-                      <td class="text-xs text-nx-text-muted">{n.scope}</td>
-                      <td class="text-right">
-                        <button class="nx-btn text-xs h-7 px-2 text-nx-danger"
-                          onclick={() => removeNetwork(n.name)} disabled={actionLoading === n.name}>
-                          {t("docker.delete")}
-                        </button>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            {/if}
-          </div>
-        </div>
-
+        <NetworksTab items={networks} loading={networksLoading} error={networkError} actionLoading={actionLoading}
+          onCreate={() => { showCreateNetwork = true; }} onRefresh={loadNetworks} onRemove={removeNetwork} />
       {:else if activeTab === "compose"}
-        <div>
-          <div class="mb-4 grid grid-cols-2 gap-3">
-            <div>
-              <label for="compose-file" class="mb-1.5 block text-xs text-nx-text-muted">{t("docker.compose_file")}</label>
-              <input id="compose-file" type="text" bind:value={composeFile} placeholder="docker-compose.yml"
-                class="nx-input w-full h-9 text-sm" />
-            </div>
-            <div>
-              <label for="compose-project" class="mb-1.5 block text-xs text-nx-text-muted">{t("docker.compose_project")}</label>
-              <input id="compose-project" type="text" bind:value={composeProject} placeholder={t("docker.compose_project_ph")}
-                class="nx-input w-full h-9 text-sm" />
-            </div>
-          </div>
-
-          <div class="mb-4 flex items-center gap-2">
-            <button class="nx-btn text-xs h-8 text-nx-success" onclick={composeUp} disabled={composeLoading}>
-              <span class="material-symbols-outlined text-sm">play_arrow</span>{t("docker.compose_up")}
-            </button>
-            <button class="nx-btn text-xs h-8 text-nx-danger" onclick={composeDown} disabled={composeLoading}>
-              <span class="material-symbols-outlined text-sm">stop</span>{t("docker.compose_down")}
-            </button>
-            <button class="nx-btn text-xs h-8" onclick={composePs} disabled={composeLoading}>
-              <span class="material-symbols-outlined text-sm">list</span>{t("docker.compose_ps")}
-            </button>
-            <button class="nx-btn text-xs h-8" onclick={composeViewLogs} disabled={composeLoading}>
-              <span class="material-symbols-outlined text-sm">list_alt</span>{t("docker.compose_logs")}
-            </button>
-          </div>
-
-          {#if composeError}
-            <div class="mb-4 nx-section">
-              <div class="nx-section-body">
-                <pre class="font-mono text-xs text-nx-danger whitespace-pre-wrap">{composeError}</pre>
-              </div>
-            </div>
-          {/if}
-
-          {#if composeContainers.length > 0}
-            <div class="mb-4 nx-section">
-              <div class="nx-section-header">
-                <span class="text-xs font-medium uppercase tracking-wider text-nx-text-muted">{t("docker.compose_services")}</span>
-              </div>
-              <table class="nx-table">
-                <thead>
-                  <tr>
-                    <th>{t("docker.name")}</th>
-                    <th>{t("docker.image")}</th>
-                    <th>{t("docker.status")}</th>
-                    <th>{t("docker.ports")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each composeContainers as c}
-                    <tr>
-                      <td class="text-sm text-nx-text">{c.name}</td>
-                      <td class="font-mono text-xs text-nx-text-secondary">{c.image}</td>
-                      <td>
-                        <span class="inline-flex items-center gap-1 text-xs {c.status === 'running' ? 'text-nx-success' : 'text-nx-text-muted'}">
-                          <ContainerIcons name={c.status === 'running' ? 'container-running' : 'container-exited'} size={12} />
-                          {statusLabel(c.status)}
-                        </span>
-                      </td>
-                      <td class="font-mono text-xs text-nx-text-muted">{c.ports || "-"}</td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          {/if}
-
-          {#if composeLogs}
-            <div class="nx-section">
-              <div class="nx-section-header">
-                <span class="text-xs font-medium uppercase tracking-wider text-nx-text-muted">{t("docker.logs")}</span>
-                <button class="text-nx-text-muted hover:text-nx-text" onclick={() => { composeLogs = ""; }}>
-                  <span class="material-symbols-outlined text-sm">close</span>
-                </button>
-              </div>
-              <pre class="max-h-[400px] overflow-auto p-4 font-mono text-xs text-nx-text-secondary whitespace-pre-wrap">{composeLogs}</pre>
-            </div>
-          {/if}
-        </div>
+        <ComposeTab file={composeFile} project={composeProject} loading={composeLoading} error={composeError} containers={composeContainers} logs={composeLogs}
+          onFileInput={(v) => composeFile = v} onProjectInput={(v) => composeProject = v}
+          onUp={composeUp} onDown={composeDown} onPs={composePs} onLogs={composeViewLogs} onClearLogs={() => { composeLogs = ""; }} />
       {/if}
     {/if}
   </div>
@@ -917,26 +487,9 @@
   </div>
 {/if}
 
-{#if showPull}
-  <ContainerDialog config={pullConfig} />
-{/if}
-
-{#if showBuild}
-  <ContainerDialog config={buildConfig} />
-{/if}
-
-{#if showPush}
-  <ContainerDialog config={pushConfig} />
-{/if}
-
-{#if showTag}
-  <ContainerDialog config={tagConfig} />
-{/if}
-
-{#if showCreateVolume}
-  <ContainerDialog config={createVolumeConfig} />
-{/if}
-
-{#if showCreateNetwork}
-  <ContainerDialog config={createNetworkConfig} />
-{/if}
+{#if showPull}<ContainerDialog config={pullConfig} />{/if}
+{#if showBuild}<ContainerDialog config={buildConfig} />{/if}
+{#if showPush}<ContainerDialog config={pushConfig} />{/if}
+{#if showTag}<ContainerDialog config={tagConfig} />{/if}
+{#if showCreateVolume}<ContainerDialog config={createVolumeConfig} />{/if}
+{#if showCreateNetwork}<ContainerDialog config={createNetworkConfig} />{/if}
