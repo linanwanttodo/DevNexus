@@ -38,6 +38,11 @@ pub fn run() {
             let show = MenuItemBuilder::with_id("show", "Show DevNexus").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
+            // Linux(libappindicator/dbusmenu) 下菜单对象必须在 setup 返回后保持存活：
+            // 否则 Rust 侧 Menu drop 会释放 D-Bus 菜单 registrar，导致托盘菜单项
+            // 只剩空白框、文字不渲染（tauri#7648 / tray-icon#89）。
+            // 通过 manage 存进 state 保持菜单引用存活。
+            app.manage(menu.clone());
 
             let app_handle = app.handle().clone();
             let tray_icon = app
