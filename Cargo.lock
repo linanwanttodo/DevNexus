@@ -877,7 +877,6 @@ dependencies = [
  "dirs 5.0.1",
  "futures-util",
  "keyring",
- "libc",
  "pbkdf2 0.12.2",
  "rand 0.8.6",
  "reqwest 0.12.28",

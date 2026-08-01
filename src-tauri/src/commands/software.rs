@@ -473,11 +473,9 @@ pub async fn list_installed_apps() -> Result<Vec<InstalledApp>, String> {
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for pm in &managers {
-        let list_args = get_pm_list_args(pm.name);
-        if list_args.is_none() {
+        let Some(args) = get_pm_list_args(pm.name) else {
             continue;
-        }
-        let args = list_args.unwrap();
+        };
 
         let output = Command::new(pm.binary)
             .args(args)
