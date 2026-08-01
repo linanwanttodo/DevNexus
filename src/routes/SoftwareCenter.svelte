@@ -1,6 +1,6 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
-  import LoadingIndicator from "../components/LoadingIndicator.svelte";
+  import CardGridSkeleton from "../components/skeleton/CardGridSkeleton.svelte";
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
@@ -253,7 +253,7 @@
     {:else}
       <!-- Regular software -->
       {#if loading}
-        <LoadingIndicator padding="py-16" />
+        <CardGridSkeleton />
       {:else if !hasPackageManager && !pmChecking}
         <div class="nx-card p-8 text-center">
           <span class="material-symbols-outlined text-nx-text-muted text-4xl">package_2</span>

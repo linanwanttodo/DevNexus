@@ -1,6 +1,6 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
-  import LoadingIndicator from "../components/LoadingIndicator.svelte";
+  import TableSkeleton from "../components/skeleton/TableSkeleton.svelte";
   import { onMount, onDestroy } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
@@ -252,7 +252,7 @@
   <!-- 进程表格 -->
   <div class="nx-section">
     {#if loading && groups.length === 0}
-      <LoadingIndicator padding="py-12" />
+      <TableSkeleton />
     {:else if error}
       <div class="nx-empty">
         <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
