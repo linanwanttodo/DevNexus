@@ -48,6 +48,7 @@ pub fn set_export_line(home: &Path, key: &str, value: &str) -> Result<bool, Stri
 ///
 /// 与 environment.rs 原有格式一致（追加式写入，去重由调用方负责）。
 /// 返回 `Ok(true)` 表示写入发生。
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn set_path_line(home: &Path, env_name: &str, path: &str) -> Result<bool, String> {
     crate::utils::validate_rc_value(path)?;
     let rc_path = detect_shell_rc(home);
@@ -140,6 +141,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn test_set_path_line_writes_comment_and_export() {
         let _guard = SHELL_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let home = temp_home("set_path_line");
