@@ -6,7 +6,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 async fn mock_chat(Json(body): Json<serde_json::Value>) -> impl IntoResponse {
-    let model = body.get("model").and_then(|m| m.as_str()).unwrap_or("bench");
+    let model = body
+        .get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or("bench");
     Json(serde_json::json!({
         "id": "chatcmpl-bench",
         "object": "chat.completion",
@@ -113,8 +116,19 @@ async fn main() {
     let rps = total_requests as f64 / total_elapsed.as_secs_f64();
 
     println!("=== API Hub 基准基线 ===");
-    println!("并发: {} | 总请求: {} | 失败: {}", concurrency, total_requests, failed);
-    println!("总耗时: {:.2}s | RPS: {:.0}", total_elapsed.as_secs_f64(), rps);
+    println!(
+        "并发: {} | 总请求: {} | 失败: {}",
+        concurrency, total_requests, failed
+    );
+    println!(
+        "总耗时: {:.2}s | RPS: {:.0}",
+        total_elapsed.as_secs_f64(),
+        rps
+    );
     println!("p50: {:?} | p95: {:?}", p50, p95);
-    println!("环境: {} | {:?}", std::env::consts::OS, std::thread::available_parallelism().map(|n| n.get()));
+    println!(
+        "环境: {} | {:?}",
+        std::env::consts::OS,
+        std::thread::available_parallelism().map(|n| n.get())
+    );
 }

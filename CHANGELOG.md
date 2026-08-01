@@ -14,6 +14,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.1] - 2026-08-01
+
+### Fixed
+- System tray menu text invisible on Linux (menu object lifetime kept alive via app state)
+- Startup flash of raw i18n keys in sidebar (language fallback chain + empty-safe t())
+- Skeleton loading invisible on dark theme (theme-aware skeleton colors)
+- Icon font blocked by CSP (restored Google Fonts for Material Symbols / Inter)
+- Text contrast below WCAG AA in both themes (muted/secondary raised to ≥4.5:1)
+- CI build failures caused by unformatted code (cargo fmt applied, fmt/clippy gates pass)
+
+### 修复（中文）
+- 修复 Linux 托盘菜单文字不显示（菜单对象生命周期保活）
+- 修复启动时侧边栏闪现 i18n 键名（语言回退链 + t() 空安全）
+- 修复暗色主题下骨架屏不可见（主题感知骨架色）
+- 修复 CSP 拦截图标字体（恢复 Google Fonts 许可）
+- 修复双主题文字对比度不达标（muted/secondary 提升至 ≥4.5:1）
+- 修复 CI 构建失败（代码格式化，fmt/clippy 门禁通过）
+
+---
+
 ## [1.3.0] - 2026-08-01
 
 ### Removed (English)

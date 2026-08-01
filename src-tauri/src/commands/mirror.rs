@@ -539,7 +539,8 @@ fn set_go_proxy(url: &str) -> Result<String, String> {
     if home.as_os_str().is_empty() {
         return Err("Cannot determine user home directory".to_string());
     }
-    let added = crate::utils::rc_editor::set_export_line(&home, "GOPROXY", &format!("{},direct", url))?;
+    let added =
+        crate::utils::rc_editor::set_export_line(&home, "GOPROXY", &format!("{},direct", url))?;
     let rc_file = crate::utils::rc_editor::detect_shell_rc(&home);
     if added {
         Ok(format!(

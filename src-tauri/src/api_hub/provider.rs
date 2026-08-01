@@ -142,12 +142,7 @@ pub async fn update_provider(state: &AppState, id: &str, provider: Provider) -> 
             }
             None => {
                 // DB 不可用（降级模式）：仅凭内存判断存在性，避免静默成功
-                let exists = state
-                    .providers
-                    .read()
-                    .await
-                    .iter()
-                    .any(|p| p.id == id);
+                let exists = state.providers.read().await.iter().any(|p| p.id == id);
                 if !exists {
                     return Err(format!("Provider not found: {}", id));
                 }

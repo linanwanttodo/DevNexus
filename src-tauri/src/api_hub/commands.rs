@@ -91,8 +91,12 @@ pub async fn api_hub_fetch_models(
     protocol: String,
     provider_id: Option<String>,
 ) -> Result<Vec<FetchedModel>, String> {
-    let pt = super::types::ApiProtocol::from_protocol_str(&protocol)
-        .ok_or_else(|| format!("Unknown protocol: '{}'. Supported: openai_chat, openai_responses, anthropic", protocol))?;
+    let pt = super::types::ApiProtocol::from_protocol_str(&protocol).ok_or_else(|| {
+        format!(
+            "Unknown protocol: '{}'. Supported: openai_chat, openai_responses, anthropic",
+            protocol
+        )
+    })?;
 
     // 编辑已有 Provider 时前端持有的是脱敏 key，此处解析回已存储的真实 key
     let api_key = if api_key.contains("••••") {

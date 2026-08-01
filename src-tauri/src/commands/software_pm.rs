@@ -309,4 +309,3 @@ pub(crate) async fn uninstall_software_exec(package_name: String) -> Result<Stri
     .await
     .map_err(|e| format!("Task join error: {}", e))?
 }
-

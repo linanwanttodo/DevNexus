@@ -70,18 +70,27 @@ fn openai_chat_to_anthropic(line: &str, state: &mut StreamState) -> Vec<String> 
         let mut out = vec![];
         if state.content_block_opened {
             out.push("event: content_block_stop".to_string());
-            out.push(format!("data: {}", serde_json::json!({"type": "content_block_stop", "index": 0})));
+            out.push(format!(
+                "data: {}",
+                serde_json::json!({"type": "content_block_stop", "index": 0})
+            ));
             out.push(String::new());
         }
         out.push("event: message_delta".to_string());
-        out.push(format!("data: {}", serde_json::json!({
-            "type": "message_delta",
-            "delta": {"stop_reason": "end_turn"},
-            "usage": {"output_tokens": 0}
-        })));
+        out.push(format!(
+            "data: {}",
+            serde_json::json!({
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn"},
+                "usage": {"output_tokens": 0}
+            })
+        ));
         out.push(String::new());
         out.push("event: message_stop".to_string());
-        out.push(format!("data: {}", serde_json::json!({"type": "message_stop"})));
+        out.push(format!(
+            "data: {}",
+            serde_json::json!({"type": "message_stop"})
+        ));
         out.push(String::new());
         state.stop_sent = true;
         return out;
@@ -97,22 +106,33 @@ fn openai_chat_to_anthropic(line: &str, state: &mut StreamState) -> Vec<String> 
     // Emit message_start on first chunk
     if !state.started {
         state.started = true;
-        state.id = chunk.get("id").and_then(|v| v.as_str()).unwrap_or("msg_stream").to_string();
-        state.model = chunk.get("model").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        state.id = chunk
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("msg_stream")
+            .to_string();
+        state.model = chunk
+            .get("model")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
 
         out.push("event: message_start".to_string());
-        out.push(format!("data: {}", serde_json::json!({
-            "type": "message_start",
-            "message": {
-                "id": state.id,
-                "type": "message",
-                "role": "assistant",
-                "model": state.model,
-                "content": [],
-                "stop_reason": null,
-                "usage": {"input_tokens": 0, "output_tokens": 0}
-            }
-        })));
+        out.push(format!(
+            "data: {}",
+            serde_json::json!({
+                "type": "message_start",
+                "message": {
+                    "id": state.id,
+                    "type": "message",
+                    "role": "assistant",
+                    "model": state.model,
+                    "content": [],
+                    "stop_reason": null,
+                    "usage": {"input_tokens": 0, "output_tokens": 0}
+                }
+            })
+        ));
         out.push(String::new());
     }
 
@@ -126,21 +146,27 @@ fn openai_chat_to_anthropic(line: &str, state: &mut StreamState) -> Vec<String> 
             if !state.content_block_opened {
                 state.content_block_opened = true;
                 out.push("event: content_block_start".to_string());
-                out.push(format!("data: {}", serde_json::json!({
-                    "type": "content_block_start",
-                    "index": 0,
-                    "content_block": {"type": "text", "text": ""}
-                })));
+                out.push(format!(
+                    "data: {}",
+                    serde_json::json!({
+                        "type": "content_block_start",
+                        "index": 0,
+                        "content_block": {"type": "text", "text": ""}
+                    })
+                ));
                 out.push(String::new());
             }
 
             if !text.is_empty() {
                 out.push("event: content_block_delta".to_string());
-                out.push(format!("data: {}", serde_json::json!({
-                    "type": "content_block_delta",
-                    "index": 0,
-                    "delta": {"type": "text_delta", "text": text}
-                })));
+                out.push(format!(
+                    "data: {}",
+                    serde_json::json!({
+                        "type": "content_block_delta",
+                        "index": 0,
+                        "delta": {"type": "text_delta", "text": text}
+                    })
+                ));
                 out.push(String::new());
             }
         }
@@ -156,19 +182,28 @@ fn openai_chat_to_anthropic(line: &str, state: &mut StreamState) -> Vec<String> 
         if !state.stop_sent {
             if state.content_block_opened {
                 out.push("event: content_block_stop".to_string());
-                out.push(format!("data: {}", serde_json::json!({"type": "content_block_stop", "index": 0})));
+                out.push(format!(
+                    "data: {}",
+                    serde_json::json!({"type": "content_block_stop", "index": 0})
+                ));
                 out.push(String::new());
                 state.content_block_opened = false;
             }
             out.push("event: message_delta".to_string());
-            out.push(format!("data: {}", serde_json::json!({
-                "type": "message_delta",
-                "delta": {"stop_reason": stop_reason},
-                "usage": {"output_tokens": 0}
-            })));
+            out.push(format!(
+                "data: {}",
+                serde_json::json!({
+                    "type": "message_delta",
+                    "delta": {"stop_reason": stop_reason},
+                    "usage": {"output_tokens": 0}
+                })
+            ));
             out.push(String::new());
             out.push("event: message_stop".to_string());
-            out.push(format!("data: {}", serde_json::json!({"type": "message_stop"})));
+            out.push(format!(
+                "data: {}",
+                serde_json::json!({"type": "message_stop"})
+            ));
             out.push(String::new());
             state.stop_sent = true;
         }
@@ -198,8 +233,16 @@ fn anthropic_to_openai_chat(line: &str, state: &mut StreamState) -> Vec<String> 
         "message_start" => {
             // Extract model and id, emit first chunk with role
             let msg = event.get("message").unwrap_or(&Value::Null);
-            state.id = msg.get("id").and_then(|v| v.as_str()).unwrap_or("chatcmpl-stream").to_string();
-            state.model = msg.get("model").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            state.id = msg
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("chatcmpl-stream")
+                .to_string();
+            state.model = msg
+                .get("model")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             state.started = true;
 
             let chunk = serde_json::json!({
@@ -212,7 +255,10 @@ fn anthropic_to_openai_chat(line: &str, state: &mut StreamState) -> Vec<String> 
             vec![format!("data: {}", chunk), String::new()]
         }
         "content_block_delta" => {
-            let text = event.pointer("/delta/text").and_then(|t| t.as_str()).unwrap_or("");
+            let text = event
+                .pointer("/delta/text")
+                .and_then(|t| t.as_str())
+                .unwrap_or("");
             if text.is_empty() {
                 return vec![];
             }
@@ -270,10 +316,13 @@ fn openai_chat_to_responses(line: &str, state: &mut StreamState) -> Vec<String> 
             "item": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": ""}]}
         })));
         out.push(String::new());
-        out.push(format!("data: {}", serde_json::json!({
-            "type": "response.completed",
-            "response": {"id": state.id, "status": "completed"}
-        })));
+        out.push(format!(
+            "data: {}",
+            serde_json::json!({
+                "type": "response.completed",
+                "response": {"id": state.id, "status": "completed"}
+            })
+        ));
         out.push(String::new());
         return out;
     }
@@ -287,8 +336,16 @@ fn openai_chat_to_responses(line: &str, state: &mut StreamState) -> Vec<String> 
 
     if !state.started {
         state.started = true;
-        state.id = chunk.get("id").and_then(|v| v.as_str()).unwrap_or("resp_stream").to_string();
-        state.model = chunk.get("model").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        state.id = chunk
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("resp_stream")
+            .to_string();
+        state.model = chunk
+            .get("model")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
 
         // Emit response.created + response.in_progress + output_item.added + content_part.added
         out.push(format!("data: {}", serde_json::json!({
@@ -296,62 +353,85 @@ fn openai_chat_to_responses(line: &str, state: &mut StreamState) -> Vec<String> 
             "response": {"id": state.id, "object": "response", "model": state.model, "status": "in_progress"}
         })));
         out.push(String::new());
-        out.push(format!("data: {}", serde_json::json!({
-            "type": "response.in_progress",
-            "response": {"id": state.id, "status": "in_progress"}
-        })));
+        out.push(format!(
+            "data: {}",
+            serde_json::json!({
+                "type": "response.in_progress",
+                "response": {"id": state.id, "status": "in_progress"}
+            })
+        ));
         out.push(String::new());
-        out.push(format!("data: {}", serde_json::json!({
-            "type": "response.output_item.added",
-            "output_index": 0,
-            "item": {"type": "message", "role": "assistant", "content": []}
-        })));
+        out.push(format!(
+            "data: {}",
+            serde_json::json!({
+                "type": "response.output_item.added",
+                "output_index": 0,
+                "item": {"type": "message", "role": "assistant", "content": []}
+            })
+        ));
         out.push(String::new());
-        out.push(format!("data: {}", serde_json::json!({
-            "type": "response.content_part.added",
-            "output_index": 0,
-            "content_index": 0,
-            "part": {"type": "output_text", "text": ""}
-        })));
+        out.push(format!(
+            "data: {}",
+            serde_json::json!({
+                "type": "response.content_part.added",
+                "output_index": 0,
+                "content_index": 0,
+                "part": {"type": "output_text", "text": ""}
+            })
+        ));
         out.push(String::new());
     }
 
     // Extract delta content
     let delta = chunk.pointer("/choices/0/delta");
-    let finish_reason = chunk.pointer("/choices/0/finish_reason").and_then(|r| r.as_str());
+    let finish_reason = chunk
+        .pointer("/choices/0/finish_reason")
+        .and_then(|r| r.as_str());
 
     if let Some(delta_obj) = delta {
         if let Some(text) = delta_obj.get("content").and_then(|c| c.as_str()) {
             if !text.is_empty() {
-                out.push(format!("data: {}", serde_json::json!({
-                    "type": "response.output_text.delta",
-                    "output_index": 0,
-                    "content_index": 0,
-                    "delta": text
-                })));
+                out.push(format!(
+                    "data: {}",
+                    serde_json::json!({
+                        "type": "response.output_text.delta",
+                        "output_index": 0,
+                        "content_index": 0,
+                        "delta": text
+                    })
+                ));
                 out.push(String::new());
             }
         }
     }
 
     if let Some(_reason) = finish_reason {
-        out.push(format!("data: {}", serde_json::json!({
-            "type": "response.output_text.done",
-            "output_index": 0,
-            "content_index": 0,
-            "text": ""
-        })));
+        out.push(format!(
+            "data: {}",
+            serde_json::json!({
+                "type": "response.output_text.done",
+                "output_index": 0,
+                "content_index": 0,
+                "text": ""
+            })
+        ));
         out.push(String::new());
-        out.push(format!("data: {}", serde_json::json!({
-            "type": "response.output_item.done",
-            "output_index": 0,
-            "item": {"type": "message", "role": "assistant"}
-        })));
+        out.push(format!(
+            "data: {}",
+            serde_json::json!({
+                "type": "response.output_item.done",
+                "output_index": 0,
+                "item": {"type": "message", "role": "assistant"}
+            })
+        ));
         out.push(String::new());
-        out.push(format!("data: {}", serde_json::json!({
-            "type": "response.completed",
-            "response": {"id": state.id, "model": state.model, "status": "completed"}
-        })));
+        out.push(format!(
+            "data: {}",
+            serde_json::json!({
+                "type": "response.completed",
+                "response": {"id": state.id, "model": state.model, "status": "completed"}
+            })
+        ));
         out.push(String::new());
     }
 
@@ -378,8 +458,16 @@ fn responses_to_openai_chat(line: &str, state: &mut StreamState) -> Vec<String> 
             if !state.started {
                 state.started = true;
                 let resp = event.get("response").unwrap_or(&Value::Null);
-                state.id = resp.get("id").and_then(|v| v.as_str()).unwrap_or("chatcmpl-stream").to_string();
-                state.model = resp.get("model").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                state.id = resp
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("chatcmpl-stream")
+                    .to_string();
+                state.model = resp
+                    .get("model")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
 
                 let chunk = serde_json::json!({
                     "id": state.id,
@@ -486,14 +574,24 @@ mod tests {
 
         let line2 = r#"data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"gpt-4o","choices":[{"index":0,"delta":{"content":"World"},"finish_reason":null}]}"#;
         let out2 = transform_sse_line(StreamDirection::OpenAIChatToResponses, line2, &mut state);
-        assert!(out2.iter().any(|l| l.contains("response.output_text.delta")));
+        assert!(out2
+            .iter()
+            .any(|l| l.contains("response.output_text.delta")));
         assert!(out2.iter().any(|l| l.contains("World")));
     }
 
     #[test]
     fn test_done_signal() {
-        let mut state = StreamState { started: true, content_block_opened: true, ..Default::default() };
-        let out = transform_sse_line(StreamDirection::OpenAIChatToAnthropic, "data: [DONE]", &mut state);
+        let mut state = StreamState {
+            started: true,
+            content_block_opened: true,
+            ..Default::default()
+        };
+        let out = transform_sse_line(
+            StreamDirection::OpenAIChatToAnthropic,
+            "data: [DONE]",
+            &mut state,
+        );
         assert!(out.iter().any(|l| l.contains("message_stop")));
     }
 
@@ -511,11 +609,18 @@ mod tests {
 
         let mut all: Vec<String> = vec![];
         for line in [c1, c2, done] {
-            all.extend(transform_sse_line(StreamDirection::OpenAIChatToAnthropic, line, &mut state));
+            all.extend(transform_sse_line(
+                StreamDirection::OpenAIChatToAnthropic,
+                line,
+                &mut state,
+            ));
         }
 
         // message_stop must appear exactly once
-        let stop_count = all.iter().filter(|l| l.contains("event: message_stop")).count();
+        let stop_count = all
+            .iter()
+            .filter(|l| l.contains("event: message_stop"))
+            .count();
         assert_eq!(
             stop_count, 1,
             "message_stop must appear exactly once, got {:?}",
@@ -523,7 +628,10 @@ mod tests {
         );
 
         // message_delta (carrying the finish/stop reason) must appear exactly once
-        let delta_event_count = all.iter().filter(|l| l.contains("event: message_delta")).count();
+        let delta_event_count = all
+            .iter()
+            .filter(|l| l.contains("event: message_delta"))
+            .count();
         assert_eq!(
             delta_event_count, 1,
             "message_delta must appear exactly once, got {:?}",

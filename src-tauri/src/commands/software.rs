@@ -691,8 +691,7 @@ fn find_binary_in_dir(dir: &std::path::Path, name: &str) -> Option<PathBuf> {
 fn is_valid_version(v: &str) -> bool {
     !v.is_empty()
         && v.len() <= 128
-        && v
-            .chars()
+        && v.chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
 }
 
@@ -1126,8 +1125,8 @@ fn kill_processes_by_name(name_lower: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::software_data::map_package_name;
+    use super::*;
 
     // ============ parse_pm_list_output ============
 

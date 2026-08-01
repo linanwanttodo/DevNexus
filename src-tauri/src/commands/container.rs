@@ -60,7 +60,11 @@ fn validate_container_id(id: &str) -> Result<(), String> {
     if id.is_empty() || id.len() > 128 {
         return Err("Invalid container id".to_string());
     }
-    if id.starts_with('-') || id.chars().any(|c| c.is_whitespace() || ";|&$`\'\"\\".contains(c)) {
+    if id.starts_with('-')
+        || id
+            .chars()
+            .any(|c| c.is_whitespace() || ";|&$`\'\"\\".contains(c))
+    {
         return Err("Invalid container id".to_string());
     }
     Ok(())
@@ -529,9 +533,7 @@ pub fn compose_logs(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ALLOWED_ACTIONS, parse_json_lines, validate_container_id, validate_exec_command,
-    };
+    use super::{parse_json_lines, validate_container_id, validate_exec_command, ALLOWED_ACTIONS};
 
     #[derive(serde::Deserialize, Debug, PartialEq)]
     struct SampleLine {
@@ -617,8 +619,20 @@ mod tests {
         );
         let parsed: Vec<SampleLine> = parse_json_lines(&out);
         assert_eq!(parsed.len(), 3);
-        assert_eq!(parsed[0], SampleLine { id: 1, name: "a".into() });
-        assert_eq!(parsed[2], SampleLine { id: 3, name: "c".into() });
+        assert_eq!(
+            parsed[0],
+            SampleLine {
+                id: 1,
+                name: "a".into()
+            }
+        );
+        assert_eq!(
+            parsed[2],
+            SampleLine {
+                id: 3,
+                name: "c".into()
+            }
+        );
     }
 
     #[test]

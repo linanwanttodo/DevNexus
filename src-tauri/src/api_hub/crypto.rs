@@ -73,7 +73,10 @@ impl ApiKeyCipher {
              Falling back to PLAINTEXT storage for API keys.",
             key_path.display()
         );
-        ApiKeyCipher { key, enabled: false }
+        ApiKeyCipher {
+            key,
+            enabled: false,
+        }
     }
 
     /// 测试/嵌入场景：以固定密钥构造，不访问 keyring/文件系统
@@ -193,7 +196,10 @@ mod tests {
     fn roundtrip_encrypt_decrypt() {
         let c = enabled_cipher();
         let enc = c.encrypt("sk-test-12345").unwrap();
-        assert!(enc.starts_with(ENC_PREFIX), "encrypted value must carry prefix");
+        assert!(
+            enc.starts_with(ENC_PREFIX),
+            "encrypted value must carry prefix"
+        );
         assert_eq!(c.decrypt(&enc), "sk-test-12345");
     }
 
@@ -217,7 +223,11 @@ mod tests {
             ENC_PREFIX,
             general_purpose::STANDARD.encode(&combined)
         );
-        assert_eq!(c.decrypt(&tampered), "", "tampered ciphertext must fail closed");
+        assert_eq!(
+            c.decrypt(&tampered),
+            "",
+            "tampered ciphertext must fail closed"
+        );
     }
 
     #[test]

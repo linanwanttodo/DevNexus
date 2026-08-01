@@ -145,8 +145,8 @@ mod tests {
         let home = temp_home("set_path_line");
         std::env::set_var("SHELL", "/bin/bash");
 
-        let wrote = set_path_line(&home, "Java", "/usr/lib/jvm/java-17/bin")
-            .expect("set path line");
+        let wrote =
+            set_path_line(&home, "Java", "/usr/lib/jvm/java-17/bin").expect("set path line");
         assert!(wrote);
 
         let content = fs::read_to_string(home.join(".bashrc")).expect("read rc");

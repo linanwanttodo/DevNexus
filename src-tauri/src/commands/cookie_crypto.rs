@@ -141,8 +141,8 @@ pub(super) fn try_aes_128_cbc(
         return Err("Empty ciphertext".to_string());
     }
 
-    let dec = Aes128CbcDec::new_from_slices(key, iv)
-        .map_err(|e| format!("CBC init error: {}", e))?;
+    let dec =
+        Aes128CbcDec::new_from_slices(key, iv).map_err(|e| format!("CBC init error: {}", e))?;
 
     let mut buf = ciphertext.to_vec();
     let plaintext = dec

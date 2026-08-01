@@ -149,7 +149,10 @@ impl PasswordManager {
 
         if let Some(ref entry) = entry {
             if let Err(e) = entry.set_password(&encoded) {
-                eprintln!("[PasswordManager] Failed to persist master password to keyring: {}", e);
+                eprintln!(
+                    "[PasswordManager] Failed to persist master password to keyring: {}",
+                    e
+                );
             }
         }
 
@@ -193,7 +196,10 @@ impl PasswordManager {
         if let Some(e) = entry {
             let encoded = general_purpose::STANDARD.encode(key);
             if let Err(err) = e.set_password(&encoded) {
-                eprintln!("[PasswordManager] Failed to persist master password to keyring: {}", err);
+                eprintln!(
+                    "[PasswordManager] Failed to persist master password to keyring: {}",
+                    err
+                );
             }
         }
 
@@ -227,8 +233,8 @@ impl PasswordManager {
             .encryption_key
             .lock()
             .map_err(|e| format!("Encryption lock error: {}", e))?;
-        let cipher = Aes256Gcm::new_from_slice(&key[..])
-            .map_err(|e| format!("Encryption error: {}", e))?;
+        let cipher =
+            Aes256Gcm::new_from_slice(&key[..]).map_err(|e| format!("Encryption error: {}", e))?;
 
         let nonce_bytes: [u8; 12] = rand::random();
         let nonce = Nonce::from_slice(&nonce_bytes);
@@ -261,8 +267,8 @@ impl PasswordManager {
             .encryption_key
             .lock()
             .map_err(|e| format!("Decryption lock error: {}", e))?;
-        let cipher = Aes256Gcm::new_from_slice(&key[..])
-            .map_err(|e| format!("Decryption error: {}", e))?;
+        let cipher =
+            Aes256Gcm::new_from_slice(&key[..]).map_err(|e| format!("Decryption error: {}", e))?;
 
         let plaintext = cipher
             .decrypt(nonce, ciphertext)

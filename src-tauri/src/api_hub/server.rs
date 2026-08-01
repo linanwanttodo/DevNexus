@@ -1,5 +1,5 @@
 use super::router::{route_by_model, RouteResult};
-use super::transform::streaming::{StreamDirection, StreamState, transform_sse_line};
+use super::transform::streaming::{transform_sse_line, StreamDirection, StreamState};
 use super::types::{ApiProtocol, AppState};
 use axum::{
     extract::{DefaultBodyLimit, State},
@@ -236,9 +236,9 @@ fn internal_request_to_provider(
 ) -> Result<serde_json::Value, String> {
     match route.provider.protocol {
         ApiProtocol::OpenAIChat => Ok(internal.clone()),
-        ApiProtocol::OpenAIResponses => {
-            Ok(super::transform::responses::chat_request_to_responses(internal))
-        }
+        ApiProtocol::OpenAIResponses => Ok(super::transform::responses::chat_request_to_responses(
+            internal,
+        )),
         ApiProtocol::Anthropic => {
             let oai: super::types::OpenAIChatRequest = serde_json::from_value(internal.clone())
                 .map_err(|e| format!("Invalid OpenAI request: {}", e))?;
@@ -336,9 +336,7 @@ async fn handle_streaming(
             .unwrap_or_else(|_| error_response(500, "Stream build error"))
     } else {
         // Same protocol: passthrough bytes directly (zero overhead)
-        let stream = byte_stream.map_err(|e| {
-            std::io::Error::other(format!("Stream error: {}", e))
-        });
+        let stream = byte_stream.map_err(|e| std::io::Error::other(format!("Stream error: {}", e)));
         let body = axum::body::Body::from_stream(stream);
 
         let mut response_builder = Response::builder()

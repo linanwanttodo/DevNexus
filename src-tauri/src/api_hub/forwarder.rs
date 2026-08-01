@@ -103,7 +103,15 @@ pub async fn forward_streaming(
         let model_clone = model.clone();
         let err_str = e.to_string();
         tokio::spawn(async move {
-            log_error(&state_clone, &provider_clone, &model_clone, elapsed, 0, Some(&err_str)).await;
+            log_error(
+                &state_clone,
+                &provider_clone,
+                &model_clone,
+                elapsed,
+                0,
+                Some(&err_str),
+            )
+            .await;
         });
         format!("Stream request failed: {}", e)
     })?;

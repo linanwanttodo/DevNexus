@@ -61,7 +61,10 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
         .pool_max_idle_per_host(10)
         .build()
         .unwrap_or_else(|e| {
-            eprintln!("[API Hub] Failed to build HTTP client, using default: {}", e);
+            eprintln!(
+                "[API Hub] Failed to build HTTP client, using default: {}",
+                e
+            );
             reqwest::Client::new()
         });
 

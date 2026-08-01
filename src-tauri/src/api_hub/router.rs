@@ -29,9 +29,9 @@ pub async fn route_by_model(state: &AppState, model: &str) -> Option<RouteResult
             continue;
         }
         let known_prefixes: &[&str] = match p.protocol {
-            ApiProtocol::OpenAIChat | ApiProtocol::OpenAIResponses => {
-                &["gpt-", "o1-", "o3-", "o4-", "text-", "dall-e", "tts-", "whisper"]
-            }
+            ApiProtocol::OpenAIChat | ApiProtocol::OpenAIResponses => &[
+                "gpt-", "o1-", "o3-", "o4-", "text-", "dall-e", "tts-", "whisper",
+            ],
             ApiProtocol::Anthropic => &["claude-"],
         };
 

@@ -474,10 +474,7 @@ async fn e2e_streaming_cross_protocol_anthropic_to_responses_unsupported() {
     .await;
 
     assert_eq!(status, 422, "expected 422, body: {:?}", body);
-    let msg = body["error"]["message"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+    let msg = body["error"]["message"].as_str().unwrap_or("").to_string();
     assert!(
         msg.contains("is not supported")
             && msg.contains("anthropic")
@@ -507,10 +504,7 @@ async fn e2e_streaming_cross_protocol_responses_to_anthropic_unsupported() {
     .await;
 
     assert_eq!(status, 422, "expected 422, body: {:?}", body);
-    let msg = body["error"]["message"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+    let msg = body["error"]["message"].as_str().unwrap_or("").to_string();
     assert!(
         msg.contains("is not supported")
             && msg.contains("openai_responses")
@@ -573,7 +567,9 @@ async fn e2e_streaming_log_tokens_backfilled() {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     let (input, output) = loop {
         let logs = super::usage::get_logs(&state_check, 50, 0).await;
-        let streamed = logs.iter().find(|l| l.is_streaming && l.model == "mock-claude");
+        let streamed = logs
+            .iter()
+            .find(|l| l.is_streaming && l.model == "mock-claude");
         if let Some(l) = streamed {
             if l.output_tokens > 0 {
                 break (l.input_tokens, l.output_tokens);
@@ -588,8 +584,14 @@ async fn e2e_streaming_log_tokens_backfilled() {
     };
 
     // Anthropic mock 的 usage：input_tokens=5, output_tokens=2
-    assert_eq!(input, 5, "input_tokens should be backfilled from Anthropic mock");
-    assert_eq!(output, 2, "output_tokens should be backfilled from Anthropic mock");
+    assert_eq!(
+        input, 5,
+        "input_tokens should be backfilled from Anthropic mock"
+    );
+    assert_eq!(
+        output, 2,
+        "output_tokens should be backfilled from Anthropic mock"
+    );
 }
 
 #[tokio::test]
@@ -723,7 +725,10 @@ async fn e2e_provider_update_empty_key_keeps_original() {
         provider::load_providers_from_db_sync(db.as_ref().unwrap(), &state.api_key_cipher)
     };
     assert_eq!(reloaded.len(), 1);
-    assert_eq!(reloaded[0].api_key, "secret123", "DB must keep the original key");
+    assert_eq!(
+        reloaded[0].api_key, "secret123",
+        "DB must keep the original key"
+    );
 }
 
 #[tokio::test]
@@ -759,11 +764,9 @@ async fn e2e_provider_update_missing_id_returns_not_found() {
         let db = state.db.lock().await;
         db.as_ref()
             .unwrap()
-            .query_row(
-                "SELECT COUNT(*) FROM providers",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
+            .query_row("SELECT COUNT(*) FROM providers", [], |row| {
+                row.get::<_, i64>(0)
+            })
             .unwrap()
     };
     assert_eq!(count, 0, "no row should be inserted for a missing id");

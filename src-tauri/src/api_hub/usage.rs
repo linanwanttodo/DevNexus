@@ -114,7 +114,12 @@ pub async fn get_logs(state: &AppState, limit: usize, offset: usize) -> Vec<Requ
 
     // 回退：内存日志（从尾部最新开始）
     let logs = state.request_logs.read().await;
-    logs.iter().rev().skip(offset).take(limit).cloned().collect()
+    logs.iter()
+        .rev()
+        .skip(offset)
+        .take(limit)
+        .cloned()
+        .collect()
 }
 
 /// 获取用量统计数据（优先 SQLite 聚合查询，DB 不可用时回退内存聚合）
@@ -171,10 +176,7 @@ fn query_logs_sync(
     );
     let mut stmt = conn.prepare_cached(&sql).ok()?;
     let rows = stmt
-        .query_map(
-            rusqlite::params![limit as i64, offset as i64],
-            row_to_log,
-        )
+        .query_map(rusqlite::params![limit as i64, offset as i64], row_to_log)
         .ok()?;
     Some(rows.filter_map(|r| r.ok()).collect())
 }

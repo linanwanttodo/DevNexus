@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItemBuilder},
-    tray::{TrayIconBuilder},
+    tray::TrayIconBuilder,
     Manager,
 };
 
