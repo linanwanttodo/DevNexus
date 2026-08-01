@@ -506,6 +506,7 @@ fn transform_byte_stream(
         use futures_util::StreamExt;
         let mut state = StreamState::default();
         let mut buffer = String::new();
+        let mut consumed = 0usize; // 已处理字节偏移，避免每次重建剩余缓冲区（O(n²)→O(n)）
 
         futures_util::pin_mut!(byte_stream);
 
@@ -522,10 +523,11 @@ fn transform_byte_stream(
             let text = String::from_utf8_lossy(&chunk);
             buffer.push_str(&text);
 
-            // Process complete lines
-            while let Some(newline_pos) = buffer.find('\n') {
-                let line = buffer[..newline_pos].trim_end_matches('\r').to_string();
-                buffer = buffer[newline_pos + 1..].to_string();
+            // Process complete lines（从已消费偏移处查找换行）
+            while let Some(rel_pos) = buffer[consumed..].find('\n') {
+                let newline_pos = consumed + rel_pos;
+                let line = buffer[consumed..newline_pos].trim_end_matches('\r');
+                consumed = newline_pos + 1;
 
                 if line.is_empty() {
                     // Empty line = SSE event separator, skip
@@ -537,11 +539,17 @@ fn transform_byte_stream(
                     continue;
                 }
 
-                let output_lines = transform_sse_line(direction, &line, &mut state);
+                let output_lines = transform_sse_line(direction, line, &mut state);
                 for out_line in output_lines {
                     let formatted = format!("{}\n", out_line);
                     yield Ok(bytes::Bytes::from(formatted));
                 }
+            }
+
+            // 丢弃已消费的前缀，避免缓冲区无界增长（每个字节只移动一次，摊还 O(n)）
+            if consumed > 0 {
+                buffer.drain(..consumed);
+                consumed = 0;
             }
         }
 
