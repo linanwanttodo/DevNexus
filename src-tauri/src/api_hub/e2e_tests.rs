@@ -768,3 +768,130 @@ async fn e2e_provider_update_missing_id_returns_not_found() {
     };
     assert_eq!(count, 0, "no row should be inserted for a missing id");
 }
+
+#[tokio::test]
+async fn e2e_concurrent_streaming_requests() {
+    // 并发/压力回归测试（T2）：8 个流式 chat 请求同时打进来，
+    // 守护近期修复在并发下不回归：
+    //   - C1：usage 统计竞态（流式 token 回填不得丢失）
+    //   - C4：流式去重（每条流只应有一个 [DONE]、内容不重复/不串包）
+    //   - C7：锁粒度（高并发下所有请求都须正常返回 200，不卡死不报错）
+    const N: usize = 8;
+
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let state_check = state.clone();
+
+    // 注册 8 个可区分的 mock 模型（smoke-model-1..8），全部路由到 Anthropic mock：
+    // 其流式 SSE 会回显 model（用于区分并发请求/检测串包），且自带 usage
+    // （input_tokens=5, output_tokens=2），用于验证 C1 并发下的 token 回填。
+    {
+        let mut providers = state.providers.write().await;
+        for p in providers.iter_mut() {
+            if p.id == "p-anth" {
+                for i in 1..=N {
+                    p.models.push(format!("smoke-model-{}", i));
+                }
+            }
+        }
+    }
+    let (hub, _h) = spawn_hub(state).await;
+
+    let client = reqwest::Client::new();
+    let url = format!("http://{}/v1/chat/completions", hub);
+
+    // 并发发起 N 个流式请求（每个请求一个独立 tokio task，多线程运行时真正并行）
+    let tasks: Vec<_> = (1..=N)
+        .map(|i| {
+            let client = client.clone();
+            let url = url.clone();
+            let model = format!("smoke-model-{}", i);
+            tokio::spawn(async move {
+                let resp = client
+                    .post(&url)
+                    .json(&serde_json::json!({
+                        "model": model,
+                        "messages": [{"role": "user", "content": "ping"}],
+                        "stream": true
+                    }))
+                    .send()
+                    .await
+                    .unwrap();
+                let status = resp.status().as_u16();
+                let body = resp.text().await.unwrap_or_default();
+                (model, status, body)
+            })
+        })
+        .collect();
+    let results = futures_util::future::join_all(tasks).await;
+
+    for r in results {
+        let (model, status, body) = r.expect("concurrent request task panicked");
+        // 1) 每个并发请求都必须正常返回 200（C7：锁粒度/并发不崩）
+        assert_eq!(status, 200, "model {}: expected 200, body={}", model, body);
+        // 2) SSE 流包含自己的 content 与唯一的结束标记（C4：不重复/不丢 [DONE]）
+        assert!(
+            body.contains("Hello") && body.contains("anthropic"),
+            "model {}: SSE missing content, body={}",
+            model,
+            body
+        );
+        assert_eq!(
+            body.matches("data: [DONE]").count(),
+            1,
+            "model {}: expected exactly one [DONE], body={}",
+            model,
+            body
+        );
+        // 3) 每条流回显各自请求体的 model 字段（C4/C7：不串包、不交错）
+        assert!(
+            body.contains(&format!("\"model\":\"{}\"", model)),
+            "model {}: own model not echoed, body={}",
+            model,
+            body
+        );
+        // 4) 流中不得出现其他请求的 data（模型回显即流身份标识）
+        for j in 1..=N {
+            let other = format!("smoke-model-{}", j);
+            if other != model {
+                assert!(
+                    !body.contains(&format!("\"model\":\"{}\"", other)),
+                    "model {}: stream contaminated by {} (cross-request data leak), body={}",
+                    model,
+                    other,
+                    body
+                );
+            }
+        }
+    }
+
+    // 5) 守护 C1：并发下所有 N 条流式日志都必须存在且 output_tokens 被回填
+    //    （update_log_tokens 在流结束后异步执行，轮询等待全部回填完成）
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let logs = super::usage::get_logs(&state_check, 200, 0).await;
+        let all_backfilled = (1..=N).all(|i| {
+            let model = format!("smoke-model-{}", i);
+            logs.iter()
+                .any(|l| l.is_streaming && l.model == model && l.output_tokens > 0)
+        });
+        if all_backfilled {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "concurrent streaming token backfill incomplete, got logs: {:?}",
+            logs
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    // 6) 计数正确性：恰好 N 条流式日志（不丢、不重复）
+    let logs = super::usage::get_logs(&state_check, 200, 0).await;
+    let streamed = logs.iter().filter(|l| l.is_streaming).count();
+    assert_eq!(
+        streamed, N,
+        "expected exactly {} streaming logs, got {}: {:?}",
+        N, streamed, logs
+    );
+}
