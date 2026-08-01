@@ -1,6 +1,6 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
-  import LoadingIndicator from "../components/LoadingIndicator.svelte";
+  import TableSkeleton from "../components/skeleton/TableSkeleton.svelte";
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
   import { showConfirm } from "../lib/confirm.svelte.js";
@@ -189,7 +189,7 @@
   {/if}
 
   {#if loading && !providers.length}
-    <LoadingIndicator padding="py-20" />
+    <TableSkeleton rows={5} />
 
   <!-- ════════════════════════════════════════════════════
        STATS TAB

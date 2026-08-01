@@ -794,3 +794,31 @@ input[type="radio"]:focus-visible {
 .nx-page-exit {
   animation: nx-fade-out 0.1s ease both;
 }
+
+/* ========================================================
+   Skeleton loading
+   ======================================================== */
+.nx-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--nx-skeleton-bg, rgba(255, 255, 255, 0.06));
+  border-radius: 6px;
+}
+.nx-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.08),
+    transparent
+  );
+  animation: nx-shimmer 1.4s infinite;
+}
+@keyframes nx-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

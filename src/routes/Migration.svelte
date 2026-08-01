@@ -1,6 +1,6 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
-  import LoadingIndicator from "../components/LoadingIndicator.svelte";
+  import CardSkeleton from "../components/skeleton/CardSkeleton.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import { showToast } from "../lib/toast.svelte.js";
@@ -199,7 +199,7 @@
 
     <div class="nx-section">
       {#if loading}
-        <LoadingIndicator padding="py-12" />
+        <CardSkeleton lines={3} />
       {:else if error}
         <div class="nx-empty">
           <span class="material-symbols-outlined text-nx-danger text-3xl">error</span>
