@@ -2,3 +2,10 @@
 members = ["src-tauri"]
 default-members = ["src-tauri"]
 resolver = "2"
+
+# 发布构建优化：更小的二进制 + 全量优化（Tauri 官方推荐配置）
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
