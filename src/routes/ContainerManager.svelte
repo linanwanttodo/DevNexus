@@ -514,7 +514,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {#each filteredContainers as c}
+                  {#each filteredContainers as c (c.id)}
                     <tr>
                       <td class="!pr-0">
                         {#if c.status === "running"}
@@ -619,7 +619,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {#each filteredImages as img}
+                  {#each filteredImages as img (img.id)}
                     <tr>
                       <td class="text-sm font-medium text-nx-text">{img.repository}</td>
                       <td><span class="nx-pill font-mono text-[10px]">{img.tag}</span></td>
@@ -689,7 +689,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {#each volumes as v}
+                  {#each volumes as v (v.name)}
                     <tr>
                       <td class="text-sm font-medium text-nx-text">{v.name}</td>
                       <td class="text-xs text-nx-text-secondary">{v.driver}</td>
@@ -750,7 +750,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {#each networks as n}
+                  {#each networks as n (n.name)}
                     <tr>
                       <td class="text-sm font-medium text-nx-text">{n.name}</td>
                       <td class="text-xs text-nx-text-secondary">{n.driver}</td>

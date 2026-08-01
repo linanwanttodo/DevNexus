@@ -292,7 +292,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each sorted as group}
+          {#each sorted as group (group.name)}
             <!-- 分组行 -->
             <tr
               class="border-b border-nx-border cursor-pointer hover:bg-nx-surface/80 transition-colors"
@@ -327,7 +327,7 @@
               <td class="px-4 py-3">
                 {#if group.ports.length > 0}
                   <div class="flex flex-wrap gap-1">
-                    {#each group.ports as port}
+                    {#each group.ports as port (port)}
                       <span class="nx-pill inline-flex items-center gap-0.5 font-mono text-xs text-nx-accent bg-nx-accent/10 px-1.5 py-0.5">
                         {port}
                         <button class="text-nx-danger hover:text-nx-danger/80 leading-none" title={t("ports.kill")}
@@ -356,7 +356,7 @@
 
             <!-- 展开行：子进程列表 -->
             {#if expanded.has(group.name)}
-              {#each group.entries as entry}
+              {#each group.entries as entry (entry.pid)}
                 <tr class="bg-nx-bg/30">
                   <td class="w-8"></td>
                   <td class="pl-8">

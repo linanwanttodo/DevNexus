@@ -432,7 +432,7 @@ import { invoke } from "@tauri-apps/api/core";
           </tr>
         </thead>
         <tbody>
-          {#each passwords as entry}
+          {#each passwords as entry (entry.id)}
             <tr class="group border-b border-nx-border last:border-0">
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2">
