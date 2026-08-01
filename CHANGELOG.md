@@ -9,9 +9,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Removed the built-in download manager (use mature download tools instead)
 - Docker / Podman container management (planned)
 - Cloud service credential management (AWS / GCP CLI) (planned)
+
+---
+
+## [1.3.0] - 2026-08-01
+
+### Removed (English)
+- Built-in download manager (use mature download tools instead)
+
+### Security (English)
+- Fixed command injection in nvm version switching (S1)
+- API Hub CORS whitelisted to block cross-site key theft (S2)
+- Cookie decryption now verifies SHA-256 integrity instead of silently trusting data (S3)
+- Shell rc injection protection for mirror/path writes (S4)
+- Software install path-traversal protection (S5)
+- Residue scanner uses boundary keyword matching + safe-delete guards (S6)
+- Keyring enabled with real platform backends (password persistence no longer fails) (S7)
+- PBKDF2 iteration bounds + encryption key zeroing on lock (S8)
+- Docker command whitelist, arg validation and 120s timeout (S9)
+- Cookie temp files use random names, 0600 perms and RAII cleanup (S10)
+- Provider API keys encrypted at rest with AES-256-GCM (OS keyring-backed key)
+
+### Fixed (English)
+- API Hub usage stats race: streaming token backfill no longer lost (C1)
+- Provider duplicate-name check moved before DB insert + unique index (C2)
+- Unsupported cross-protocol streaming now returns explicit 422 (C3)
+- Duplicate message_delta/message_stop in stream conversion removed (C4)
+- Client-input errors return 400/422 instead of 500; no startup panic (C5)
+- Provider update preserves key on empty/masked input; missing id errors (C6)
+- Shrunk system/process lock critical sections, removed unwrap panics (C7)
+- Upstream URL join dedups by path segment (C8)
+- fetch_models reuses global HTTP client (C9)
+- Removed dead code, unified command executor, rc editor and error types (A1-A5)
+- PBKDF2 default iterations raised to 600k (OWASP)
+
+### Changed (English)
+- Frontend fully i18n-ized (ApiHub + remaining pages), components split, keyed lists, unified loading indicator (F1-F9)
+- TLS stack unified to rustls; CSP tightened (removed unused Google Fonts)
+- Release profile: LTO + strip; CI key injection & release cleanup guards
+- Dependencies upgraded (tauri 2.11.5, tokio 1.53.1); quick-xml 0.41.0 fixes high-severity DoS
+- API Hub benchmark tooling added (`pnpm bench`, 3571 RPS baseline)
+
+### 移除（中文）
+- 内置下载管理器（改用成熟的下载工具）
+
+### 安全修复（中文）
+- 修复 nvm 版本切换命令注入（S1）
+- API Hub CORS 白名单化，阻止跨站盗用密钥（S2）
+- Cookie 解密增加 SHA-256 完整性校验（S3）
+- shell rc 注入防护（镜像源/环境变量写入）（S4）
+- 软件安装路径穿越防护（S5）
+- 残留扫描改为边界关键词匹配 + 安全删除保护（S6）
+- keyring 启用真实平台后端，密码持久化不再静默失败（S7）
+- PBKDF2 迭代数上限 + 锁定时密钥内存清零（S8）
+- docker 命令白名单、参数校验与超时（S9）
+- Cookie 临时文件随机名、0600 权限与自动清理（S10）
+- Provider API Key 落库加密（AES-256-GCM，密钥存 OS keyring）
+
+### 修复（中文）
+- API Hub 用量统计竞态，流式 token 回填不再丢失（C1）
+- Provider 重名检查前置 + 数据库唯一索引（C2）
+- 不支持的跨协议流式转换显式返回 422（C3）
+- 流式转换重复停止事件去重（C4）
+- 客户端输入错误返回 400/422，启动不再 panic（C5）
+- Provider 更新空 key 保留原值、不存在 id 报错（C6）
+- 缩小系统/进程锁临界区并消除 unwrap panic（C7）
+- 上游 URL 拼接按路径段边界去重（C8）
+- fetch_models 复用全局 HTTP 连接池（C9）
+- 消除重复实现：统一命令执行器、rc 编辑器、错误类型（A1-A5）
+- PBKDF2 默认迭代数提升至 60 万（OWASP 推荐）
+
+### 优化（中文）
+- 前端全面 i18n 化、组件拆分、keyed 列表、统一加载指示器（F1-F9）
+- TLS 栈统一为 rustls；收紧 CSP（移除未使用的 Google Fonts）
+- 发布构建 LTO + strip 优化；CI 密钥注入与 release 清理守卫
+- 依赖整体升级（tauri 2.11.5、tokio 1.53.1）；quick-xml 0.41.0 修复高危 DoS
+- 新增 API Hub 压测工具（`pnpm bench`，基线 3571 RPS）
 
 ---
 
