@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # DevNexus pre-commit hook：与 CI 的 Code quality checks 保持一致
-# 运行：cargo fmt --check + cargo clippy -- -D warnings + pnpm check (svelte-check)
+# 运行：cargo fmt --check + cargo clippy -- -D warnings + pnpm check (vite build)
 # 任一步失败则阻止提交，避免 CI 反复构建失败。
 set -u
 
@@ -22,7 +22,7 @@ if ! cargo clippy -- -D warnings; then
 fi
 
 echo ""
-echo "==> [pre-commit] pnpm check (svelte-check)"
+echo "==> [pre-commit] pnpm check (vite build)"
 if ! pnpm check; then
   echo "!! 前端类型/语法检查失败。修复后再提交"
   FAILED=1

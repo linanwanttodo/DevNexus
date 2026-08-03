@@ -77,7 +77,8 @@ pub fn api_hub_status(state: State<'_, AppState>) -> serde_json::Value {
     serde_json::json!({
         "running": state.running.load(Ordering::SeqCst),
         "port": 3456,
-        "version": env!("CARGO_PKG_VERSION")
+        "version": env!("CARGO_PKG_VERSION"),
+        "auth_token": state.auth_token
     })
 }
 

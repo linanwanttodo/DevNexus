@@ -306,25 +306,26 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
         "intellij idea" | "intellij idea ultimate" | "intellij idea community" | "idea" => {
             #[cfg(unix)]
             {
-                // JetBrains 统一缓存目录
-                push!(home_p.join(".config/JetBrains"));
-                push!(home_p.join(".cache/JetBrains"));
-                push!(home_p.join(".local/share/JetBrains"));
+                // 只清理 IntelliJ IDEA 对应产品的子目录，绝不删除 JetBrains 共享根目录
+                // （根目录下同时存放 PyCharm/GoLand/CLion 等其它产品的活动数据）
+                push!(home_p.join(".config/JetBrains/IntelliJIdea*"));
+                push!(home_p.join(".cache/JetBrains/IntelliJIdea*"));
+                push!(home_p.join(".local/share/JetBrains/IntelliJIdea*"));
                 push!(home_p.join(".java/.userPrefs/jetbrains"));
             }
             #[cfg(target_os = "macos")]
             {
-                push!(home_p.join("Library/Application Support/JetBrains"));
-                push!(home_p.join("Library/Caches/JetBrains"));
+                push!(home_p.join("Library/Application Support/JetBrains/IntelliJIdea*"));
+                push!(home_p.join("Library/Caches/JetBrains/IntelliJIdea*"));
                 push!(home_p.join("Library/Preferences/com.jetbrains.intellij.plist"));
             }
             #[cfg(windows)]
             {
                 if let Ok(a) = std::env::var("APPDATA") {
-                    push!(PathBuf::from(a).join("JetBrains"));
+                    push!(PathBuf::from(a.clone()).join("JetBrains/IntelliJIdea*"));
                 }
                 if let Ok(l) = std::env::var("LOCALAPPDATA") {
-                    push!(PathBuf::from(l).join("JetBrains"));
+                    push!(PathBuf::from(l).join("JetBrains/IntelliJIdea*"));
                 }
             }
         }
@@ -996,10 +997,83 @@ pub fn get_cleanup_paths(app_name: &str, package_name: &str, home: &str) -> Vec<
         }
     }
 
+    // 展开带通配符（*）的路径为实际存在的子目录，再统一去重
+    let mut expanded: Vec<PathBuf> = Vec::new();
+    for p in paths {
+        let s = p.to_string_lossy();
+        if s.contains('*') {
+            expand_glob(&p, &mut expanded);
+        } else {
+            expanded.push(p);
+        }
+    }
+
     // 去重保持顺序
     let mut seen = std::collections::HashSet::new();
-    paths
+    expanded
         .into_iter()
         .filter(|p| seen.insert(p.display().to_string()))
         .collect()
+}
+
+/// 将含单个尾部通配符（如 `~/.config/JetBrains/IntelliJIdea*`）的路径展开为实际存在的目录。
+/// 若通配符不在末尾、父目录不存在或无匹配项，则静默跳过（不产生清理目标）。
+fn expand_glob(pattern: &std::path::Path, out: &mut Vec<PathBuf>) {
+    let s = pattern.to_string_lossy();
+    let Some((prefix, suffix)) = s.split_once('*') else {
+        return;
+    };
+    // 仅支持尾部通配符（后缀为空或纯文件名结尾），避免复杂 glob
+    if suffix.contains('/') || suffix.contains('\\') {
+        return;
+    }
+    let prefix_path = std::path::Path::new(prefix);
+    let Some(parent) = prefix_path.parent() else {
+        return;
+    };
+    let Some(stem) = prefix_path.file_name().and_then(|n| n.to_str()) else {
+        return;
+    };
+    if stem.is_empty() {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with(stem) {
+            out.push(entry.path());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expand_glob_matches_stem_in_real_dir() {
+        let tmp = std::env::temp_dir().join(format!("devnexus_glob_test_{}", std::process::id()));
+        let jetbrains = tmp.join("JetBrains");
+        std::fs::create_dir_all(&jetbrains).unwrap();
+        std::fs::create_dir_all(jetbrains.join("IntelliJIdea2026.1")).unwrap();
+        std::fs::create_dir_all(jetbrains.join("PyCharm2026.1")).unwrap();
+
+        let mut out = Vec::new();
+        let pattern = jetbrains.join("IntelliJIdea*");
+        expand_glob(&pattern, &mut out);
+        assert_eq!(out.len(), 1, "只应匹配 IntelliJIdea 前缀");
+        assert_eq!(
+            out[0].file_name().unwrap().to_str().unwrap(),
+            "IntelliJIdea2026.1"
+        );
+
+        let mut none = Vec::new();
+        let missing = jetbrains.join("GoLand*");
+        expand_glob(&missing, &mut none);
+        assert!(none.is_empty(), "无匹配项应返回空");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }

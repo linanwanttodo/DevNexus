@@ -225,13 +225,24 @@ pub(crate) async fn install_software_exec(package_name: String) -> Result<String
             let mut args: Vec<&str> = pm.install_args.to_vec();
             args.push(pkg);
 
+            // L1 修复：单次执行失败（含 pkexec 无法启动等）仅记录错误并继续尝试
+            // 下一个包管理器，不再用 `?` 中断整个循环。
             let output = if pm.needs_sudo {
-                run_elevated(pm.binary, &args)?
+                match run_elevated(pm.binary, &args) {
+                    Ok(o) => o,
+                    Err(e) => {
+                        last_error = e;
+                        continue;
+                    }
+                }
             } else {
-                Command::new(pm.binary)
-                    .args(&args)
-                    .output()
-                    .map_err(|e| format!("Failed to execute {}: {}", pm.binary, e))?
+                match Command::new(pm.binary).args(&args).output() {
+                    Ok(o) => o,
+                    Err(e) => {
+                        last_error = format!("Failed to execute {}: {}", pm.binary, e);
+                        continue;
+                    }
+                }
             };
 
             if output.status.success() {
@@ -282,13 +293,23 @@ pub(crate) async fn uninstall_software_exec(package_name: String) -> Result<Stri
             let mut args: Vec<&str> = pm.uninstall_args.to_vec();
             args.push(pkg);
 
+            // L1 修复：单次执行失败仅记录错误并继续尝试下一个包管理器
             let output = if pm.needs_sudo {
-                run_elevated(pm.binary, &args)?
+                match run_elevated(pm.binary, &args) {
+                    Ok(o) => o,
+                    Err(e) => {
+                        last_error = e;
+                        continue;
+                    }
+                }
             } else {
-                Command::new(pm.binary)
-                    .args(&args)
-                    .output()
-                    .map_err(|e| format!("Failed to execute {}: {}", pm.binary, e))?
+                match Command::new(pm.binary).args(&args).output() {
+                    Ok(o) => o,
+                    Err(e) => {
+                        last_error = format!("Failed to execute {}: {}", pm.binary, e);
+                        continue;
+                    }
+                }
             };
 
             if output.status.success() {

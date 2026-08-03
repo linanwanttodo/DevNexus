@@ -1,11 +1,23 @@
-import { svelte } from "@sveltejs/vite-plugin-svelte";
+import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [vue()],
   clearScreen: false,
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vue-vendor": ["vue", "vue-router"],
+          "arco-vendor": ["@arco-design/web-vue"],
+          "tauri-vendor": ["@tauri-apps/api/core", "@tauri-apps/plugin-dialog", "@tauri-apps/plugin-shell", "@tauri-apps/plugin-process"],
+        },
+      },
+    },
+  },
   server: {
     port: 1420,
     strictPort: true,

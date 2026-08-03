@@ -14,10 +14,57 @@ pub mod usage;
 
 use types::AppState;
 
+/// 访问令牌文件（0600 权限，供外部客户端长期使用）
+const TOKEN_FILE: &str = "api_hub_token";
+
+/// 加载或创建本地服务访问令牌。
+/// 首次运行生成 48 位随机字符并写入 data_dir（0600）；之后复用，
+/// 保证用户配置的 IDE 客户端 token 在重启后依然有效。
+fn load_or_create_token(data_dir: &std::path::Path) -> String {
+    let token_path = data_dir.join(TOKEN_FILE);
+    if let Ok(t) = std::fs::read_to_string(&token_path) {
+        let t = t.trim().to_string();
+        if t.len() >= 32 && !t.contains(char::is_whitespace) {
+            return t;
+        }
+    }
+
+    use rand::distributions::Alphanumeric;
+    use rand::Rng;
+    let token: String = rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(48)
+        .map(char::from)
+        .collect();
+
+    if std::fs::create_dir_all(data_dir).is_ok() {
+        if std::fs::write(&token_path, &token).is_ok() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(meta) = std::fs::metadata(&token_path) {
+                    let mut perms = meta.permissions();
+                    perms.set_mode(0o600);
+                    let _ = std::fs::set_permissions(&token_path, perms);
+                }
+            }
+            return token;
+        }
+        eprintln!(
+            "[API Hub] WARNING: failed to persist auth token to {}; using in-memory token.",
+            token_path.display()
+        );
+    }
+    token
+}
+
 /// 初始化 API Hub：创建共享状态（同步调用，在应用启动时执行）
 pub fn init(data_dir: &std::path::Path) -> AppState {
     // API key 加密器（OS keyring → data_dir 文件兜底 → 明文降级）
     let api_key_cipher = Arc::new(crypto::ApiKeyCipher::load_or_create(data_dir));
+
+    // 本地服务访问令牌（H1 安全修复）
+    let auth_token = load_or_create_token(data_dir);
 
     // 初始化 SQLite
     let db_path = data_dir.join("api_hub.db");
@@ -75,6 +122,7 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
         http_client,
         running: Arc::new(AtomicBool::new(false)),
         api_key_cipher,
+        auth_token,
     }
 }
 

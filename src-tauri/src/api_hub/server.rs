@@ -2,8 +2,9 @@ use super::router::{route_by_model, RouteResult};
 use super::transform::streaming::{transform_sse_line, StreamDirection, StreamState};
 use super::types::{ApiProtocol, AppState};
 use axum::{
-    extract::{DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, Request, State},
     http::{HeaderName, HeaderValue, Method},
+    middleware::Next,
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -62,17 +63,52 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .allow_headers([
             HeaderName::from_static("content-type"),
             HeaderName::from_static("authorization"),
+            HeaderName::from_static("x-devnexus-token"),
         ]);
 
-    Router::new()
-        .route("/health", get(health_handler))
+    // 代理端点必须携带访问令牌（H1 安全修复）；/health 保持匿名可探活。
+    let protected = Router::new()
         .route("/v1/chat/completions", post(chat_completions_handler))
         .route("/v1/responses", post(responses_handler))
         .route("/v1/messages", post(anthropic_messages_handler))
         .route("/v1/models", get(list_models_handler))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            require_auth,
+        ));
+
+    Router::new()
+        .route("/health", get(health_handler))
+        .merge(protected)
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10 MB
         .layer(cors)
         .with_state(state)
+}
+
+/// 认证中间件：校验 `X-DevNexus-Token` 或 `Authorization: Bearer <token>`。
+/// 防止本机任意进程/浏览器页面盗用已配置的 API Key 调用上游（消耗用户额度）。
+async fn require_auth(State(state): State<Arc<AppState>>, req: Request, next: Next) -> Response {
+    let ok = req
+        .headers()
+        .get(HeaderName::from_static("x-devnexus-token"))
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v == state.auth_token)
+        .or_else(|| {
+            req.headers()
+                .get(HeaderName::from_static("authorization"))
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.strip_prefix("Bearer "))
+                .map(|v| v.trim() == state.auth_token)
+        })
+        .unwrap_or(false);
+
+    if !ok {
+        return error_response(
+            401,
+            "Unauthorized: missing or invalid X-DevNexus-Token header. The token is shown in the API Hub page.",
+        );
+    }
+    next.run(req).await
 }
 
 // ── Health ────────────────────────────────────────────────────

@@ -113,9 +113,18 @@ impl PasswordManager {
         Ok(())
     }
 
+    /// 密钥文件兜底路径（H2 安全修复）：keyring 不可用时落盘，避免密钥丢失导致密文永久不可解
+    fn key_file_path() -> std::path::PathBuf {
+        crate::utils::data_dir().join("password_key.bin")
+    }
+
     /// 从系统钥匙串（keyring）加载或创建加密密钥
     /// 使用 OS 原生安全存储（macOS Keychain / Linux Secret Service / Windows Credential Manager）
-    /// 替代旧版 flat file 方案，避免密钥以明文形式暴露在文件系统中
+    /// 替代旧版 flat file 方案，避免密钥以明文形式暴露在文件系统中。
+    ///
+    /// 回退链（H2 修复）：keyring → `data_dir/password_key.bin`（0600 文件兜底）。
+    /// 只有密钥确实被持久化（keyring 或文件之一成功）后才清理旧版 key.bin，
+    /// 避免「生成新密钥 → 持久化失败 → 旧密钥被删 → 数据永久丢失」。
     fn load_or_create_key() -> [u8; 32] {
         const SERVICE_NAME: &str = "com.devnexus.app";
         const KEYRING_USER: &str = "encryption-key";
@@ -136,28 +145,80 @@ impl PasswordManager {
             }
         }
 
-        // 2. 向后兼容：尝试从旧版 key.bin 迁移
+        // 2. 回退：从 data_dir 密钥文件读取
+        if let Some(key) = Self::read_key_file() {
+            Self::try_remove_old_keyfile();
+            return key;
+        }
+
+        // 3. 向后兼容：尝试从旧版 key.bin 迁移
         if let Some(key) = Self::migrate_from_keyfile(entry.as_ref()) {
             Self::try_remove_old_keyfile();
             return key;
         }
 
-        // 3. 生成新密钥并存入钥匙串
+        // 4. 生成新密钥并尝试持久化（keyring → 文件兜底）
         let mut key = [0u8; 32];
         rand::thread_rng().fill(&mut key);
-        let encoded = general_purpose::STANDARD.encode(key);
 
+        let mut persisted = false;
         if let Some(ref entry) = entry {
-            if let Err(e) = entry.set_password(&encoded) {
+            let encoded = general_purpose::STANDARD.encode(key);
+            match entry.set_password(&encoded) {
+                Ok(_) => persisted = true,
+                Err(e) => eprintln!("[PasswordManager] Failed to persist key to keyring: {}", e),
+            }
+        }
+        if !persisted {
+            persisted = Self::write_key_file(&key);
+            if !persisted {
                 eprintln!(
-                    "[PasswordManager] Failed to persist master password to keyring: {}",
-                    e
+                    "[PasswordManager] WARNING: unable to persist encryption key (keyring and {} both unavailable). \
+                     Vault data saved now will be UNREADABLE after restart.",
+                    Self::key_file_path().display()
                 );
             }
         }
 
-        Self::try_remove_old_keyfile();
+        // 仅当新密钥已持久化时才清理旧版 key.bin（H2 修复：防止唯一可用密钥被误删）
+        if persisted {
+            Self::try_remove_old_keyfile();
+        }
         key
+    }
+
+    /// 读取 data_dir 密钥文件（32 字节）；不存在/损坏返回 None
+    fn read_key_file() -> Option<[u8; 32]> {
+        let data = std::fs::read(Self::key_file_path()).ok()?;
+        if data.len() != 32 {
+            return None;
+        }
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&data);
+        Some(key)
+    }
+
+    /// 写入 data_dir 密钥文件（Unix 上设置 0600 权限）
+    fn write_key_file(key: &[u8; 32]) -> bool {
+        let path = Self::key_file_path();
+        if let Some(parent) = path.parent() {
+            if std::fs::create_dir_all(parent).is_err() {
+                return false;
+            }
+        }
+        if std::fs::write(&path, key).is_err() {
+            return false;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(meta) = std::fs::metadata(&path) {
+                let mut perms = meta.permissions();
+                perms.set_mode(0o600);
+                let _ = std::fs::set_permissions(&path, perms);
+            }
+        }
+        true
     }
 
     /// 从旧版 key.bin 迁移密钥到钥匙串

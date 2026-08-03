@@ -6,13 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <title>DevNexus</title>
     <script>
-      // Prevent theme flash: apply theme before Svelte hydrates
-      (function() {
-        var theme = localStorage.getItem('devnexus-theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', theme);
+      // Prevent theme flash: apply Arco theme before Vue mounts
+      (function () {
+        var theme = localStorage.getItem("devnexus-theme") || "dark";
+        var resolved =
+          theme === "system"
+            ? window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light"
+            : theme;
+        document.body.setAttribute("arco-theme", resolved);
+        document.documentElement.setAttribute("data-theme", resolved);
       })();
     </script>
     <style>
@@ -23,12 +30,13 @@
         background-color: #161616;
         color: rgba(235, 235, 235, 0.87);
         overflow: hidden;
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
       }
       [data-theme="light"] body,
       [data-theme="light"] {
         background-color: #f8f8f8;
       }
-      /* Hide app content until Svelte mounts (prevents raw key flash) */
+      /* Hide app content until Vue mounts (prevents raw key flash) */
       #app {
         opacity: 0;
         transition: opacity 0.15s ease;
@@ -36,7 +44,7 @@
       #app.ready {
         opacity: 1;
       }
-      /* Loading skeleton shown until Svelte mounts */
+      /* Loading skeleton shown until Vue mounts */
       #app:empty {
         display: flex;
         height: 100vh;

@@ -1,4 +1,5 @@
 use crate::utils;
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
@@ -152,6 +153,13 @@ pub async fn uninstall_software_deep(
     // (a) 先执行标准卸载
     let result = software_pm::uninstall_software_exec(package_name.clone()).await;
 
+    // 安全校验：只有标准卸载成功后才清理残留目录。
+    // 若卸载失败（如包管理器报错、无权限），跳过目录删除，避免误删仍在使用的活动数据。
+    let uninstall_ok = result.is_ok();
+    if !uninstall_ok {
+        return result;
+    }
+
     // (b) 获取所有可能的清理路径（复用 residue_scanner::known_paths 单一数据源）
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
@@ -176,11 +184,8 @@ pub async fn uninstall_software_deep(
         }
     }
 
-    // (d) 构造结果消息
-    let mut message = match &result {
-        Ok(r) => r.clone(),
-        Err(e) => format!("Uninstall warning: {}", e),
-    };
+    // (d) 构造结果消息（至此卸载已成功）
+    let mut message = result.clone().unwrap_or_default();
     if !cleaned_dirs.is_empty() || !error_dirs.is_empty() {
         message.push_str("\n\n");
     }
@@ -194,10 +199,6 @@ pub async fn uninstall_software_deep(
         message.push_str(&format!("清理失败:\n{}", error_dirs.join("\n")));
     }
 
-    // 如果标准卸载失败但清理成功，仍然算部分成功
-    if result.is_err() && cleaned_dirs.is_empty() && error_dirs.is_empty() {
-        return result; // 完全没有做任何清理，返回原始错误
-    }
     Ok(message)
 }
 
@@ -206,7 +207,8 @@ pub async fn uninstall_software_deep(
 pub struct InstalledApp {
     pub name: String,
     pub version: String,
-    pub source: String, // 包管理器名称
+    pub source: String,       // 包管理器名称
+    pub icon: Option<String>, // base64 data URL，无图标时为 None
 }
 
 /// 获取包管理器的"列出已安装"命令参数
@@ -464,14 +466,22 @@ fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
 /// 用于"应用卸载管理器"模块
 #[tauri::command]
 pub async fn list_installed_apps() -> Result<Vec<InstalledApp>, String> {
-    let managers = software_pm::detect_package_managers();
-    if managers.is_empty() {
-        return Err("未检测到支持的包管理器。请先安装包管理器。".to_string());
-    }
-
     let mut all_apps: Vec<InstalledApp> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
+    // (1) 主来源：GUI 应用（.desktop 文件）。Windows/macOS 上退化为包管理器列表。
+    #[cfg(target_os = "linux")]
+    {
+        for app in list_gui_apps() {
+            let key = format!("{}:{}", app.name, app.source);
+            if seen.insert(key) {
+                all_apps.push(app);
+            }
+        }
+    }
+
+    // (2) 包管理器列表：只补充包管理器中未覆盖的 GUI 应用（通过 desktop 匹配判断）
+    let managers = software_pm::detect_package_managers();
     for pm in &managers {
         let Some(args) = get_pm_list_args(pm.name) else {
             continue;
@@ -491,13 +501,19 @@ pub async fn list_installed_apps() -> Result<Vec<InstalledApp>, String> {
         let apps = parse_pm_list_output(pm.name, &stdout);
 
         for (name, version) in apps {
-            // 去重：相同名称和来源跳过
             let key = format!("{}:{}", name, pm.name);
             if seen.insert(key) {
+                // 只显示 GUI 应用：能解析到图标的，或能被 desktop 匹配的
+                let icon = resolve_app_icon(&name, pm.name);
+                let has_desktop = desktop_for_package(&name);
+                if icon.is_none() && !has_desktop {
+                    continue; // 无图标且无 desktop 入口 → 视为 CLI/系统组件，过滤
+                }
                 all_apps.push(InstalledApp {
                     name,
                     version,
                     source: pm.name.to_string(),
+                    icon,
                 });
             }
         }
@@ -507,6 +523,407 @@ pub async fn list_installed_apps() -> Result<Vec<InstalledApp>, String> {
     all_apps.sort_by_key(|a| a.name.to_lowercase());
 
     Ok(all_apps)
+}
+
+#[cfg(target_os = "linux")]
+fn is_system_desktop(path: &std::path::Path) -> bool {
+    // 排除 GNOME/系统组件桌面入口
+    let s = path.to_string_lossy().to_lowercase();
+    let name = path
+        .file_stem()
+        .map(|x| x.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    s.contains("/system-applications/")
+        || s.contains("/autostart/")
+        || name.starts_with("gnome-")
+        || name.starts_with("org.gnome.")
+        || name.ends_with("-autostart")
+        || name == "org.gnome.software"
+        || name.contains("tracker")
+        || name.contains("zeitgeist")
+        || name.contains("bluetooth-sendto")
+        || name == "apport-gtk"
+        || name == "gnome-software"
+}
+
+/// 扫描系统 .desktop 文件，构建 GUI 应用列表
+#[cfg(target_os = "linux")]
+fn list_gui_apps() -> Vec<InstalledApp> {
+    use std::collections::HashMap;
+
+    let desktop_dirs = [
+        dirs_home_dir().join(".local/share/applications"),
+        PathBuf::from("/usr/share/applications"),
+        PathBuf::from("/var/lib/flatpak/exports/share/applications"),
+        PathBuf::from("/var/lib/snapd/desktop/applications"),
+    ];
+
+    let mut apps: Vec<InstalledApp> = Vec::new();
+    let mut seen: HashMap<String, String> = HashMap::new(); // desktop文件名 -> source
+
+    for (dir_idx, dir) in desktop_dirs.iter().enumerate() {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e != "desktop").unwrap_or(true) {
+                continue;
+            }
+            if is_system_desktop(&path) {
+                continue;
+            }
+            let file_stem = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if file_stem.is_empty() || file_stem.ends_with(".desktop") {
+                continue; // 跳过如 "ai.opencode.desktop.desktop" 的嵌套
+            }
+            // 去重：同一 desktop 文件名只取第一个来源
+            if seen.contains_key(&file_stem) {
+                continue;
+            }
+            let source = match dir_idx {
+                0 => "manual", // ~/.local/share/applications
+                1 => "system", // /usr/share/applications
+                2 => "flatpak",
+                _ => "snap",
+            };
+            // 识别实际包管理器来源（通过 desktop 文件的 X-Flatpak/或路径）
+            let path_str = path.to_string_lossy().to_string();
+            let actual_source = if path_str.contains("/flatpak/") {
+                "flatpak"
+            } else if path_str.contains("/snapd/") {
+                "snap"
+            } else {
+                source
+            };
+
+            let name = desktop_display_name(&path);
+            let version = desktop_version(&path);
+            let icon = read_desktop_icon(&path);
+            seen.insert(file_stem, actual_source.to_string());
+            apps.push(InstalledApp {
+                name,
+                version,
+                source: actual_source.to_string(),
+                icon,
+            });
+        }
+    }
+
+    apps
+}
+
+/// 读取 .desktop 文件的显示名称（Name=，排除本地化 Name[xx]=）
+#[cfg(target_os = "linux")]
+fn desktop_display_name(path: &std::path::Path) -> String {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+    };
+    for line in content.lines() {
+        let line = line.trim();
+        if line.starts_with("Name=") && !line.starts_with("Name[") {
+            let name = line[5..].trim();
+            if !name.is_empty() {
+                return name.to_string();
+            }
+        }
+    }
+    path.file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
+/// 读取 .desktop 文件的版本字段（Version= 或 X-AppVersion=）
+#[cfg(target_os = "linux")]
+fn desktop_version(path: &std::path::Path) -> String {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return "installed".to_string();
+    };
+    for line in content.lines() {
+        let line = line.trim();
+        if let Some(v) = line
+            .strip_prefix("X-AppVersion=")
+            .or_else(|| line.strip_prefix("Version="))
+        {
+            let v = v.trim();
+            if !v.is_empty() && v != "1.0" {
+                return v.to_string();
+            }
+        }
+    }
+    "installed".to_string()
+}
+
+/// 读取 .desktop 文件的图标（复用桌面图标解析逻辑）
+#[cfg(target_os = "linux")]
+fn read_desktop_icon(path: &std::path::Path) -> Option<String> {
+    desktop_icon_path(path).and_then(|p| read_image_as_data_url(&p))
+}
+
+/// 判断包名是否有对应 desktop 入口（用于包管理器列表过滤 GUI 应用）
+#[cfg(target_os = "linux")]
+fn desktop_for_package(package: &str) -> bool {
+    let pkg_lower = package.to_lowercase();
+    let desktop_dirs = [
+        dirs_home_dir().join(".local/share/applications"),
+        PathBuf::from("/usr/share/applications"),
+        PathBuf::from("/var/lib/flatpak/exports/share/applications"),
+        PathBuf::from("/var/lib/snapd/desktop/applications"),
+    ];
+    for dir in &desktop_dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e != "desktop").unwrap_or(true) {
+                continue;
+            }
+            let stem = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            if stem == pkg_lower
+                || stem.contains(&pkg_lower)
+                || pkg_lower.contains(&stem)
+                || desktop_name_of(&path).to_lowercase() == pkg_lower
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 从 Linux 桌面入口文件（.desktop）解析应用图标，返回 base64 data URL
+fn resolve_app_icon(app_name: &str, _source: &str) -> Option<String> {
+    // 只在 Linux 上解析；Windows/macOS 暂不处理（由前端品牌图标兜底）
+    #[cfg(target_os = "linux")]
+    {
+        #[allow(unused_imports)]
+        use base64::Engine as _;
+        use std::path::Path;
+
+        let desktop_dirs = [
+            dirs_home_dir().join(".local/share/applications"),
+            PathBuf::from("/usr/share/applications"),
+            PathBuf::from("/var/lib/flatpak/exports/share/applications"),
+            PathBuf::from("/var/lib/snapd/desktop/applications"),
+        ];
+
+        // 1. 构造候选 .desktop 文件名
+        //    flatpak/snap: app id 即文件名（如 org.example.App.desktop）
+        //    apt: 尝试按包名、按 Desktop 文件里 Name= 匹配
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        for dir in &desktop_dirs {
+            if !dir.is_dir() {
+                continue;
+            }
+            for entry in std::fs::read_dir(dir).ok()? {
+                let Ok(entry) = entry else { continue };
+                let path = entry.path();
+                let Some(ext) = path.extension() else {
+                    continue;
+                };
+                if ext != "desktop" {
+                    continue;
+                }
+                let file_stem = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_lowercase())
+                    .unwrap_or_default();
+                let desktop_name = desktop_name_of(&path);
+                // 精确匹配：文件名 或 desktop 的 Name=/Name[xx]= 与包名一致
+                if file_stem == app_name.to_lowercase()
+                    || desktop_name.to_lowercase() == app_name.to_lowercase()
+                    || desktop_name.contains(app_name)
+                    || app_name.to_lowercase().contains(&file_stem)
+                {
+                    candidates.push(path);
+                    if file_stem == app_name.to_lowercase() {
+                        break;
+                    }
+                }
+            }
+            if !candidates.is_empty() {
+                break;
+            }
+        }
+
+        for desktop in candidates {
+            if let Some(icon_path) = desktop_icon_path(&desktop) {
+                if let Some(data) = read_image_as_data_url(&icon_path) {
+                    return Some(data);
+                }
+            }
+        }
+
+        // 2. 兜底：直接在图标主题目录按包名搜索（如 apt 的 flatpak 图标等）
+        let theme_dirs = [
+            "/usr/share/icons/hicolor",
+            "/usr/share/icons/Adwaita",
+            "/usr/share/icons/ubuntu-mono-dark",
+            "/usr/share/pixmaps",
+        ];
+        for theme in theme_dirs {
+            for size in [
+                "512x512", "256x256", "128x128", "64x64", "48x48", "32x32", "scalable",
+            ] {
+                let dir = Path::new(theme).join(size).join("apps");
+                if !dir.is_dir() {
+                    continue;
+                }
+                for ext in ["png", "svg", "xpm", "svgz"] {
+                    let p = dir.join(format!("{}.{}", app_name, ext));
+                    if p.is_file() {
+                        if let Some(data) = read_image_as_data_url(&p) {
+                            return Some(data);
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app_name, source);
+        None
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn dirs_home_dir() -> PathBuf {
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("/root"))
+}
+
+/// 读取 .desktop 文件的 Name 字段（首个非注释）
+#[cfg(target_os = "linux")]
+fn desktop_name_of(path: &std::path::Path) -> String {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return String::new();
+    };
+    for line in content.lines() {
+        let line = line.trim();
+        if line.starts_with("Name=") && !line.starts_with("Name[") {
+            return line[5..].trim().to_string();
+        }
+    }
+    String::new()
+}
+
+/// 从 .desktop 文件解析 Icon= 字段，返回可读取的图标路径
+#[cfg(target_os = "linux")]
+fn desktop_icon_path(desktop: &std::path::Path) -> Option<PathBuf> {
+    use std::path::Path;
+
+    let content = std::fs::read_to_string(desktop).ok()?;
+    let mut icon_value: Option<String> = None;
+    for line in content.lines() {
+        let line = line.trim();
+        if let Some(v) = line.strip_prefix("Icon=") {
+            icon_value = Some(v.trim().to_string());
+            break;
+        }
+    }
+    let icon = icon_value?;
+    if icon.is_empty() {
+        return None;
+    }
+    let icon_path = Path::new(&icon);
+    // 绝对路径
+    if icon_path.is_absolute() && icon_path.is_file() {
+        return Some(icon_path.to_path_buf());
+    }
+    // 相对路径（如 hicolor/...）
+    if icon.contains('/') && !icon.starts_with('/') {
+        for base in ["/usr/share", "/usr/local/share"] {
+            let p = Path::new(base).join(&icon);
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+    }
+    // 图标名：在图标主题目录中搜索（无扩展名则尝试常见扩展）
+    let name_without_ext = icon
+        .rsplit_once('.')
+        .map(|(n, e)| {
+            if matches!(e, "png" | "svg" | "svgz" | "xpm") {
+                n.to_string()
+            } else {
+                icon.clone()
+            }
+        })
+        .unwrap_or_else(|| icon.clone());
+
+    let theme_dirs = [
+        "/usr/share/icons/hicolor",
+        "/usr/share/icons/Adwaita",
+        "/usr/share/icons/ubuntu-mono-dark",
+        "/usr/share/pixmaps",
+        "/usr/share/icons/breeze",
+        "/usr/share/icons/hicolor",
+    ];
+    for theme in theme_dirs {
+        if let Some(icon_name_only) = name_without_ext.rsplit('/').next() {
+            for size in [
+                "512x512", "256x256", "128x128", "96x96", "64x64", "48x48", "32x32", "24x24",
+                "scalable",
+            ] {
+                for ext in ["png", "svg", "svgz", "xpm"] {
+                    let p = Path::new(theme)
+                        .join(size)
+                        .join("apps")
+                        .join(format!("{}.{}", icon_name_only, ext));
+                    if p.is_file() {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+    }
+    // 直接尝试 pixmaps 目录
+    let pixmap = Path::new("/usr/share/pixmaps").join(&icon);
+    if pixmap.is_file() {
+        return Some(pixmap);
+    }
+    let pixmap_ext = Path::new("/usr/share/pixmaps").join(format!("{}.png", icon));
+    if pixmap_ext.is_file() {
+        return Some(pixmap_ext);
+    }
+    None
+}
+
+/// 读取图片文件并转为 base64 data URL
+/// L2 修复：单图标上限从 2MB 收紧到 512KB，避免大量应用列表时
+/// 同步读取 + base64 化导致 UI 卡顿与 IPC 负载过大。
+#[cfg(target_os = "linux")]
+fn read_image_as_data_url(path: &std::path::Path) -> Option<String> {
+    use base64::Engine as _;
+    let data = std::fs::read(path).ok()?;
+    if data.is_empty() || data.len() > 512 * 1024 {
+        return None; // 空文件或超大文件跳过
+    }
+    let mime = match path.extension().and_then(|e| e.to_str()) {
+        Some("svg") | Some("svgz") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("xpm") => "image/x-xpm",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("ico") => "image/x-icon",
+        _ => return None,
+    };
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+    Some(format!("data:{};base64,{}", mime, b64))
 }
 
 /// 从 GitHub Releases API 获取版本列表
@@ -726,19 +1143,48 @@ pub async fn install_software_from_url(
     let temp_dir = std::env::temp_dir().join("devnexus-install");
     std::fs::create_dir_all(&temp_dir).map_err(|e| format!("Failed to create temp dir: {}", e))?;
 
-    // 下载
+    // 下载（M2 修复：连接/总超时 + 流式写入 + 大小上限，避免挂起与内存爆炸）
+    const MAX_DOWNLOAD_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GiB
     let filename = url.rsplit('/').next().unwrap_or("download");
     let filepath = temp_dir.join(filename);
 
-    let response = reqwest::get(&url)
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(600))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
+    let response = client
+        .get(&url)
+        .send()
         .await
         .map_err(|e| format!("Failed to download: {}", e))?;
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
 
-    std::fs::write(&filepath, &bytes).map_err(|e| format!("Failed to save file: {}", e))?;
+    if let Some(total) = response.content_length() {
+        if total > MAX_DOWNLOAD_BYTES {
+            return Err(format!(
+                "Download too large ({} bytes > {} limit)",
+                total, MAX_DOWNLOAD_BYTES
+            ));
+        }
+    }
+
+    let mut out =
+        std::fs::File::create(&filepath).map_err(|e| format!("Failed to create file: {}", e))?;
+    let mut stream = response.bytes_stream();
+    let mut downloaded: u64 = 0;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("Failed to read response: {}", e))?;
+        downloaded += chunk.len() as u64;
+        if downloaded > MAX_DOWNLOAD_BYTES {
+            let _ = std::fs::remove_file(&filepath);
+            return Err(format!(
+                "Download exceeds size limit ({} bytes > {} limit)",
+                downloaded, MAX_DOWNLOAD_BYTES
+            ));
+        }
+        std::io::Write::write_all(&mut out, &chunk)
+            .map_err(|e| format!("Failed to save file: {}", e))?;
+    }
 
     // 创建安装目录
     std::fs::create_dir_all(&install_dir)
@@ -931,6 +1377,15 @@ pub async fn force_uninstall_software(
         Err(e) => messages.push(format!("Package manager removal: {}", e)),
     }
 
+    // 安全校验：包管理器卸载失败时不执行任何目录/文件删除。
+    // 残留删除只应在软件确实已从系统中移除后执行，避免误删仍在使用的活动数据。
+    if uninstall_result.is_err() {
+        messages.push(
+            "Uninstall failed; skipped residue cleanup to avoid deleting in-use data.".to_string(),
+        );
+        return Ok(messages.join("\n"));
+    }
+
     // 3) 获取所有已知的残留路径（含关键词扫描）
     let scan = crate::residue_scanner::scan_for_residues(&app_name, &package_name);
 
@@ -1060,6 +1515,53 @@ pub fn clean_specific_residues(items: Vec<String>) -> Result<String, String> {
     Ok(result)
 }
 
+/// 进程名/可执行名是否与关键词匹配（M3 修复：收紧匹配，避免误杀无关进程）
+///
+/// 匹配规则（任一命中即匹配）：
+/// 1. 完全相等（如 `idea` == `idea`）；
+/// 2. 关键词 + 数字/版本后缀（如 `idea` → `idea64`、`node` → `nodejs20`）；
+/// 3. 长关键词（≥4 字符）在名称中的完整单词匹配（`idea` 命中 `intellij-idea`，但不命中 `ideally`）。
+///
+/// 相比旧的 `contains` 子串匹配，这能避免 `idea` 误杀名称里恰好含 "idea" 的无关进程。
+fn process_matches_keyword(target: &str, kw: &str) -> bool {
+    if target == kw {
+        return true;
+    }
+    // 关键词 + 版本/数字后缀：node → nodejs、node20、code-oss
+    if let Some(rest) = target.strip_prefix(kw) {
+        let first = rest.chars().next().unwrap_or(' ');
+        if first.is_ascii_digit() || !(first.is_ascii_alphanumeric() || first == '_') {
+            return true;
+        }
+    }
+    // 长关键词才允许词内匹配（避免短关键词过度匹配）
+    if kw.len() >= 4 && contains_whole_word(target, kw) {
+        return true;
+    }
+    false
+}
+
+/// target 中 kw 以单词边界出现（前后不是字母/数字/下划线）
+fn contains_whole_word(target: &str, kw: &str) -> bool {
+    let bytes = target.as_bytes();
+    let mut from = 0;
+    while let Some(rel) = target[from..].find(kw) {
+        let abs = from + rel;
+        let before_ok = abs == 0 || !is_word_byte(bytes[abs - 1]);
+        let end = abs + kw.len();
+        let after_ok = end >= bytes.len() || !is_word_byte(bytes[end]);
+        if before_ok && after_ok {
+            return true;
+        }
+        from = abs + 1;
+    }
+    false
+}
+
+fn is_word_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
 /// 按名称关键词杀死匹配的进程（跨平台）
 fn kill_processes_by_name(name_lower: &str) -> usize {
     #[cfg(unix)]
@@ -1088,10 +1590,10 @@ fn kill_processes_by_name(name_lower: &str) -> usize {
             .unwrap_or("")
             .to_lowercase();
 
-        // 关键词匹配：进程名包含至少一个关键词
+        // 收紧后的关键词匹配（M3 修复）
         let matches = keywords
             .iter()
-            .any(|kw| pname.contains(kw) || exe.contains(kw));
+            .any(|kw| process_matches_keyword(&pname, kw) || process_matches_keyword(&exe, kw));
         if !matches {
             continue;
         }
@@ -1099,7 +1601,7 @@ fn kill_processes_by_name(name_lower: &str) -> usize {
         // 跳过自身
         if let Ok(cur) = std::env::current_exe() {
             if let Some(cur_name) = cur.file_stem().and_then(|s| s.to_str()) {
-                if pname.contains(&cur_name.to_lowercase()) {
+                if process_matches_keyword(&pname, &cur_name.to_lowercase()) {
                     continue;
                 }
             }
@@ -1317,5 +1819,69 @@ mod tests {
         assert!(!is_valid_version("a;b"));
         assert!(!is_valid_version(""));
         assert!(!is_valid_version(&"v".repeat(200)));
+    }
+
+    // ============ icon resolution ============
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_desktop_name_of() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("dnx_icon_test_{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("test.desktop");
+        fs::write(
+            &f,
+            "[Desktop Entry]\nName=My Cool App\nName[zh]=我的应用\nIcon=myapp\n",
+        )
+        .unwrap();
+        assert_eq!(desktop_name_of(&f), "My Cool App");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_desktop_icon_path_absolute() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("dnx_icon_test_abs_{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let png = dir.join("icon.png");
+        fs::write(&png, b"\x89PNG\r\n\x1a\n").unwrap();
+        let desktop = dir.join("app.desktop");
+        fs::write(
+            &desktop,
+            format!("[Desktop Entry]\nName=App\nIcon={}\n", png.display()),
+        )
+        .unwrap();
+        let got = desktop_icon_path(&desktop);
+        assert!(got.is_some(), "should resolve absolute icon path");
+        assert_eq!(got.unwrap(), png);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_read_image_as_data_url_png() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("dnx_icon_test_url_{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let png = dir.join("a.png");
+        fs::write(&png, b"\x89PNG\r\n\x1a\n1234").unwrap();
+        let got = read_image_as_data_url(&png);
+        assert!(got.is_some());
+        assert!(got.unwrap().starts_with("data:image/png;base64,"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_read_image_as_data_url_unsupported_ext() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("dnx_icon_test_bad_{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let txt = dir.join("a.txt");
+        fs::write(&txt, b"hello").unwrap();
+        assert!(read_image_as_data_url(&txt).is_none());
+        let _ = fs::remove_dir_all(&dir);
     }
 }

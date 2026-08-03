@@ -12,7 +12,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-check",
+    "check": "vite build",
     "hook:install": "bash scripts/install-pre-commit.sh",
     "hook:check": "bash scripts/pre-commit.sh",
     "bench": "cargo run --example api_hub_bench --manifest-path src-tauri/Cargo.toml",
@@ -20,21 +20,18 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@arco-design/web-vue": "^2.53.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-process": "^2",
     "@tauri-apps/plugin-shell": "^2",
-    "@tauri-apps/plugin-updater": "^2"
+    "@tauri-apps/plugin-updater": "^2",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^5",
     "@tauri-apps/cli": "^2",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.49",
-    "svelte": "^5",
-    "svelte-check": "^4.4.8",
-    "tailwindcss": "^3.4.17",
-    "typescript": "^6.0.3",
+    "@vitejs/plugin-vue": "^5.2.1",
     "vite": "^6"
   },
   "pnpm": {

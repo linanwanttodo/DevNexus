@@ -48,6 +48,7 @@ async fn main() {
     .await
     .unwrap();
 
+    let token = state.auth_token.clone();
     let hub_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let hub_addr = hub_listener.local_addr().unwrap();
     let app = api_hub::server::build_router(Arc::new(state));
@@ -58,7 +59,7 @@ async fn main() {
 
     println!("HUB_URL=http://{}", hub_addr);
 
-    // self-check with reqwest
+    // self-check with reqwest（代理端点需携带访问令牌）
     let health: serde_json::Value = reqwest::get(format!("http://{}/health", hub_addr))
         .await
         .unwrap()
@@ -67,17 +68,22 @@ async fn main() {
         .unwrap();
     println!("HEALTH={}", health);
 
-    let models: serde_json::Value = reqwest::get(format!("http://{}/v1/models", hub_addr))
+    let models: serde_json::Value = reqwest::Client::new()
+        .get(format!("http://{}/v1/models", hub_addr))
+        .header("X-DevNexus-Token", &token)
+        .send()
         .await
         .unwrap()
         .json()
         .await
         .unwrap();
     println!("MODELS={}", models);
+    println!("TOKEN={}", token);
 
     let client = reqwest::Client::new();
     let chat: serde_json::Value = client
         .post(format!("http://{}/v1/chat/completions", hub_addr))
+        .header("X-DevNexus-Token", &token)
         .json(&serde_json::json!({
             "model": "smoke-model",
             "messages": [{"role":"user","content":"ping"}]

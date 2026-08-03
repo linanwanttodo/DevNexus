@@ -59,6 +59,7 @@ async fn main() {
     .await
     .unwrap();
 
+    let token = state.auth_token.clone();
     let hub_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let hub_addr = hub_listener.local_addr().unwrap();
     let app = api_hub::server::build_router(Arc::new(state));
@@ -74,7 +75,13 @@ async fn main() {
 
     // 3) 预热 10 请求
     for _ in 0..10 {
-        let _ = client.post(&url).json(&body).send().await.unwrap();
+        let _ = client
+            .post(&url)
+            .header("X-DevNexus-Token", &token)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
     }
 
     // 4) 并发压测：信号量限制并发，记录每次延迟
@@ -89,10 +96,16 @@ async fn main() {
         let client = client.clone();
         let url = url.clone();
         let body = body.clone();
+        let token = token.clone();
         handles.push(tokio::spawn(async move {
             let _permit = sem.acquire().await.unwrap();
             let t0 = std::time::Instant::now();
-            let resp = client.post(&url).json(&body).send().await;
+            let resp = client
+                .post(&url)
+                .header("X-DevNexus-Token", &token)
+                .json(&body)
+                .send()
+                .await;
             let elapsed = t0.elapsed();
             match resp {
                 Ok(r) if r.status().is_success() => Ok(elapsed),

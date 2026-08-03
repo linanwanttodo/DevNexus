@@ -235,4 +235,9 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     pub running: Arc<AtomicBool>,
     pub api_key_cipher: Arc<ApiKeyCipher>,
+    /// 本地 HTTP 服务访问令牌（H1 安全修复）：外部客户端必须携带
+    /// `X-DevNexus-Token` 或 `Authorization: Bearer <token>` 才能访问代理端点。
+    /// 防止本机任意进程 / 恶意网页（DNS rebinding、CSRF 式请求）
+    /// 盗用已配置 Provider 的 API Key。
+    pub auth_token: String,
 }

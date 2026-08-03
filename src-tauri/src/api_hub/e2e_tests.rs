@@ -200,6 +200,7 @@ fn test_state(upstream: &str) -> AppState {
         http_client,
         running: Arc::new(AtomicBool::new(false)),
         api_key_cipher: Arc::new(ApiKeyCipher::from_key([7u8; 32], true)),
+        auth_token: "test-token".into(),
     }
 }
 
@@ -214,7 +215,24 @@ async fn spawn_hub(state: AppState) -> (SocketAddr, tokio::task::JoinHandle<()>)
     (addr, handle)
 }
 
+const TEST_TOKEN: &str = "test-token";
+
 async fn post_json(url: &str, body: serde_json::Value) -> (u16, serde_json::Value) {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(url)
+        .header("X-DevNexus-Token", TEST_TOKEN)
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    let status = resp.status().as_u16();
+    let json = resp.json().await.unwrap_or(serde_json::json!({}));
+    (status, json)
+}
+
+/// 不带 token 的请求（用于认证回归测试）
+async fn post_json_no_auth(url: &str, body: serde_json::Value) -> (u16, serde_json::Value) {
     let client = reqwest::Client::new();
     let resp = client.post(url).json(&body).send().await.unwrap();
     let status = resp.status().as_u16();
@@ -236,7 +254,10 @@ async fn e2e_health_and_models() {
         .unwrap();
     assert_eq!(health["status"], "ok");
 
-    let models: serde_json::Value = reqwest::get(format!("http://{}/v1/models", hub))
+    let models: serde_json::Value = reqwest::Client::new()
+        .get(format!("http://{}/v1/models", hub))
+        .header("X-DevNexus-Token", TEST_TOKEN)
+        .send()
         .await
         .unwrap()
         .json()
@@ -248,6 +269,55 @@ async fn e2e_health_and_models() {
         "expected registered models, got {:?}",
         data
     );
+}
+
+#[tokio::test]
+async fn e2e_auth_required_on_proxy_endpoints() {
+    // H1 安全回归测试：无 token 访问代理端点必须 401，/health 保持匿名可用。
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    // /health 匿名可访问
+    let health = reqwest::get(format!("http://{}/health", hub))
+        .await
+        .unwrap();
+    assert_eq!(health.status().as_u16(), 200);
+
+    // 无 token：/v1/models 401
+    let no_token = reqwest::get(format!("http://{}/v1/models", hub))
+        .await
+        .unwrap();
+    assert_eq!(no_token.status().as_u16(), 401);
+
+    // 错误 token：401
+    let wrong = reqwest::Client::new()
+        .get(format!("http://{}/v1/models", hub))
+        .header("X-DevNexus-Token", "wrong-token")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(wrong.status().as_u16(), 401);
+
+    // 正确 token（Authorization Bearer 形式）：200
+    let bearer = reqwest::Client::new()
+        .get(format!("http://{}/v1/models", hub))
+        .header("Authorization", format!("Bearer {}", TEST_TOKEN))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bearer.status().as_u16(), 200);
+
+    // 无 token：POST 代理端点 401
+    let (status, body) = post_json_no_auth(
+        &format!("http://{}/v1/chat/completions", hub),
+        serde_json::json!({
+            "model": "mock-gpt",
+            "messages": [{"role": "user", "content": "hi"}]
+        }),
+    )
+    .await;
+    assert_eq!(status, 401, "{:?}", body);
 }
 
 #[tokio::test]
@@ -395,6 +465,7 @@ async fn e2e_streaming_chat() {
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("http://{}/v1/chat/completions", hub))
+        .header("X-DevNexus-Token", TEST_TOKEN)
         .json(&serde_json::json!({
             "model": "mock-sse",
             "messages": [{"role": "user", "content": "hi"}],
@@ -425,6 +496,7 @@ async fn e2e_streaming_cross_protocol_openai_to_anthropic() {
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("http://{}/v1/chat/completions", hub))
+        .header("X-DevNexus-Token", TEST_TOKEN)
         .json(&serde_json::json!({
             "model": "mock-claude",
             "messages": [{"role": "user", "content": "hi"}],
@@ -547,6 +619,7 @@ async fn e2e_streaming_log_tokens_backfilled() {
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("http://{}/v1/chat/completions", hub))
+        .header("X-DevNexus-Token", TEST_TOKEN)
         .json(&serde_json::json!({
             "model": "mock-claude",
             "messages": [{"role": "user", "content": "hi"}],
@@ -609,6 +682,7 @@ async fn e2e_provider_duplicate_name_rejected_and_not_persisted() {
         http_client,
         running: Arc::new(AtomicBool::new(false)),
         api_key_cipher: Arc::new(ApiKeyCipher::from_key([7u8; 32], true)),
+        auth_token: TEST_TOKEN.into(),
     };
 
     let mk = |name: &str| Provider {
@@ -663,6 +737,7 @@ fn provider_test_state() -> AppState {
         http_client,
         running: Arc::new(AtomicBool::new(false)),
         api_key_cipher: Arc::new(ApiKeyCipher::from_key([7u8; 32], true)),
+        auth_token: TEST_TOKEN.into(),
     }
 }
 
@@ -812,6 +887,7 @@ async fn e2e_concurrent_streaming_requests() {
             tokio::spawn(async move {
                 let resp = client
                     .post(&url)
+                    .header("X-DevNexus-Token", TEST_TOKEN)
                     .json(&serde_json::json!({
                         "model": model,
                         "messages": [{"role": "user", "content": "ping"}],
