@@ -63,18 +63,6 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Code quality checks
-        run: |
-          cargo fmt --check
-          cargo clippy -- -D warnings
-
-      - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
-
-      - name: Setup Tauri signing key
-        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
-        run: echo "TAURI_SIGNING_PRIVATE_KEY already set via workflow env"
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -98,6 +86,18 @@ jobs:
 
       - name: Type-check frontend
         run: pnpm check
+
+      - name: Code quality checks
+        run: |
+          cargo fmt --check
+          cargo clippy -- -D warnings
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Setup Tauri signing key
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        run: echo "TAURI_SIGNING_PRIVATE_KEY already set via workflow env"
 
       - name: Build Tauri
         run: |
@@ -192,6 +192,12 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check frontend
+        run: pnpm check
+
       - name: Code quality checks
         run: |
           cargo fmt --check --manifest-path src-tauri/Cargo.toml
@@ -199,12 +205,6 @@ jobs:
 
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
-
-      - name: Install frontend deps
-        run: pnpm install --frozen-lockfile
-
-      - name: Type-check frontend
-        run: pnpm check
 
       - name: Build Tauri
         run: |
@@ -271,21 +271,6 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Code quality checks
-        run: |
-          cargo fmt --check --manifest-path src-tauri/Cargo.toml
-          cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
-        shell: bash
-
-      - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
-        shell: bash
-
-      - name: Setup Tauri signing key
-        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
-        run: echo "TAURI_SIGNING_PRIVATE_KEY already set via workflow env"
-        shell: bash
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -311,6 +296,21 @@ jobs:
 
       - name: Type-check frontend
         run: pnpm check
+        shell: bash
+
+      - name: Code quality checks
+        run: |
+          cargo fmt --check --manifest-path src-tauri/Cargo.toml
+          cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+        shell: bash
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+        shell: bash
+
+      - name: Setup Tauri signing key
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        run: echo "TAURI_SIGNING_PRIVATE_KEY already set via workflow env"
         shell: bash
 
       - name: Build Tauri
