@@ -38,13 +38,17 @@ async function loadSystemInfo() {
 async function refreshResourceUsage() {
   try {
     resourceUsage.value = await invoke("get_resource_usage");
-  } catch (_) {}
+  } catch (err) {
+    console.error("Failed to refresh resource usage:", err);
+  }
 }
 
 async function loadEnvironments() {
   try {
     environments.value = await invoke("list_environments");
-  } catch (_) {}
+  } catch (err) {
+    console.error("Failed to load environments:", err);
+  }
 }
 
 function progressColor(val) {
@@ -99,7 +103,7 @@ const recentEnvs = computed(() =>
 onMounted(() => {
   loadSystemInfo();
   loadEnvironments();
-  timer = setInterval(refreshResourceUsage, 5000);
+  timer = setInterval(refreshResourceUsage, 10000);
 });
 
 onBeforeUnmount(() => {

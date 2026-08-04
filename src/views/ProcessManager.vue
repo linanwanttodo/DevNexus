@@ -375,11 +375,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.process-page {
-  padding: 20px 24px;
-  max-width: 1100px;
-  margin: 0 auto;
-}
 .toolbar {
   display: flex;
   align-items: center;

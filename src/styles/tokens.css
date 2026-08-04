@@ -1,0 +1,42 @@
+/* ===== DevNexus 设计 Token 层 =====
+ * 基于 Arco Design 规范（间距 4/8/12/16/20/24 节奏、圆角、字号、容器宽度）
+ * 在 app.css 之前引入，供全局与组件共享。
+ * 颜色类 token 直接复用 Arco 内置 CSS 变量（--color-* / --primary-*），
+ * 此处仅补充 Arco 未提供的间距/圆角/字号/容器宽度体系。
+ */
+
+:root {
+  /* ── 间距节奏（Arco spacing scale）── */
+  --nx-space-1: 4px;
+  --nx-space-2: 8px;
+  --nx-space-3: 12px;
+  --nx-space-4: 16px;
+  --nx-space-5: 20px;
+  --nx-space-6: 24px;
+  --nx-space-7: 32px;
+  --nx-space-8: 40px;
+
+  /* ── 圆角（Arco radius scale）── */
+  --nx-radius-1: 2px;
+  --nx-radius-2: 4px;
+  --nx-radius-3: 6px;
+  --nx-radius-4: 8px;
+  --nx-radius-5: 10px;
+  --nx-radius-6: 12px;
+  --nx-radius-round: 9999px;
+
+  /* ── 字号（Arco font-size scale）── */
+  --nx-fs-1: 12px;
+  --nx-fs-2: 13px;
+  --nx-fs-3: 14px;
+  --nx-fs-4: 16px;
+  --nx-fs-5: 18px;
+  --nx-fs-6: 20px;
+  --nx-fs-7: 24px;
+
+  /* ── 容器宽度（统一页面最大宽度，消除跳动）── */
+  --nx-page-max-width: 1200px;
+
+  /* ── 区块卡片间距（统一 section 之间的纵向间隔）── */
+  --nx-section-gap: 16px;
+}

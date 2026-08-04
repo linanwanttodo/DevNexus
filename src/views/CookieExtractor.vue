@@ -269,9 +269,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.cookie-page {
-  max-width: 1100px;
-}
 .section-card {
   border-radius: 10px;
 }

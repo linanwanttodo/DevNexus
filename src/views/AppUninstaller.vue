@@ -490,9 +490,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.uninstall-page {
-  max-width: 1000px;
-}
 .toolbar-row {
   display: flex;
   align-items: center;
@@ -506,7 +503,7 @@ onMounted(() => {
   width: 180px;
 }
 .app-list-card {
-  border-radius: 10px;
+  border-radius: var(--nx-radius-5);
 }
 .list-header {
   display: flex;

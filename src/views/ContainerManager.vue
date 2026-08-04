@@ -793,12 +793,6 @@ const showSearch = computed(() => ["containers", "images"].includes(activeTab.va
   display: flex;
   flex-direction: column;
 }
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
 .header-left {
   display: flex;
   align-items: center;

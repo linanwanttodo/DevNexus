@@ -55,7 +55,9 @@ async function checkForUpdates() {
           changelogEn.value = cl.en;
           changelogZh.value = cl.zh;
         }
-      } catch (_) {}
+      } catch (err) {
+        console.error("Failed to load changelog:", err);
+      }
       updateState.value = "available";
     } else {
       updateState.value = "up_to_date";
@@ -88,7 +90,9 @@ async function downloadAndInstall() {
       updateState.value = "installed";
       return;
     }
-  } catch (_) {}
+  } catch (err) {
+    console.error("Updater downloadAndInstall failed:", err);
+  }
 
   try {
     const url = await invoke("get_download_url", {
@@ -324,9 +328,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.settings-page {
-  padding: 20px 24px;
-}
 .breadcrumb {
   display: flex;
   align-items: center;

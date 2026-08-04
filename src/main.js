@@ -8,6 +8,7 @@ import App from "./App.vue";
 import { router } from "./router.js";
 import { initI18n } from "./lib/i18n.js";
 import { applyTheme } from "./lib/stores.js";
+import "./styles/tokens.css";
 import "./styles/app.css";
 
 async function bootstrap() {

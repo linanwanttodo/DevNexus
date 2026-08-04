@@ -90,7 +90,7 @@ function close() {
 }
 
 .win-btn-close:hover {
-  background-color: #e81123;
-  color: #fff;
+  background-color: rgb(var(--red-6));
+  color: var(--color-white);
 }
 </style>

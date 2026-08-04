@@ -116,7 +116,7 @@ function toggle(id) {
   justify-content: center;
 }
 .check-icon {
-  color: #fff;
+  color: var(--color-white);
   font-size: 11px;
 }
 .check-off {

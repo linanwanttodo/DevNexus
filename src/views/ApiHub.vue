@@ -174,7 +174,8 @@ function getModelEntries() {
 }
 function heatmapColor(requests, max) {
   const pct = Math.min(requests / Math.max(max, 1), 1);
-  return `rgba(22, 93, 255, ${0.12 + pct * 0.88})`;
+  const alpha = (0.12 + pct * 0.88).toFixed(3);
+  return `rgb(var(--primary-6) / ${alpha})`;
 }
 function getAlias(p, id) {
   return p.model_aliases?.[id] || id;
@@ -550,12 +551,6 @@ const logColumns = computed(() => [
 </template>
 
 <style scoped>
-.apihub-page {
-  max-width: 1100px;
-}
-.page-header {
-  margin-bottom: 20px;
-}
 .gateway-card {
   border-radius: 10px;
   margin-bottom: 24px;

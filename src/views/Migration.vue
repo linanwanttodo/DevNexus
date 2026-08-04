@@ -326,11 +326,6 @@ onMounted(loadEnvironments);
 </template>
 
 <style scoped>
-.migration-page {
-  padding: 20px 24px;
-  max-width: 900px;
-  margin: 0 auto;
-}
 .export-header {
   display: flex;
   justify-content: flex-end;

@@ -242,11 +242,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.mirrors-page {
-  padding: 20px 24px;
-  max-width: 1000px;
-  margin: 0 auto;
-}
 .group-head {
   display: flex;
   align-items: center;

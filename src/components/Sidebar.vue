@@ -4,11 +4,12 @@ import { useRoute, useRouter } from "vue-router";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "../lib/i18n.js";
+import { APP_VERSION } from "../lib/version.js";
 
 const route = useRoute();
 const router = useRouter();
 
-const appVersion = ref("1.1.1");
+const appVersion = ref(APP_VERSION);
 const resourceUsage = ref(null);
 let timer = null;
 
@@ -105,7 +106,7 @@ function handleClick(key) {
         <a-progress
           :percent="cpuBar"
           :show-text="false"
-          :color="{ from: '#4099ff', to: '#58a6ff' }"
+          :color="{ from: 'rgb(var(--primary-5))', to: 'rgb(var(--primary-6))' }"
           size="small"
           class="status-bar-progress"
         />
@@ -116,7 +117,7 @@ function handleClick(key) {
         <a-progress
           :percent="memBar"
           :show-text="false"
-          :color="{ from: '#46bf72', to: '#6fdc97' }"
+          :color="{ from: 'rgb(var(--green-5))', to: 'rgb(var(--green-6))' }"
           size="small"
           class="status-bar-progress"
         />

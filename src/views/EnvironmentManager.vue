@@ -367,11 +367,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.env-page {
-  padding: 20px 24px;
-  max-width: 1000px;
-  margin: 0 auto;
-}
 .empty-hint {
   font-size: 12px;
   color: var(--color-text-3);

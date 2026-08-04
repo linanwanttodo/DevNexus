@@ -187,37 +187,41 @@ function statusLabel(item) {
 </script>
 
 <template>
-  <div class="software-page">
-    <!-- Header with back button -->
-    <div class="breadcrumb">
-      <a-button type="text" size="small" @click="router.push('/dashboard')">
-        <template #icon><icon-left /></template>
-        {{ t("nav.dashboard") }}
+  <div class="page software-page">
+    <!-- Header -->
+    <div class="page-header">
+      <div>
+        <a-breadcrumb>
+          <a-breadcrumb-item>
+            <a-link @click="router.push('/dashboard')">{{ t("nav.dashboard") }}</a-link>
+          </a-breadcrumb-item>
+          <a-breadcrumb-item>{{ t("software.title") }}</a-breadcrumb-item>
+        </a-breadcrumb>
+        <h1 class="page-title" style="margin-top: 8px">{{ t("software.title") }}</h1>
+      </div>
+      <a-button size="small" @click="loadSoftware">
+        <template #icon><icon-refresh /></template>
+        {{ t("common.refresh") }}
       </a-button>
-      <span class="crumb-sep">/</span>
-      <span class="crumb-title">{{ t("software.title") }}</span>
     </div>
 
     <!-- Category pills + filters bar -->
-    <div class="filter-bar">
-      <div class="cat-pills">
+    <div class="filter-bar section-card">
+      <a-space wrap>
         <a-button
           v-for="cat in categories"
           :key="cat.id"
           size="small"
-          :type="selectedCategory === cat.id ? 'primary' : 'text'"
+          :type="selectedCategory === cat.id ? 'primary' : 'secondary'"
           @click="selectedCategory = cat.id"
         >
           {{ cat.label }}
         </a-button>
-      </div>
-      <div class="filter-actions">
+      </a-space>
+      <a-space size="large">
         <a-checkbox v-model="filterInstalled">{{ t("software.installed_filter") }}</a-checkbox>
         <a-checkbox v-model="filterUpdates">{{ t("software.updates_filter") }}</a-checkbox>
-        <a-button size="small" @click="loadSoftware">
-          <template #icon><icon-refresh /></template>
-        </a-button>
-      </div>
+      </a-space>
     </div>
 
     <!-- Content area -->
@@ -319,61 +323,27 @@ function statusLabel(item) {
 .software-page {
   display: flex;
   flex-direction: column;
-  height: 100%;
-}
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
-}
-.crumb-sep {
-  font-size: 12px;
-  color: var(--color-text-3);
-}
-.crumb-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-1);
 }
 .filter-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
+  gap: var(--nx-space-4);
   flex-wrap: wrap;
-}
-.cat-pills {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-.filter-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-shrink: 0;
 }
 .content-area {
   flex: 1;
-  overflow-y: auto;
-  padding: 20px;
+  min-height: 0;
 }
 .tool-grid,
 .soft-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--nx-space-3);
 }
 .tool-card,
 .soft-card {
-  border-radius: 10px;
+  border-radius: var(--nx-radius-5);
   display: flex;
   flex-direction: column;
 }
@@ -383,7 +353,7 @@ function statusLabel(item) {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--nx-radius-4);
   background-color: var(--color-fill-2);
   color: var(--color-text-2);
   font-size: 18px;
@@ -412,7 +382,7 @@ function statusLabel(item) {
   gap: 8px;
   padding: 6px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--nx-radius-4);
   background-color: var(--color-fill-1);
 }
 .cmd-text {
@@ -425,7 +395,7 @@ function statusLabel(item) {
   white-space: nowrap;
 }
 .no-pm-card {
-  border-radius: 10px;
+  border-radius: var(--nx-radius-5);
   text-align: center;
   padding: 20px;
 }
@@ -487,7 +457,7 @@ function statusLabel(item) {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--nx-radius-4);
   background-color: var(--color-fill-2);
 }
 .soft-name {

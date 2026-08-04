@@ -46,8 +46,8 @@ import ErrorBoundary from "./components/ErrorBoundary.vue";
 }
 
 .app-main :deep(.page) {
-  padding: 20px 24px;
-  max-width: 1400px;
+  padding: var(--nx-space-5) var(--nx-space-6);
+  max-width: var(--nx-page-max-width);
   margin: 0 auto;
 }
 </style>
