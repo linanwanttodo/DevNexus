@@ -89,8 +89,8 @@ jobs:
 
       - name: Code quality checks
         run: |
-          cargo fmt --check
-          cargo clippy -- -D warnings
+          cargo fmt --check --manifest-path src-tauri/Cargo.toml
+          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
@@ -201,7 +201,7 @@ jobs:
       - name: Code quality checks
         run: |
           cargo fmt --check --manifest-path src-tauri/Cargo.toml
-          cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
@@ -301,7 +301,7 @@ jobs:
       - name: Code quality checks
         run: |
           cargo fmt --check --manifest-path src-tauri/Cargo.toml
-          cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
         shell: bash
 
       - name: Run Rust tests

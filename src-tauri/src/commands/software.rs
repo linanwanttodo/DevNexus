@@ -503,11 +503,14 @@ pub async fn list_installed_apps() -> Result<Vec<InstalledApp>, String> {
         for (name, version) in apps {
             let key = format!("{}:{}", name, pm.name);
             if seen.insert(key) {
-                // 只显示 GUI 应用：能解析到图标的，或能被 desktop 匹配的
                 let icon = resolve_app_icon(&name, pm.name);
-                let has_desktop = desktop_for_package(&name);
-                if icon.is_none() && !has_desktop {
-                    continue; // 无图标且无 desktop 入口 → 视为 CLI/系统组件，过滤
+                // GUI 过滤仅适用于 Linux（依赖 .desktop 入口语义）：
+                // 无图标且无 desktop 入口 → 视为 CLI/系统组件，过滤。
+                // Windows/macOS 无 .desktop 概念，包管理器条目全部保留，
+                // 否则列表会被清空（图标与 desktop 判定恒为空）。
+                #[cfg(target_os = "linux")]
+                if icon.is_none() && !desktop_for_package(&name) {
+                    continue;
                 }
                 all_apps.push(InstalledApp {
                     name,
@@ -795,7 +798,7 @@ fn resolve_app_icon(app_name: &str, _source: &str) -> Option<String> {
 
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (app_name, source);
+        let _ = (app_name, _source);
         None
     }
 }

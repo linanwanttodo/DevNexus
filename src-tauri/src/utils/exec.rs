@@ -139,8 +139,6 @@ mod tests {
     #[test]
     fn test_run_timeout_kills_child() {
         // 验证超时后子进程被终止（不再残留 sleep 进程）
-        use std::process::Command;
-
         let marker = format!(
             "/tmp/dnx_exec_marker_{}_{}",
             std::process::id(),
