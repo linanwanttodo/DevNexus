@@ -283,6 +283,26 @@ A: 检查浏览器开发者工具 Console 面板。常见原因：
 - Rust 命令 `#[tauri::command]` 忘记注册
 - 前端路由表未包含该页面
 
+### Q: `cargo tauri dev` 报 `OS file watch limit reached`？
+
+A: 这是 Linux 的 inotify 文件监视句柄数达到内核上限（`fs.inotify.max_user_watches` 默认 65536）。
+`tauri dev` 同时监视 `src-tauri`（含巨大的 `target/`）与前端目录，很容易把额度用满。
+本仓库已通过 `tauri.conf.json` 的 `build.watch.ignorePatterns` 排除了 `target/`、`node_modules/` 等巨型目录，
+但老机器仍可能不足。永久提升上限（需 sudo，重启后依然有效）：
+
+```bash
+# 写入持久化配置
+echo 'fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 512
+fs.inotify.max_queued_events = 1048576' | sudo tee /etc/sysctl.d/99-inotify.conf
+
+# 立即生效
+sudo sysctl --system
+```
+
+或运行仓库自带脚本：`sudo bash scripts/fix-inotify.sh`
+临时生效（重启失效）：`sudo sysctl -w fs.inotify.max_user_watches=524288`
+
 ### Q: `cargo check` 在 Windows 上失败？
 
 A: 确认安装了 [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) 运行时（Windows 10 1809+ 已内置），以及 C++ 构建工具链（Visual Studio Build Tools）。
