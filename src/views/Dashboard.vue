@@ -99,11 +99,20 @@ function progressColorClass(val) {
 const stats = computed(() => [
   {
     id: "cpu",
-    tkey: "dashboard.cpu_cores",
-    value: systemInfo.value ? String(systemInfo.value.cpu_cores) : "--",
-    sub: systemInfo.value?.cpu_model
-      ? systemInfo.value.cpu_model.split(" ").slice(0, 2).join(" ")
-      : "",
+    // 主数值 = 占用率（与内存/磁盘卡片一致），核心数与型号放副行
+    tkey: "dashboard.cpu_usage",
+    value:
+      resourceUsage.value != null
+        ? `${resourceUsage.value.cpu_usage.toFixed(1)}%`
+        : "--",
+    sub: [
+      systemInfo.value ? `${systemInfo.value.cpu_cores}` : "",
+      systemInfo.value?.cpu_model
+        ? systemInfo.value.cpu_model.split(" ").slice(0, 2).join(" ")
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" · "),
     percent: resourceUsage.value ? resourceUsage.value.cpu_usage : null,
   },
   {

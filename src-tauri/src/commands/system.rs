@@ -156,6 +156,19 @@ mod tests {
         assert!(json.contains("\"gpu_name\":null"));
         assert!(json.contains("\"battery_percent\":null"));
     }
+
+    #[test]
+    fn test_cpu_usage_after_second_refresh() {
+        // 模拟 get_resource_usage 的调用序列：初始化采样 → refresh → 读 usage
+        let mut sys = System::new_all();
+        sys.refresh_all();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::everything());
+        let usage = sys.global_cpu_usage();
+        eprintln!("cpu_usage after 2 samples = {usage:?}");
+        // 只验证调用不 panic 且返回有限值，不强行断言非零（空闲机器可能接近 0）
+        assert!(usage.is_finite() && usage >= 0.0);
+    }
 }
 
 #[derive(Serialize)]
@@ -193,7 +206,10 @@ pub fn get_system_info() -> Result<SystemInfo, String> {
         Ok(guard) => guard,
         Err(_) => return Err("internal lock poisoned".to_string()),
     };
-    sys.refresh_all();
+    // 只刷新内存。cpu_model / cpu_cores 在单例初始化时已填充；
+    // 用 refresh_all 会重置 CPU 占用率采样基准，导致紧随其后的
+    // get_resource_usage 在毫秒级间隔内读到 ~0% 占用。
+    sys.refresh_memory();
 
     let total_memory_gb = sys.total_memory() as f64 / 1073741824.0;
 
