@@ -37,8 +37,6 @@ const appVersion = ref("");
 const updateState = ref("idle");
 const updateInfo = ref(null);
 const updateError = ref("");
-const changelogEn = ref("");
-const changelogZh = ref("");
 const downloadProgress = ref(0);
 
 const themeOptions = [
@@ -65,21 +63,12 @@ async function checkForUpdates() {
   updateState.value = "checking";
   updateError.value = "";
   updateInfo.value = null;
-  changelogEn.value = "";
-  changelogZh.value = "";
   try {
     const result = await invoke("check_for_updates_github");
     if (result.has_update) {
+      // 更新说明直接使用 check_for_updates_github 返回的 release_notes。
+      // 不要调用 get_changelog——该命令已随下载模块移除，后端不再注册。
       updateInfo.value = result;
-      try {
-        const cl = await invoke("get_changelog", { version: null });
-        if (cl) {
-          changelogEn.value = cl.en;
-          changelogZh.value = cl.zh;
-        }
-      } catch (err) {
-        console.error("Failed to load changelog:", err);
-      }
       updateState.value = "available";
     } else {
       updateState.value = "up_to_date";
@@ -308,17 +297,7 @@ onMounted(() => {
                   <div class="update-title">
                     {{ t("settings.update_available") }} {{ updateInfo?.latest_version }}
                   </div>
-                  <div v-if="changelogEn || changelogZh" class="changelog">
-                    <template v-if="changelogEn">
-                      <div class="changelog-lang">English</div>
-                      <pre class="changelog-body">{{ changelogEn }}</pre>
-                    </template>
-                    <template v-if="changelogZh">
-                      <div class="changelog-lang">中文</div>
-                      <pre class="changelog-body">{{ changelogZh }}</pre>
-                    </template>
-                  </div>
-                  <div v-else-if="updateInfo?.release_notes" class="changelog">
+                  <div v-if="updateInfo?.release_notes" class="changelog">
                     <pre class="changelog-body">{{ updateInfo.release_notes }}</pre>
                   </div>
                   <div v-if="updateInfo?.published_at" class="update-date">
