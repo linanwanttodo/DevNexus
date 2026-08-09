@@ -1,0 +1,57 @@
+# Dependabot 自动依赖更新配置
+# 文档: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+
+updates:
+  # GitHub Actions 自身版本（本次已手动升级到 Node 24 运行时，后续由 Dependabot 持续跟进）
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 10
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  # 前端依赖（npm 生态，自动识别 pnpm-lock.yaml 与 workspace）
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    versioning-strategy: increase-if-necessary
+    open-pull-requests-limit: 15
+    groups:
+      vue-ecosystem:
+        patterns:
+          - "vue"
+          - "vue-*"
+          - "@vue/*"
+          - "vite"
+          - "@tauri-apps/*"
+      minor-patch:
+        update-types:
+          - minor
+          - patch
+        patterns:
+          - "*"
+
+  # Rust 后端依赖
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 15
+    groups:
+      backend:
+        patterns:
+          - "*"
