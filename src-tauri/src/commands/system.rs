@@ -402,10 +402,12 @@ fn read_battery_status() -> (Option<f32>, Option<String>) {
         if percent.is_some() || status.is_some() {
             return (percent, status);
         }
-        return (None, None);
+        (None, None)
     }
 
     // Windows 不支持（需电池 API），返回 None
     #[cfg(target_os = "windows")]
-    return (None, None);
+    {
+        (None, None)
+    }
 }
