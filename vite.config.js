@@ -17,9 +17,16 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vue-vendor": ["vue", "vue-router"],
-          "tauri-vendor": ["@tauri-apps/api/core", "@tauri-apps/plugin-dialog", "@tauri-apps/plugin-shell", "@tauri-apps/plugin-process"],
+        // Vite 8 使用 rolldown，不支持 object 式 manualChunks（会报
+        // "manualChunks is not a function"），须用函数式按模块 id 分组。
+        manualChunks(id) {
+          const m = id.replace(/\\/g, "/");
+          if (m.includes("/node_modules/vue/") || m.includes("/node_modules/vue-router/")) {
+            return "vue-vendor";
+          }
+          if (m.includes("/node_modules/@tauri-apps/")) {
+            return "tauri-vendor";
+          }
         },
       },
     },
