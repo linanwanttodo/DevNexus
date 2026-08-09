@@ -150,6 +150,8 @@ jobs:
 
       - name: Install create-dmg (for DMG bundling)
         run: |
+          # 运行器镜像预装 aws/tap 且未受信任，会产生 brew tap 噪音；我们不使用它，直接移除
+          brew untap aws/tap 2>/dev/null || true
           brew install create-dmg || true
           if command -v create-dmg >/dev/null 2>&1; then
             echo "create-dmg available: $(command -v create-dmg)"
