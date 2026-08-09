@@ -68,7 +68,9 @@
   "titleBar": {
     "minimize": "Minimize",
     "maximize": "Maximize",
-    "close": "Close"
+    "close": "Close",
+    "pin": "Always on Top",
+    "unpin": "Exit Always on Top"
   },
   "dashboard": {
     "title": "Dashboard",

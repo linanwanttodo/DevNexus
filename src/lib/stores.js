@@ -1,4 +1,4 @@
-// src/lib/stores.js — Vue 版轻量全局状态（主题）
+// src/lib/stores.js — Vue 版轻量全局状态（主题 / 窗口置顶）
 // 路由状态由 vue-router 接管（hash 模式），此处仅保留主题等全局偏好。
 import { ref } from "vue";
 
@@ -32,4 +32,24 @@ export function applyTheme(pref) {
       : pref;
   document.documentElement.classList.toggle("dark", resolved === "dark");
   document.documentElement.setAttribute("data-theme", resolved);
+}
+
+// ---- 窗口置顶（类似微信的"窗口置于顶层"）----
+// 持久化到 localStorage，重启后 TitleBar 会恢复状态
+const initialWindowTop =
+  typeof window !== "undefined"
+    ? localStorage.getItem("devnexus-window-top") === "1"
+    : false;
+
+const windowTop = ref(initialWindowTop);
+
+export function getWindowTop() {
+  return windowTop;
+}
+
+export function setWindowTop(value) {
+  windowTop.value = value;
+  if (typeof window !== "undefined") {
+    localStorage.setItem("devnexus-window-top", value ? "1" : "0");
+  }
 }
