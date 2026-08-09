@@ -41,6 +41,10 @@ const routes = [
     component: () => import("./views/ContainerManager.vue"),
   },
   {
+    path: "/island",
+    component: () => import("./views/IslandSettings.vue"),
+  },
+  {
     path: "/settings",
     component: () => import("./views/Settings.vue"),
   },

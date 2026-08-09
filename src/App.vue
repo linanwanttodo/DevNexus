@@ -1,12 +1,19 @@
 <script setup>
+import { onMounted } from "vue";
 import TitleBar from "./components/TitleBar.vue";
 import Sidebar from "./components/Sidebar.vue";
 import ErrorBoundary from "./components/ErrorBoundary.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
 import Sonner from "./components/ui/sonner/Sonner.vue";
 import { getTheme } from "./lib/stores.js";
+import { applyIslandState } from "./lib/island.js";
 
 const theme = getTheme();
+
+// 启动时按持久化状态恢复灵动岛悬浮窗（独立透明置顶窗口）
+onMounted(() => {
+  applyIslandState();
+});
 </script>
 
 <template>
