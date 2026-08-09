@@ -1,5 +1,7 @@
 <script setup>
 import { t } from "../../lib/i18n.js";
+import AppIcon from "../AppIcon.vue";
+import { Input } from "@/components/ui/input";
 
 const props = defineProps({
   models: { type: Array, default: () => [] },
@@ -35,7 +37,7 @@ function toggle(id) {
       <!-- Checkbox -->
       <div class="check-col">
         <div v-if="selected[m.id]" class="check-on">
-          <icon-check class="check-icon" />
+          <AppIcon name="check" class="check-icon size-3" />
         </div>
         <div v-else class="check-off"></div>
       </div>
@@ -51,20 +53,19 @@ function toggle(id) {
 
       <!-- Alias + context inputs -->
       <template v-if="selected[m.id]">
-        <a-input
+        <Input
           v-model="aliases[m.id]"
-          size="mini"
           :placeholder="t('apiHub.alias')"
-          class="alias-input"
+          class="alias-input h-6 text-xs"
           :class="showCtx ? 'w-24' : 'w-32'"
           @click.stop
           @keydown.stop
         />
         <template v-if="showCtx">
-          <a-input-number
+          <Input
             v-model="contexts[m.id]"
-            size="mini"
-            class="ctx-input"
+            type="number"
+            class="ctx-input h-6 text-xs"
             :placeholder="'200000'"
             @click.stop
             @keydown.stop
@@ -81,16 +82,16 @@ function toggle(id) {
 <style scoped>
 .model-list {
   overflow-y: auto;
-  border: 1px solid var(--color-border-2);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background-color: var(--color-fill-1);
+  background-color: var(--color-muted);
 }
 .model-row {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border-2);
+  border-bottom: 1px solid var(--color-border);
   cursor: pointer;
   transition: background-color 0.15s;
 }
@@ -98,7 +99,7 @@ function toggle(id) {
   border-bottom: none;
 }
 .model-row:hover {
-  background-color: var(--color-fill-2);
+  background-color: var(--color-accent);
 }
 .check-col {
   width: 20px;
@@ -110,20 +111,19 @@ function toggle(id) {
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  background-color: rgb(var(--primary-6));
+  background-color: var(--color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .check-icon {
-  color: var(--color-white);
-  font-size: 11px;
+  color: var(--color-primary-foreground);
 }
 .check-off {
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  border: 1px solid var(--color-border-3);
+  border: 1px solid var(--color-border);
 }
 .model-info {
   flex: 1;
@@ -132,14 +132,14 @@ function toggle(id) {
 .model-id {
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .model-name {
   font-size: 10px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .alias-input {
   text-align: right;
@@ -150,12 +150,12 @@ function toggle(id) {
 }
 .ctx-label {
   font-size: 10px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   flex-shrink: 0;
 }
 .owned-by {
   font-size: 10px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   flex-shrink: 0;
 }
 </style>

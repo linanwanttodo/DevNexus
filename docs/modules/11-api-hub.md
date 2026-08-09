@@ -32,6 +32,7 @@ pub struct Provider {
     pub api_key: String,                                     // API Key
     pub models: Vec<String>,                                 // 可用模型列表
     pub model_aliases: HashMap<String, String>,               // 模型别名映射
+    pub model_context_lengths: HashMap<String, u64>,           // 各模型上下文长度
     pub enabled: bool,                                       // 是否启用
     pub created_at: i64,                                     // 创建时间戳
 }
@@ -152,6 +153,8 @@ pub struct AppState {
     pub db: Arc<tokio::sync::Mutex<Option<rusqlite::Connection>>>,
     pub http_client: reqwest::Client,
     pub running: Arc<AtomicBool>,
+    pub api_key_cipher: Arc<ApiKeyCipher>,   // API Key 加密/解密
+    pub auth_token: String,                   // 本地访问令牌（H1 安全修复）
 }
 ```
 
@@ -500,14 +503,14 @@ pub async fn start_server(state: Arc<AppState>) {
 |------|------|
 | 仅监听 localhost | 外部网络无法访问，天然隔离 |
 | 请求体大小限制 | `DefaultBodyLimit::max(10MB)` 防止内存耗尽攻击 |
-| 无鉴权认证 | v1 版本不添加访问控制（仅本地可用） |
-| API Key 安全 | API Key 仅存储在本地 SQLite 中 |
-| CORS 开放 | 允许所有来源（本地第三方应用跨域调用） |
+| 本地访问令牌鉴权 | 代理端点（`/v1/*`）要求携带 `X-DevNexus-Token` 或 `Authorization: Bearer <token>`，令牌在启动时生成于 `AppState.auth_token` 并下发给前端；用于防止本机其他进程 / 恶意网页（DNS rebinding、CSRF 式请求）盗用已配置 Provider 的 API Key |
+| API Key 加密存储 | API Key 通过 `ApiKeyCipher`（`api_hub/crypto.rs`）加密后以密文存入本地 SQLite（`providers` 表 `api_key` 字段不再明文） |
+| CORS | 仅允许 `tauri://localhost` 与本地 dev 地址（`http://localhost:1420` 等）跨域调用 |
 
 ### 9.3 已知风险
 
 - **端口冲突**: `3456` 端口被占用时启动失败（日志打印错误信息）
-- **API Key 明文存储**: Key 以明文存储在 SQLite 数据库中（后续可考虑加密）
+- **令牌下发**: 前端需从 `api_hub_status` 获取 `auth_token` 并在请求代理端点时携带，否则返回 401
 
 ---
 

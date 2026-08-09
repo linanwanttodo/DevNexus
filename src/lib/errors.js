@@ -3,7 +3,6 @@ import { t } from "./i18n.js";
 
 /** 已知的后端错误文案 → i18n key（懒解析，保证语言切换后取到当前语言的文案） */
 const knownPatterns = {
-  "vault is locked": "errors.vault_locked",
   "Provider already exists": "errors.provider_exists",
   "already exists": "errors.already_exists",
   "Invalid version string": "errors.invalid_version",

@@ -31,8 +31,8 @@ const icons = {
 };
 
 const colors = {
-  "container-running": "rgb(var(--green-6))",
-  "container-paused": "rgb(var(--orange-6))",
+  "container-running": "var(--color-success)",
+  "container-paused": "var(--color-warning)",
 };
 </script>
 

@@ -6,9 +6,9 @@
 
 **通信链路**:
 ```
-MirrorSettings.svelte ──→ invoke("list_mirrors")        ──→ mirror.rs
-                     ──→ invoke("test_mirror_latency")  ──→ mirror.rs
-                     ──→ invoke("switch_mirror")        ──→ mirror.rs
+MirrorSettings.vue ──→ invoke("list_mirrors")        ──→ mirror.rs
+                   ──→ invoke("test_mirror_latency")  ──→ mirror.rs
+                   ──→ invoke("switch_mirror")        ──→ mirror.rs
 ```
 
 ---
@@ -36,17 +36,19 @@ pub struct MirrorGroup {
 }
 ```
 
-**前端对应** (`routes/MirrorSettings.svelte`):
+**前端对应** (`views/MirrorSettings.vue`):
 
 ```javascript
-let groups = $state([]);
-let selectedCountry = $state("all");
+import { ref, computed } from "vue";
 
-let filteredGroups = $derived(
-    groups.map(g => ({
+const groups = ref([]);
+const selectedCountry = ref("all");
+
+const filteredGroups = computed(() =>
+    groups.value.map(g => ({
         ...g,
         mirrors: g.mirrors.filter(m =>
-            selectedCountry === "all" || m.country === selectedCountry
+            selectedCountry.value === "all" || m.country === selectedCountry.value
         ),
     }))
 );
@@ -129,23 +131,22 @@ fn get_docker_mirror() -> Option<String> {
 }
 ```
 
-**支持的 12 种镜像类型**:
+**支持的 12 种镜像类型**（按 id 列出）：`npm`、`pypi`、`docker`、`cargo`、`brew`、`composer`、`go`、`gems`、`maven`、`conda`、`nuget`、`pub`。
 
 | 类型 | 配置文件路径 | 配置键 |
 |------|-------------|--------|
 | npm | `~/.npmrc` | `registry=` |
-| pip | `~/.pip/pip.conf` / `~/.config/pip/pip.conf` | `index-url=` |
+| pypi | `~/.pip/pip.conf` / `~/.config/pip/pip.conf` | `index-url=` |
+| docker | `/etc/docker/daemon.json` | `registry-mirrors: [...]` |
 | cargo | `~/.cargo/config.toml` | `[source.crates-io]` + `replace-with` |
 | brew | Shell profile (`~/.zshrc` 等) | `export HOMEBREW_API_DOMAIN=` |
-| docker | `/etc/docker/daemon.json` | `registry-mirrors: [...]` |
-| pypi | `~/.pip/pip.conf` | `index-url=` |
+| composer | 全局配置 | `composer config -g repos` |
 | go | Shell profile | `export GOPROXY=` |
-| ruby gems | `~/.gemrc` | `:sources: [url]` |
-| php composer | 全局配置 | `composer config -g repos` |
+| gems | `~/.gemrc` | `:sources: [url]` |
 | maven | `~/.m2/settings.xml` | `<mirror><url>` |
 | conda | `~/.condarc` | `channel_alias:` |
 | nuget | `~/.nuget/NuGet/NuGet.Config` | XML `<add key="..." value="..." />` |
-| dart/pub | Shell profile | `export PUB_HOSTED_URL=` |
+| pub | Shell profile | `export PUB_HOSTED_URL=` |
 
 ### 3.3 镜像源切换
 
@@ -263,31 +264,24 @@ pub async fn test_mirror_latency(url: String) -> i64 {
       <span class="text-xs text-nx-text-muted">npm</span>
     </div>
     <!-- 当前激活的镜像显示 -->
-    {#if group.current_url}
-      <span class="mt-1 text-xs text-nx-success">Active: ...</span>
-    {/if}
+    <span v-if="group.current_url" class="mt-1 text-xs text-nx-success">Active: ...</span>
   </div>
   <div class="divide-y divide-nx-border">
-    {#each filteredMirrors as mirror}
-      <div class="flex items-center justify-between px-4 py-3">
-        <div>
-          <span>{mirror.name} {getCountryFlag(mirror.country)}</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button onclick={() => testMirror(group.id, mirror.url)}>
-            {mirror.latency_ms > 0 ? `${mirror.latency_ms}ms` : 'test'}
-          </button>
-          {#if mirror.is_active}
-            <span>Active</span>
-          {:else}
-            <button onclick={() => switchMirror(group.id, mirror.url)}>Use</button>
-          {/if}
-        </div>
+    <div v-for="mirror in filteredMirrors" :key="mirror.url" class="flex items-center justify-between px-4 py-3">
+      <div>
+        <span>{{ mirror.name }} {{ getCountryFlag(mirror.country) }}</span>
       </div>
-    {/each}
+      <div class="flex items-center gap-2">
+        <button @click="testMirror(group.id, mirror.url)">
+          {{ mirror.latency_ms > 0 ? mirror.latency_ms + 'ms' : 'test' }}
+        </button>
+        <span v-if="mirror.is_active">Active</span>
+        <button v-else @click="switchMirror(group.id, mirror.url)">Use</button>
+      </div>
+    </div>
   </div>
   <div class="px-3 py-2">
-    <button onclick={() => testAllMirrors(group)}>Test All</button>
+    <button @click="testAllMirrors(group)">Test All</button>
   </div>
 </div>
 ```

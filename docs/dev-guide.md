@@ -7,7 +7,7 @@
 | 依赖 | 版本要求 | 用途 |
 |------|---------|------|
 | Rust | 1.77+ | 后端编译 |
-| Node.js | 18+ | 前端构建 |
+| Node.js | 20+ | 前端构建 |
 | pnpm | 9+ | 包管理器 |
 | Tauri CLI | 2.x | 应用构建 |
 
@@ -44,56 +44,43 @@ cargo tauri dev   # 启动 Tauri 窗口，连接 Vite 服务器
 
 ```
 devnexus/
-├── src/                          # 前端 (Svelte 5)
-│   ├── app.html                  # HTML 入口
-│   ├── app.css                   # 全局样式 (Tailwind)
-│   ├── lib/
-│   │   ├── components/           # 可复用组件
-│   │   │   ├── BrandIcons.svelte # 软件品牌图标映射
-│   │   │   ├── Controls.svelte   # 通用控件
-│   │   │   ├── Favorite.svelte   # 收藏按钮
-│   │   │   ├── Loading.svelte    # 加载动画
-│   │   │   ├── Notification.svelte # 通知提示
-│   │   │   └── Sidebar.svelte    # 侧边导航栏
-│   │   └── api.js                # Tauri IPC 调用封装
-│   └── routes/                   # 页面组件（每个模块一个）
-│       ├── +page.svelte          # 布局入口
-│       ├── +layout.svelte        # 布局（侧边栏 + 内容区）
-│       ├── Dashboard.svelte      # 系统仪表板
-│       ├── SoftwareCenter.svelte # 软件中心
-│       ├── EnvironmentManager.svelte # 环境管理
-│       ├── MirrorSettings.svelte # 镜像设置
-│       ├── ProcessManager.svelte # 进程/端口管理
-│       ├── PasswordManager.svelte# 密码管理器
-│       ├── CookieExtractor.svelte# Cookie 提取
-│       └── Settings.svelte       # 设置页
+├── src/                          # 前端 (Vue 3)
+│   ├── main.js                  # Vue 应用入口
+│   ├── App.vue                  # 根组件（TitleBar + Sidebar + router-view）
+│   ├── router.js                # Vue Router 路由表（hash 模式，懒加载）
+│   ├── styles/                  # 全局样式 (Tailwind v4 + 设计 token)
+│   ├── lib/                     # 通用工具（stores、i18n、toast、confirm 等）
+│   ├── components/              # 可复用组件（含 ui/ 基础组件）
+│   ├── icons/                   # 图标
+│   ├── locales/                 # 多语言（zh / en / ru）
+│   └── views/                   # 页面组件（每个模块一个 .vue）
+│       ├── Dashboard.vue          # 系统仪表板
+│       ├── EnvironmentManager.vue # 环境管理
+│       ├── SoftwareCenter.vue     # 软件中心
+│       ├── MirrorSettings.vue     # 镜像设置
+│       ├── ProcessManager.vue     # 进程/端口管理
+│       ├── PasswordManager.vue    # 密码管理器
+│       ├── CookieExtractor.vue    # Cookie 提取
+│       ├── AppUninstaller.vue     # 应用卸载（深度清理）
+│       ├── ContainerManager.vue   # 容器管理
+│       ├── ApiHub.vue             # API Hub
+│       ├── Migration.vue          # 环境迁移
+│       └── Settings.vue           # 设置页
 ├── src-tauri/                    # 后端 (Rust)
 │   ├── src/
-│   │   ├── main.rs               # 入口，注册 Tauri 命令
-│   │   ├── lib.rs                # 库入口
-│   │   ├── utils.rs              # 通用工具函数
-│   │   ├── system.rs             # 系统仪表板
-│   │   ├── environment.rs        # 环境管理器
-│   │   ├── process_ports.rs     # 端口管理
-│   │   ├── version_manager.rs    # 版本管理器
-│   │   ├── password_manager.rs   # 密码管理器
-│   │   ├── cookie_extractor.rs  # Cookie 提取
-│   │   └── residue_scanner.rs    # 残留扫描
-│   ├── commands/
-│   │   ├── mod.rs                # 命令模块导出
-│   │   ├── system.rs             # 系统仪表板命令
-│   │   ├── software.rs           # 软件中心命令
-│   │   ├── environment.rs        # 环境管理命令
-│   │   ├── mirror.rs             # 镜像设置命令
-│   │   ├── password_manager.rs   # 密码管理命令
-│   │   ├── cookie_extractor.rs  # Cookie 提取命令
-│   │   └── version_manager.rs    # 版本管理命令
+│   │   ├── main.rs               # 入口，调用 run()
+│   │   ├── lib.rs                # 库入口，注册 Tauri 命令 + 启动 API Hub
+│   │   ├── api_hub/              # API Hub 模块（axum 网关）
+│   │   ├── commands/             # 各功能命令模块
+│   │   ├── residue_scanner/      # 残留扫描
+│   │   └── utils/                # 通用工具函数
 │   ├── Cargo.toml                # Rust 依赖
 │   └── tauri.conf.json           # Tauri 配置
+├── index.html                    # Vite HTML 入口
 ├── package.json                  # 前端依赖
-├── svelte.config.js              # Svelte 配置
-├── tailwind.config.js            # Tailwind 配置
-├── vite.config.ts                # Vite 配置
+├── vite.config.js                # Vite 配置
+├── tsconfig.json                 # TypeScript 配置
+├── pnpm-workspace.yaml           # pnpm workspace 配置
 └── docs/                         # 文档
     ├── architecture.md           # 架构总览
     ├── modules/                  # 模块详细设计
@@ -106,6 +93,9 @@ devnexus/
     │   ├── 08-cookie.md
     │   ├── 09-uninstall.md
     │   ├── 10-version.md
+    │   ├── 11-api-hub.md
+    │   ├── 13-containers.md
+    │   ├── 14-migration.md
     │   └── 99-cross-platform.md
     ├── dev-guide.md              # 本文件
     └── README.md                 # 项目总览
@@ -118,10 +108,10 @@ devnexus/
 ### 3.1 步骤
 
 1. **后端**: 在 `src-tauri/commands/` 下创建 `your_module.rs`
-2. **注册命令**: 在 `commands/mod.rs` 中导出，在 `main.rs` 或 `lib.rs` 中 `.invoke_handler()`
-3. **前端页面**: 在 `src/routes/` 下创建 `YourModule.svelte`
-4. **添加导航**: 在 `+layout.svelte` 的导航列表中添加入口
-5. **注册路由**: 在 `+page.svelte` 的路由表中添加
+2. **注册命令**: 在 `commands/mod.rs` 中导出，在 `lib.rs` 的 `.invoke_handler()` 中注册
+3. **前端页面**: 在 `src/views/` 下创建 `YourModule.vue`
+4. **添加导航**: 在 `src/components/Sidebar.vue` 的导航列表中添加入口
+5. **注册路由**: 在 `src/router.js` 的路由表中添加（建议懒加载）
 
 ### 3.2 示例: Tauri 命令注册
 
@@ -167,13 +157,13 @@ fn main() {
 - **异步**: 长时间操作（HTTP 请求、进程执行）使用 `async`，纯计算用同步
 - **测试**: 每个模块有 `#[cfg(test)] mod tests { ... }`
 
-### 4.2 Svelte 前端
+### 4.2 Vue 3 前端
 
-- **命名**: `camelCase` 变量 + 函数，`PascalCase` 组件
-- **状态管理**: 使用 `$state()` rune（Svelte 5）
-- **派生值**: 使用 `$derived()` 替代 `$:` 标记
-- **IPC 调用**: 封装在 `lib/api.js` 中
-- **样式**: 使用 Tailwind CSS，遵循 `nx-*` 主题前缀
+- **命名**: `camelCase` 变量 + 函数，`PascalCase` 组件（`.vue` 文件）
+- **状态管理**: 使用 `<script setup>` + `ref` / `reactive`，配合 `lib/stores.js` 中的全局状态
+- **派生值**: 使用 `computed()` 计算属性
+- **IPC 调用**: 在视图组件中直接 `import { invoke } from "@tauri-apps/api/tauri"`
+- **样式**: 使用 Tailwind CSS v4，主题 token 见 `src/styles/tokens.css`
 
 ### 4.3 异步 IPC 模式
 
@@ -327,20 +317,25 @@ cargo update
 
 | 前端依赖 | 用途 |
 |---------|------|
-| `svelte` ^5 | 前端框架 |
+| `vue` ^3.5 | 前端框架 |
 | `@tauri-apps/api` ^2 | Tauri IPC |
-| `tailwindcss` ^3 | CSS 框架 |
-| `lucide-svelte` | 图标库 |
+| `vue-router` ^4 | 前端路由 |
+| `tailwindcss` ^4 | CSS 框架（v4 + `@tailwindcss/vite`） |
+| `@lucide/vue` | 图标库 |
+| `reka-ui` | 无障碍 UI 基础组件 |
+| `vue-sonner` | 轻提示（toast） |
 
 | Rust 依赖 | 用途 |
 |----------|------|
 | `tauri` ^2 | GUI 框架 |
 | `sysinfo` | 系统信息 |
 | `serde` + `serde_json` | 序列化 |
-| `reqwest` | HTTP 请求 |
-| `rusqlite` | SQLite |
-| `aes-gcm` | AES 加密 |
-| `pbkdf2` | 密钥派生 |
-| `cron` | 定时任务 |
+| `reqwest` | HTTP 请求（rustls-tls） |
+| `rusqlite` | SQLite（bundled） |
+| `aes-gcm` / `aes` / `cbc` | AES 加密 |
+| `pbkdf2` + `sha2` | 密钥派生 / 哈希 |
+| `axum` + `tower-http` | API Hub HTTP 网关 |
 | `chrono` | 日期时间 |
 | `tokio` | 异步运行时 |
+| `which` | PATH 搜索 |
+| `zip` / `csv` / `walkdir` | 压缩 / 解析 / 文件遍历 |

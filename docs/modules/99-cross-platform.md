@@ -18,7 +18,7 @@ DevNexus 的跨平台策略分为三层:
 
 ```
 ┌─────────────────────────────────────┐
-│ Layer 3: 前端 (Svelte + Tailwind)    │ ← 完全跨平台，零平台相关代码
+│ Layer 3: 前端 (Vue 3 + Tailwind)      │ ← 完全跨平台，零平台相关代码
 ├─────────────────────────────────────┤
 │ Layer 2: 通用逻辑                       │
 │   system.rs, environment.rs,         │
@@ -315,7 +315,6 @@ let text = String::from_utf8_lossy(&output.stdout);  // UTF-8 解码
 | `aes-gcm` | 加密 | ✅ 纯算法 |
 | `pbkdf2` | 密钥派生 | ✅ 纯算法 |
 | `chrono` | 时间处理 | ✅ 全平台 |
-| `cron` | Cron 表达式 | ✅ 纯算法 |
 | `uuid` | UUID 生成 | ✅ 全平台 |
 | `tokio` | 异步运行时 | ✅ 全平台 |
 | `tauri` | GUI 框架 | ✅ 全平台 |

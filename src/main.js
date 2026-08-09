@@ -1,13 +1,11 @@
-// src/main.js — Vue 3 + Arco Design 入口
+// src/main.js — Vue 3 + Tailwind v4 + shadcn-vue 入口
 import { createApp } from "vue";
-import ArcoVue from "@arco-design/web-vue";
-import ArcoVueIcon from "@arco-design/web-vue/es/icon";
-import "@arco-design/web-vue/dist/arco.css";
 
 import App from "./App.vue";
 import { router } from "./router.js";
 import { initI18n } from "./lib/i18n.js";
 import { applyTheme } from "./lib/stores.js";
+import "./styles/global.css";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
@@ -21,8 +19,6 @@ async function bootstrap() {
 
   const app = createApp(App);
   app.use(router);
-  app.use(ArcoVue);
-  app.use(ArcoVueIcon);
   app.mount("#app");
 
   // 标记就绪，淡入（配合 index.html 防闪烁脚本）

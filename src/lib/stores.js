@@ -21,7 +21,7 @@ export function setTheme(pref) {
   }
 }
 
-/** 解析偏好（light/dark/system）并应用到 DOM */
+/** 解析偏好（light/dark/system）并应用到 DOM（Tailwind .dark + html data-theme） */
 export function applyTheme(pref) {
   if (typeof window === "undefined") return;
   const resolved =
@@ -30,6 +30,6 @@ export function applyTheme(pref) {
         ? "dark"
         : "light"
       : pref;
-  document.body.setAttribute("arco-theme", resolved);
+  document.documentElement.classList.toggle("dark", resolved === "dark");
   document.documentElement.setAttribute("data-theme", resolved);
 }

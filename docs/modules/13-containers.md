@@ -6,12 +6,12 @@
 
 **通信链路**:
 ```
-ContainerManager.svelte ──→ invoke("list_containers")  ──→ container.rs
-                      ──→ invoke("container_action")  ──→ container.rs
-                      ──→ invoke("list_images")       ──→ container.rs
-                      ──→ invoke("list_volumes")      ──→ container.rs
-                      ──→ invoke("list_networks")     ──→ container.rs
-                      ──→ invoke("compose_up")        ──→ container.rs
+ContainerManager.vue ──→ invoke("list_containers")  ──→ container.rs
+                    ──→ invoke("container_action")  ──→ container.rs
+                    ──→ invoke("list_images")       ──→ container.rs
+                    ──→ invoke("list_volumes")      ──→ container.rs
+                    ──→ invoke("list_networks")     ──→ container.rs
+                    ──→ invoke("compose_up")        ──→ container.rs
 ```
 
 ---
@@ -40,5 +40,5 @@ ContainerManager.svelte ──→ invoke("list_containers")  ──→ container
 
 ## 4. 前端结构
 
-`ContainerManager.svelte`（约 495 行）按 tab 拆分为 5 个表格组件：
-`ContainersTab` / `ImagesTab` / `VolumesTab` / `NetworksTab` / `ComposeTab`，弹窗统一走 `ContainerDialog`（配置对象驱动）。
+`ContainerManager.vue` 按 tab 拆分为 5 个表格组件（`src/components/containers/` 下）：
+`ContainersTab` / `ImagesTab` / `VolumesTab` / `NetworksTab` / `ComposeTab`，弹窗统一走 `ContainerDialog.vue`（配置对象驱动）。

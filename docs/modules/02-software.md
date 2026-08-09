@@ -6,11 +6,11 @@
 
 **通信链路**:
 ```
-SoftwareCenter.svelte ──→ invoke("list_software")       ──→ software.rs
-                     ──→ invoke("install_software")     ──→ software.rs
-                     ──→ invoke("uninstall_software")   ──→ software.rs
-                     ──→ invoke("uninstall_software_deep") ──→ software.rs + residue_scanner/
-                     ──→ invoke("list_package_managers")──→ software.rs
+SoftwareCenter.vue ──→ invoke("list_software")       ──→ software.rs
+                   ──→ invoke("install_software")     ──→ software.rs
+                   ──→ invoke("uninstall_software")   ──→ software.rs
+                   ──→ invoke("uninstall_software_deep") ──→ software.rs + residue_scanner/
+                   ──→ invoke("list_package_managers")──→ software.rs
 ```
 
 ---
@@ -43,19 +43,21 @@ struct PackageManager {
 }
 ```
 
-**前端对应** (`routes/SoftwareCenter.svelte`):
+**前端对应** (`views/SoftwareCenter.vue`):
 
 ```javascript
-let selectedCategory = $state("all");
-let filterInstalled = $state(false);
-let filterUpdates = $state(false);
-let software = $state([]);
+import { ref, computed } from "vue";
 
-let filteredSoftware = $derived(
-    software
-        .filter(s => selectedCategory === "all" || s.category === selectedCategory)
-        .filter(s => !filterInstalled || s.status === "installed")
-        .filter(s => !filterUpdates || s.status !== "available")
+const selectedCategory = ref("all");
+const filterInstalled = ref(false);
+const filterUpdates = ref(false);
+const software = ref([]);
+
+const filteredSoftware = computed(() =>
+    software.value
+        .filter(s => selectedCategory.value === "all" || s.category === selectedCategory.value)
+        .filter(s => !filterInstalled.value || s.status === "installed")
+        .filter(s => !filterUpdates.value || s.status !== "available")
 );
 ```
 
@@ -65,11 +67,11 @@ let filteredSoftware = $derived(
 
 ### 3.1 软件定义系统
 
-37 款内置工具定义，分四类：
+数十款内置工具定义，分四类（IDE/编辑器、数据库、CLI 工具、运行时等）：
 
 ```rust
 fn build_software_defs() -> Vec<SoftwareDef> {
-    let mut defs = Vec::with_capacity(24);
+    let mut defs = Vec::new();
     // IDE/编辑器: VS Code, Neovim, Vim, Sublime, Zed, Postman, IntelliJ
     // 数据库: DBeaver, SQLite, PostgreSQL, Redis, MySQL Workbench, TablePlus
     // CLI工具: Git, curl, wget, OpenSSH, GCC, Clang, CMake, htop, tmux,
@@ -383,7 +385,7 @@ const removeData = await showConfirm(`Also remove config and data files?`);
 
 ### 5.3 品牌图标映射
 
-通过 `BrandIcons.svelte` 为每个软件显示对应的品牌 SVG 图标：
+通过品牌图标组件为每个软件显示对应的品牌 SVG 图标（`src/icons/ContainerIcons.vue` 等图标资源）：
 
 ```javascript
 const map = {

@@ -1,7 +1,24 @@
 <script setup>
-import { computed } from "vue";
 import { t } from "../../lib/i18n.js";
 import ContainerIcons from "../../icons/ContainerIcons.vue";
+import AppIcon from "../AppIcon.vue";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const props = defineProps({
   file: { type: String, default: "" },
@@ -31,13 +48,6 @@ function statusLabel(status) {
   };
   return map[status] || status;
 }
-
-const columns = computed(() => [
-  { title: t("docker.name"), slotName: "name" },
-  { title: t("docker.image"), slotName: "image" },
-  { title: t("docker.status"), slotName: "status" },
-  { title: t("docker.ports"), slotName: "ports" },
-]);
 </script>
 
 <template>
@@ -45,88 +55,114 @@ const columns = computed(() => [
     <div class="grid grid-cols-2 gap-3 mb-4">
       <div>
         <label class="field-label">{{ t("docker.compose_file") }}</label>
-        <a-input
+        <Input
           :model-value="file"
           placeholder="docker-compose.yml"
-          @input="(v) => emit('file-input', v)"
+          @update:model-value="(v) => emit('file-input', v)"
         />
       </div>
       <div>
         <label class="field-label">{{ t("docker.compose_project") }}</label>
-        <a-input
+        <Input
           :model-value="project"
           :placeholder="t('docker.compose_project_ph')"
-          @input="(v) => emit('project-input', v)"
+          @update:model-value="(v) => emit('project-input', v)"
         />
       </div>
     </div>
 
     <div class="flex items-center gap-2 mb-4">
-      <a-button type="primary" status="success" size="small" :disabled="loading" @click="emit('up')">
-        <template #icon><icon-play-arrow /></template>
+      <Button
+        :disabled="loading"
+        @click="emit('up')"
+      >
+        <AppIcon name="play-arrow" class="size-4" />
         {{ t("docker.compose_up") }}
-      </a-button>
-      <a-button status="danger" size="small" :disabled="loading" @click="emit('down')">
-        <template #icon><icon-stop /></template>
+      </Button>
+      <Button
+        variant="destructive"
+        :disabled="loading"
+        @click="emit('down')"
+      >
+        <AppIcon name="stop" class="size-4" />
         {{ t("docker.compose_down") }}
-      </a-button>
-      <a-button size="small" :disabled="loading" @click="emit('ps')">
-        <template #icon><icon-menu /></template>
+      </Button>
+      <Button variant="outline" :disabled="loading" @click="emit('ps')">
+        <AppIcon name="menu" class="size-4" />
         {{ t("docker.compose_ps") }}
-      </a-button>
-      <a-button size="small" :disabled="loading" @click="emit('logs')">
-        <template #icon><icon-file /></template>
+      </Button>
+      <Button variant="outline" :disabled="loading" @click="emit('logs')">
+        <AppIcon name="file" class="size-4" />
         {{ t("docker.compose_logs") }}
-      </a-button>
+      </Button>
+      <Spinner v-if="loading" class="size-4 text-muted-foreground" />
     </div>
 
-    <a-alert v-if="error" type="error" class="mb-4">
-      <pre class="error-pre">{{ error }}</pre>
-    </a-alert>
+    <Alert v-if="error" variant="destructive" class="mb-4">
+      <AlertTitle>{{ t("error.title") }}</AlertTitle>
+      <AlertDescription>
+        <pre class="error-pre">{{ error }}</pre>
+      </AlertDescription>
+    </Alert>
 
-    <a-card v-if="containers.length > 0" :bordered="true" class="section-card mb-4">
-      <template #title>
-        <span class="section-title">{{ t("docker.compose_services") }}</span>
-      </template>
-      <a-table
-        :data="containers"
-        :columns="columns"
-        :pagination="false"
-        :bordered="{ wrapper: false, cell: false }"
-        size="small"
-      >
-        <template #name="{ record }">
-          <span class="cell-name">{{ record.name }}</span>
-        </template>
-        <template #image="{ record }">
-          <span class="cell-mono">{{ record.image }}</span>
-        </template>
-        <template #status="{ record }">
-          <span class="status-inline" :class="record.status === 'running' ? 'ok' : ''">
-            <ContainerIcons
-              :name="record.status === 'running' ? 'container-running' : 'container-exited'"
-              :size="12"
-            />
-            {{ statusLabel(record.status) }}
-          </span>
-        </template>
-        <template #ports="{ record }">
-          <span class="cell-mono cell-muted">{{ record.ports || "-" }}</span>
-        </template>
-      </a-table>
-    </a-card>
+    <Card v-if="containers.length > 0" class="section-card shadow-sm mb-4">
+      <CardHeader class="py-3">
+        <CardTitle class="section-title">
+          {{ t("docker.compose_services") }}
+        </CardTitle>
+      </CardHeader>
+      <CardContent class="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{{ t("docker.name") }}</TableHead>
+              <TableHead>{{ t("docker.image") }}</TableHead>
+              <TableHead>{{ t("docker.status") }}</TableHead>
+              <TableHead>{{ t("docker.ports") }}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="record in containers" :key="record.name">
+              <TableCell>
+                <span class="cell-name">{{ record.name }}</span>
+              </TableCell>
+              <TableCell>
+                <span class="cell-mono">{{ record.image }}</span>
+              </TableCell>
+              <TableCell>
+                <span
+                  class="status-inline"
+                  :class="record.status === 'running' ? 'ok' : ''"
+                >
+                  <ContainerIcons
+                    :name="record.status === 'running' ? 'container-running' : 'container-exited'"
+                    :size="12"
+                  />
+                  {{ statusLabel(record.status) }}
+                </span>
+              </TableCell>
+              <TableCell>
+                <span class="cell-mono cell-muted">{{ record.ports || "-" }}</span>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
 
-    <a-card v-if="logs" :bordered="true" class="section-card">
-      <template #title>
+    <Card v-if="logs" class="section-card shadow-sm">
+      <CardHeader class="py-3">
         <div class="card-title-row">
-          <span class="section-title">{{ t("docker.logs") }}</span>
-          <a-button size="mini" @click="emit('clear-logs')">
-            <template #icon><icon-close /></template>
-          </a-button>
+          <CardTitle class="section-title">{{ t("docker.logs") }}</CardTitle>
+          <Button size="icon" variant="ghost" @click="emit('clear-logs')">
+            <AppIcon name="close" class="size-4" />
+          </Button>
         </div>
-      </template>
-      <pre class="logs-pre">{{ logs }}</pre>
-    </a-card>
+      </CardHeader>
+      <CardContent>
+        <pre class="logs-pre">{{ logs }}</pre>
+      </CardContent>
+    </Card>
   </div>
 </template>
 
@@ -140,7 +176,7 @@ const columns = computed(() => [
   display: block;
   margin-bottom: 6px;
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .section-card {
   border-radius: 10px;
@@ -150,7 +186,7 @@ const columns = computed(() => [
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .card-title-row {
   display: flex;
@@ -163,29 +199,29 @@ const columns = computed(() => [
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
   white-space: pre-wrap;
-  color: rgb(var(--red-6));
+  color: var(--color-destructive);
 }
 .cell-name {
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 .cell-mono {
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
 }
 .cell-muted {
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .status-inline {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .status-inline.ok {
-  color: rgb(var(--green-6));
+  color: var(--color-success);
 }
 .logs-pre {
   margin: 0;
@@ -194,7 +230,7 @@ const columns = computed(() => [
   padding: 12px 0;
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
   white-space: pre-wrap;
 }
 </style>

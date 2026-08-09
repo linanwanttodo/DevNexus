@@ -7,6 +7,32 @@ import { showConfirm } from "../lib/confirm.js";
 import { t, tFormat } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
 import BrandIcons from "../icons/BrandIcons.vue";
+import AppIcon from "../components/AppIcon.vue";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyMedia,
+} from "@/components/ui/empty";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 const router = useRouter();
 
@@ -191,77 +217,93 @@ function statusLabel(item) {
     <!-- Header -->
     <div class="page-header">
       <div>
-        <a-breadcrumb>
-          <a-breadcrumb-item>
-            <a-link @click="router.push('/dashboard')">{{ t("nav.dashboard") }}</a-link>
-          </a-breadcrumb-item>
-          <a-breadcrumb-item>{{ t("software.title") }}</a-breadcrumb-item>
-        </a-breadcrumb>
-        <h1 class="page-title" style="margin-top: 8px">{{ t("software.title") }}</h1>
+        <Breadcrumb class="mb-1">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink as="button" @click="router.push('/dashboard')">
+                {{ t("nav.dashboard") }}
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{{ t("software.title") }}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+        <h1 class="page-title mt-2">{{ t("software.title") }}</h1>
       </div>
-      <a-button size="small" @click="loadSoftware">
-        <template #icon><icon-refresh /></template>
+      <Button variant="outline" size="sm" @click="loadSoftware">
+        <AppIcon name="refresh" class="size-4" />
         {{ t("common.refresh") }}
-      </a-button>
+      </Button>
     </div>
 
     <!-- Category pills + filters bar -->
     <div class="filter-bar section-card">
-      <a-space wrap>
-        <a-button
+      <div class="flex flex-wrap items-center gap-2">
+        <Button
           v-for="cat in categories"
           :key="cat.id"
-          size="small"
-          :type="selectedCategory === cat.id ? 'primary' : 'secondary'"
+          size="sm"
+          :variant="selectedCategory === cat.id ? 'default' : 'outline'"
           @click="selectedCategory = cat.id"
         >
           {{ cat.label }}
-        </a-button>
-      </a-space>
-      <a-space size="large">
-        <a-checkbox v-model="filterInstalled">{{ t("software.installed_filter") }}</a-checkbox>
-        <a-checkbox v-model="filterUpdates">{{ t("software.updates_filter") }}</a-checkbox>
-      </a-space>
+        </Button>
+      </div>
+      <div class="flex items-center gap-6">
+        <label class="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+          <Checkbox v-model="filterInstalled" />
+          {{ t("software.installed_filter") }}
+        </label>
+        <label class="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+          <Checkbox v-model="filterUpdates" />
+          {{ t("software.updates_filter") }}
+        </label>
+      </div>
     </div>
 
     <!-- Content area -->
     <div class="content-area">
       <!-- CLI Code tools -->
       <div v-if="selectedCategory === 'cli-code'" class="tool-grid">
-        <a-card v-for="tool in cliCodeTools" :key="tool.name" :bordered="true" class="tool-card">
-          <div class="tool-icon">
-            <icon-terminal />
-          </div>
-          <div class="tool-title">{{ tool.name }}</div>
-          <div class="tool-publisher">{{ tool.publisher }}</div>
-          <div class="tool-desc">{{ tool.desc }}</div>
-          <div class="tool-command">
-            <span class="cmd-text" :title="tool.command">{{ tool.command }}</span>
-            <a-button
-              size="mini"
-              :type="copiedCommand === tool.name ? 'success' : 'text'"
-              @click="copyCommand(tool.command, tool.name)"
-            >
-              <template #icon>
-                <icon-check v-if="copiedCommand === tool.name" />
-                <icon-copy v-else />
-              </template>
-            </a-button>
-          </div>
-        </a-card>
+        <Card v-for="tool in cliCodeTools" :key="tool.name" class="tool-card shadow-sm">
+          <CardContent class="flex flex-1 flex-col p-4">
+            <div class="tool-icon">
+              <AppIcon name="code-block" class="size-[18px]" />
+            </div>
+            <div class="tool-title">{{ tool.name }}</div>
+            <div class="tool-publisher">{{ tool.publisher }}</div>
+            <div class="tool-desc">{{ tool.desc }}</div>
+            <div class="tool-command">
+              <span class="cmd-text" :title="tool.command">{{ tool.command }}</span>
+              <Button
+                size="sm"
+                class="shrink-0"
+                :variant="copiedCommand === tool.name ? 'default' : 'ghost'"
+                @click="copyCommand(tool.command, tool.name)"
+              >
+                <AppIcon v-if="copiedCommand === tool.name" name="check" class="size-3.5" />
+                <AppIcon v-else name="copy" class="size-3.5" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <!-- Regular software -->
       <div v-else>
-        <a-spin :loading="loading" style="width: 100%">
-          <!-- No package manager -->
-          <a-card v-if="!hasPackageManager && !pmChecking && !error" :bordered="true" class="no-pm-card">
+        <!-- No package manager -->
+        <Card v-if="!hasPackageManager && !pmChecking && !error" class="no-pm-card shadow-sm">
+          <CardContent class="py-5">
             <div class="no-pm-content">
-              <icon-package class="no-pm-icon" />
+              <AppIcon name="archive" class="no-pm-icon size-10" />
               <h2 class="no-pm-title">{{ t("software.no_pm_title") }}</h2>
               <p class="no-pm-desc">{{ t("software.no_pm_desc") }}</p>
               <div v-if="packageManagers.length > 0" class="no-pm-pills">
-                <a-tag v-for="pm in packageManagers" :key="pm.name">{{ pm.name }}</a-tag>
+                <Badge v-for="pm in packageManagers" :key="pm.name" variant="secondary">
+                  {{ pm.name }}
+                </Badge>
               </div>
               <div v-else class="no-pm-suggest">
                 <p class="suggest-title">{{ t("software.no_pm_suggest") }}</p>
@@ -272,48 +314,74 @@ function statusLabel(item) {
                 </ul>
               </div>
             </div>
-          </a-card>
+          </CardContent>
+        </Card>
 
-          <!-- Error -->
-          <a-result v-else-if="error" status="error" :title="error" style="padding: 56px 0">
-            <template #extra>
-              <a-button type="primary" @click="loadSoftware">{{ t("common.retry") }}</a-button>
-            </template>
-          </a-result>
+        <!-- Loading -->
+        <div
+          v-else-if="loading"
+          class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        >
+          <Skeleton v-for="i in 8" :key="i" class="h-44 w-full rounded-xl" />
+        </div>
 
-          <!-- Empty -->
-          <a-empty
-            v-else-if="filteredSoftware.length === 0"
-            :description="t('software.none')"
-            style="padding: 56px 0"
-          />
+        <!-- Error -->
+        <Card v-else-if="error" class="shadow-sm">
+          <CardContent class="py-4">
+            <Alert variant="destructive">
+              <AppIcon name="close-circle-fill" class="size-4" />
+              <AlertTitle>{{ t("error.title") }}</AlertTitle>
+              <AlertDescription>{{ error }}</AlertDescription>
+            </Alert>
+            <Button class="mt-3" @click="loadSoftware">
+              {{ t("common.retry") }}
+            </Button>
+          </CardContent>
+        </Card>
 
-          <!-- Grid -->
-          <div v-else class="soft-grid">
-            <a-card v-for="item in filteredSoftware" :key="item.name" :bordered="true" class="soft-card">
+        <!-- Empty -->
+        <Card v-else-if="filteredSoftware.length === 0" class="shadow-sm">
+          <CardContent class="py-4">
+            <Empty class="py-5">
+              <EmptyMedia>
+                <AppIcon name="apps" class="size-10 text-muted-foreground/60" />
+              </EmptyMedia>
+              <EmptyContent>
+                <EmptyDescription>{{ t("software.none") }}</EmptyDescription>
+              </EmptyContent>
+            </Empty>
+          </CardContent>
+        </Card>
+
+        <!-- Grid -->
+        <div v-else class="soft-grid">
+          <Card v-for="item in filteredSoftware" :key="item.name" class="soft-card shadow-sm">
+            <CardContent class="flex flex-1 flex-col p-4">
               <div class="soft-head">
                 <div class="soft-icon">
                   <BrandIcons :name="brandIconName(item.name)" :size="20" />
                 </div>
-                <a-tag :color="item.status === 'installed' ? 'green' : ''" size="small">
+                <Badge
+                  variant="secondary"
+                  :class="item.status === 'installed' ? 'bg-success/10 text-success' : ''"
+                >
                   {{ statusLabel(item) }}
-                </a-tag>
+                </Badge>
               </div>
               <div class="soft-name">{{ item.name }}</div>
               <div class="soft-version">{{ item.version }}</div>
-              <a-button
-                class="soft-action"
-                :type="item.action === 'Install' ? 'primary' : item.action === 'Uninstall' ? 'danger' : 'secondary'"
+              <Button
+                class="soft-action w-full"
+                :variant="item.action === 'Install' ? 'default' : item.action === 'Uninstall' ? 'destructive' : 'outline'"
                 :disabled="item.action === 'System Managed' || installing"
-                :loading="installing && currentItem?.name === item.name"
-                long
                 @click="handleAction(item)"
               >
+                <Spinner v-if="installing && currentItem?.name === item.name" class="size-4" />
                 {{ installing && currentItem?.name === item.name ? t("software.processing") : item.action }}
-              </a-button>
-            </a-card>
-          </div>
-        </a-spin>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   </div>
@@ -328,7 +396,7 @@ function statusLabel(item) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--nx-space-4);
+  gap: 1rem;
   flex-wrap: wrap;
 }
 .content-area {
@@ -339,11 +407,10 @@ function statusLabel(item) {
 .soft-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--nx-space-3);
+  gap: 0.75rem;
 }
 .tool-card,
 .soft-card {
-  border-radius: var(--nx-radius-5);
   display: flex;
   flex-direction: column;
 }
@@ -353,25 +420,25 @@ function statusLabel(item) {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: var(--nx-radius-4);
-  background-color: var(--color-fill-2);
-  color: var(--color-text-2);
+  border-radius: 8px;
+  background-color: var(--color-accent);
+  color: var(--color-muted-foreground);
   font-size: 18px;
   margin-bottom: 12px;
 }
 .tool-title {
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 .tool-publisher {
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   margin: 2px 0 6px;
 }
 .tool-desc {
   font-size: 12px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
   line-height: 1.6;
   flex: 1;
   margin-bottom: 12px;
@@ -382,36 +449,34 @@ function statusLabel(item) {
   gap: 8px;
   padding: 6px 10px;
   border: 1px solid var(--color-border);
-  border-radius: var(--nx-radius-4);
-  background-color: var(--color-fill-1);
+  border-radius: 8px;
+  background-color: var(--color-muted);
 }
 .cmd-text {
   flex: 1;
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .no-pm-card {
-  border-radius: var(--nx-radius-5);
   text-align: center;
   padding: 20px;
 }
 .no-pm-icon {
-  font-size: 40px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
 }
 .no-pm-title {
   font-size: 16px;
   font-weight: 600;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
   margin: 14px 0 6px;
 }
 .no-pm-desc {
   font-size: 13px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
   line-height: 1.7;
   max-width: 480px;
   margin: 0 auto;
@@ -428,7 +493,7 @@ function statusLabel(item) {
   display: inline-block;
   text-align: left;
   font-size: 13px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
 }
 .suggest-title {
   font-weight: 500;
@@ -442,7 +507,7 @@ function statusLabel(item) {
   gap: 4px;
 }
 .link {
-  color: var(--color-primary-6);
+  color: var(--color-primary);
   text-decoration: underline;
 }
 .soft-head {
@@ -457,19 +522,19 @@ function statusLabel(item) {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: var(--nx-radius-4);
-  background-color: var(--color-fill-2);
+  border-radius: 8px;
+  background-color: var(--color-accent);
 }
 .soft-name {
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
   margin-bottom: 4px;
 }
 .soft-version {
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   margin-bottom: 16px;
 }
 .soft-action {

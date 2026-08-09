@@ -2,11 +2,11 @@
 
 ## 系统架构
 
-DevNexus 采用 **Tauri 2.0** 标准架构：Rust 后端 + Svelte 前端，通过 IPC (指令调用) 通信。
+DevNexus 采用 **Tauri 2.0** 标准架构：Rust 后端 + Vue 3 前端，通过 IPC (指令调用) 通信。
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                     前端 (Svelte 5)                   │
+│                     前端 (Vue 3)                      │
 │  ┌─────────────┐ ┌──────────────┐ ┌────────────────┐│
 │  │ Dashboard   │ │              │ │SoftwareCenter  ││
 │  ├─────────────┤ ├──────────────┤ ├────────────────┤│
@@ -71,14 +71,14 @@ DevNexus 采用 **Tauri 2.0** 标准架构：Rust 后端 + Svelte 前端，通�
 ## 数据流
 
 ```
-用户操作 → Svelte Event Handler
+用户操作 → Vue 组件事件处理 (script setup)
          → invoke("command_name", { args })
          → Tauri IPC (JSON 序列化)
          → Rust #[tauri::command] fn
          → 业务逻辑（系统调用、文件读写、加密解密）
          → Result<T, String>
          → JSON 反序列化
-         → 前端响应式更新 ($state / $derived)
+         → 前端响应式更新 (Vue ref / reactive + <script setup>)
 ```
 
 所有命令都是请求-响应模式。没有 WebSocket / 事件推送（除了前端的 `setInterval` 轮询）。
@@ -86,16 +86,20 @@ DevNexus 采用 **Tauri 2.0** 标准架构：Rust 后端 + Svelte 前端，通�
 ## 前端路由表
 
 ```javascript
-// +page.svelte 中的路由
+// src/router.js 中的路由（Vue Router，hash 模式，懒加载）
 const routes = {
-    '/':                    Dashboard,          // 系统仪表板
-    '/software':            SoftwareCenter,      // 软件中心
-    '/environment':         EnvironmentManager,  // 环境管理
-    '/mirrors':             MirrorSettings,      // 镜像设置
-    '/ports':               ProcessManager,      // 进程/端口管理
-    '/passwords':           PasswordManager,     // 密码管理器
-    '/cookies':             CookieExtractor,   // Cookie 提取
-    '/settings':            Settings,            // 设置
+    '/':                Dashboard,          // 系统仪表板
+    '/environments':    EnvironmentManager,  // 环境管理
+    '/software':        SoftwareCenter,      // 软件中心
+    '/mirrors':         MirrorSettings,      // 镜像设置
+    '/processes':       ProcessManager,      // 进程/端口管理
+    '/passwords':       PasswordManager,     // 密码管理器
+    '/cookies':         CookieExtractor,     // Cookie 提取
+    '/uninstall':       AppUninstaller,      // 应用卸载（深度清理）
+    '/containers':      ContainerManager,    // 容器管理
+    '/api-hub':         ApiHub,              // API Hub
+    '/migration':       Migration,           // 环境迁移
+    '/settings':        Settings,            // 设置
 };
 ```
 
@@ -103,17 +107,17 @@ const routes = {
 
 | 编号 | 模块 | 文件 | 核心功能 |
 |------|------|------|---------|
-| 02 | 系统仪表板 | `commands/system.rs` | 硬件信息、CPU/内存/磁盘使用率 |
-| 03 | 软件中心 | `commands/software.rs` | 37+ 工具管理、跨平台包管理器 |
-| 04 | 环境管理 | `commands/environment.rs` | 运行时检测、PATH 编辑 |
-| 05 | 容器管理 | `commands/container.rs` | Docker/Podman 容器、镜像、卷、Compose |
-| 06 | API Hub | `commands/api_hub/` | 本地 AI 网关、多协议格式转换、流式 |
-| 07 | 镜像设置 | `commands/mirror.rs` | 12 种包源切换、延迟测试 |
-| 08 | 端口/进程管理 | `commands/process_ports.rs` | 端口列表、进程查杀 |
-| 09 | 密码管理器 | `commands/password_manager.rs` | AES-256-GCM 加密存储、密码生成 |
-| 11 | Cookie 提取 | `commands/cookie_extractor.rs` | 浏览器 Cookie 读取与导出 |
-| 12 | 深度卸载 | `residue_scanner.rs` | 残留扫描、跨平台路径数据库 |
-| 13 | 版本管理 | `commands/version_manager.rs` | 6 种语言版本切换、Shell 配置 |
+| 01 | 系统仪表板 | `commands/system.rs` | 硬件信息、CPU/内存/磁盘使用率 |
+| 02 | 软件中心 | `commands/software.rs` | 工具管理、跨平台包管理器 |
+| 03 | 环境管理 | `commands/environment.rs` | 运行时检测、PATH 编辑 |
+| 04 | 镜像设置 | `commands/mirror.rs` | 包源切换、延迟测试 |
+| 05 | 端口/进程管理 | `commands/process_ports.rs` | 端口列表、进程查杀 |
+| 07 | 密码管理器 | `commands/password_manager.rs` | AES-256-GCM 加密存储、密码生成 |
+| 08 | Cookie 提取 | `commands/cookie_extractor.rs` | 浏览器 Cookie 读取与导出 |
+| 09 | 深度卸载 | `residue_scanner/` | 残留扫描、跨平台路径数据库 |
+| 10 | 版本管理 | `commands/version_manager.rs` | 多语言运行时版本切换、Shell 配置 |
+| 11 | API Hub | `api_hub/` | 本地 AI 网关、多协议格式转换、流式 |
+| 13 | 容器管理 | `commands/container.rs` | Docker/Podman 容器、镜像、卷、Compose |
 | 14 | 环境迁移 | `commands/migration.rs` | 配置文件导入/导出 |
 | 15 | 自动更新 | `commands/updater.rs` | GitHub Release 检查 + 双语日志 |
 

@@ -6,8 +6,8 @@
 
 **通信链路**:
 ```
-EnvironmentManager.svelte ──→ invoke("list_versions")    ──→ version_manager.rs
-                         ──→ invoke("switch_version")    ──→ version_manager.rs
+EnvironmentManager.vue ──→ invoke("list_versions")    ──→ version_manager.rs
+                        ──→ invoke("switch_version")    ──→ version_manager.rs
 ```
 
 ---
@@ -34,19 +34,21 @@ pub enum LangType {
 }
 ```
 
-**前端对应** (`routes/EnvironmentManager.svelte`):
+**前端对应** (`views/EnvironmentManager.vue`):
 
 ```javascript
-let versionCache = $state({});   // { langType: { versions: [...], current: "..." } }
+import { ref } from "vue";
+
+const versionCache = ref({});   // { langType: { versions: [...], current: "..." } }
 
 async function loadVersions(env, forceRefresh = false) {
     // 使用缓存 — 10 分钟 TTL
-    if (!forceRefresh && versionCache[env.lang_type]?.timestamp > Date.now() - 600000) {
+    if (!forceRefresh && versionCache.value[env.lang_type]?.timestamp > Date.now() - 600000) {
         return;
     }
     const versions = await invoke("list_versions", { langType: env.lang_type });
-    versionCache = {
-        ...versionCache,
+    versionCache.value = {
+        ...versionCache.value,
         [env.lang_type]: { versions, timestamp: Date.now() },
     };
 }
@@ -408,26 +410,22 @@ pub fn switch_version(lang_type: String, version: String) -> Result<String, Stri
 
 ```html
 <dialog>
-  <h3>Select {env.name} Version</h3>
+  <h3>Select {{ env.name }} Version</h3>
   <div class="divide-y divide-nx-border">
-    {#each versions as v}
-      <button
-        class="flex w-full items-center justify-between px-4 py-3"
-        onclick={() => selectVersion(env, v)}
-      >
-        <div>
-          <span>{v.version}</span>
-          <span class="text-xs text-nx-text-muted">{v.path}</span>
-        </div>
-        <div>
-          {#if v.is_active}
-            <span class="text-nx-success">Active</span>
-          {:else}
-            <span>Switch</span>
-          {/if}
-        </div>
-      </button>
-    {/each}
+    <button
+      v-for="v in versions" :key="v.version"
+      class="flex w-full items-center justify-between px-4 py-3"
+      @click="selectVersion(env, v)"
+    >
+      <div>
+        <span>{{ v.version }}</span>
+        <span class="text-xs text-nx-text-muted">{{ v.path }}</span>
+      </div>
+      <div>
+        <span v-if="v.is_active" class="text-nx-success">Active</span>
+        <span v-else>Switch</span>
+      </div>
+    </button>
   </div>
 </dialog>
 ```
@@ -435,15 +433,15 @@ pub fn switch_version(lang_type: String, version: String) -> Result<String, Stri
 ### 6.2 版本缓存
 
 ```javascript
-let versionCache = $state({});
+const versionCache = ref({});
 
 async function loadVersions(env, forceRefresh = false) {
-    if (!forceRefresh && versionCache[env.lang_type]?.timestamp > Date.now() - 600000) {
+    if (!forceRefresh && versionCache.value[env.lang_type]?.timestamp > Date.now() - 600000) {
         return; // 缓存 10 分钟
     }
     const versions = await invoke("list_versions", { langType: env.lang_type });
-    versionCache = {
-        ...versionCache,
+    versionCache.value = {
+        ...versionCache.value,
         [env.lang_type]: { versions, timestamp: Date.now() },
     };
 }

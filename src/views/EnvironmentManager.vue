@@ -6,6 +6,46 @@ import { showToast } from "../lib/toast.js";
 import { showConfirm } from "../lib/confirm.js";
 import { t, tFormat } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
+import AppIcon from "../components/AppIcon.vue";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyMedia,
+} from "@/components/ui/empty";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const environments = ref([]);
 const loading = ref(true);
@@ -189,187 +229,241 @@ onMounted(() => {
     <!-- Header -->
     <div class="page-header">
       <h1 class="page-title">{{ t("environments.title") }}</h1>
-      <div class="flex gap-2 items-center">
-        <a-button :loading="refreshingAll" @click="refreshAll">
-          <template #icon><icon-refresh /></template>
+      <div class="flex items-center gap-2">
+        <Button variant="outline" :disabled="refreshingAll" @click="refreshAll">
+          <AppIcon name="refresh" :spin="refreshingAll" class="size-4" />
           {{ t("environments.refresh") }}
-        </a-button>
-        <a-button @click="exportEnvironments">
-          <template #icon><icon-download /></template>
+        </Button>
+        <Button variant="outline" @click="exportEnvironments">
+          <AppIcon name="download" class="size-4" />
           {{ t("environments.export") }}
-        </a-button>
-        <a-button type="primary" @click="showCreateModal = true">
-          <template #icon><icon-plus /></template>
+        </Button>
+        <Button @click="showCreateModal = true">
+          <AppIcon name="plus" class="size-4" />
           {{ t("environments.new") }}
-        </a-button>
+        </Button>
       </div>
     </div>
 
-    <a-spin :loading="loading" style="width: 100%">
-      <a-result v-if="error" status="error" :title="error" style="padding: 48px 0">
-        <template #extra>
-          <a-button type="primary" @click="loadEnvironments">{{ t("common.retry") }}</a-button>
-        </template>
-      </a-result>
+    <!-- Loading -->
+    <Card v-if="loading" class="shadow-sm">
+      <CardContent class="space-y-3 py-4">
+        <Skeleton class="h-10 w-full" />
+        <Skeleton class="h-10 w-full" />
+        <Skeleton class="h-10 w-full" />
+      </CardContent>
+    </Card>
 
-      <a-empty
-        v-else-if="environments.length === 0"
-        :description="t('environments.none')"
-        style="padding: 48px 0"
-      >
-        <template #description>
-          <div>{{ t("environments.none") }}</div>
-          <div class="empty-hint">{{ t("environments.none_hint") }}</div>
-        </template>
-      </a-empty>
+    <!-- Error -->
+    <Card v-else-if="error" class="shadow-sm">
+      <CardContent class="py-4">
+        <Alert variant="destructive">
+          <AppIcon name="close-circle-fill" class="size-4" />
+          <AlertTitle>{{ t("error.title") }}</AlertTitle>
+          <AlertDescription>{{ error }}</AlertDescription>
+        </Alert>
+        <Button class="mt-3" @click="loadEnvironments">
+          {{ t("common.retry") }}
+        </Button>
+      </CardContent>
+    </Card>
 
-      <a-card v-else :bordered="true" class="env-card">
-        <a-table
-          :data="environments"
-          :pagination="false"
-          :bordered="false"
-          :row-key="'name'"
-          size="small"
-        >
-          <template #columns>
-            <a-table-column :title="t('environments.name')" data-index="name">
-              <template #cell="{ record }">
+    <!-- Empty -->
+    <Card v-else-if="environments.length === 0" class="shadow-sm">
+      <CardContent class="py-4">
+        <Empty class="py-5">
+          <EmptyMedia>
+            <AppIcon name="code" class="size-10 text-muted-foreground/60" />
+          </EmptyMedia>
+          <EmptyContent>
+            <EmptyDescription>
+              <div>{{ t("environments.none") }}</div>
+              <div class="empty-hint">{{ t("environments.none_hint") }}</div>
+            </EmptyDescription>
+          </EmptyContent>
+        </Empty>
+      </CardContent>
+    </Card>
+
+    <!-- Table -->
+    <Card v-else class="shadow-sm">
+      <CardContent class="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-[38%]">{{ t("environments.name") }}</TableHead>
+              <TableHead>{{ t("environments.path") }}</TableHead>
+              <TableHead class="w-[130px]">{{ t("environments.status") }}</TableHead>
+              <TableHead class="w-[130px] text-right">{{ t("environments.actions") }}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="record in environments" :key="record.name">
+              <TableCell>
                 <div class="env-name-cell">
                   <span class="env-name">{{ record.name }}</span>
-                  <a-typography-text code type="secondary" style="font-size: 12px">
+                  <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
                     v{{ record.version }}
-                  </a-typography-text>
+                  </code>
                 </div>
-              </template>
-            </a-table-column>
-            <a-table-column :title="t('environments.path')" data-index="path">
-              <template #cell="{ record }">
+              </TableCell>
+              <TableCell>
                 <span class="env-path">{{ record.path }}</span>
-              </template>
-            </a-table-column>
-            <a-table-column :title="t('environments.status')" data-index="status" :width="140">
-              <template #cell="{ record }">
-                <a-tag color="green" size="small">
-                  <template #icon><icon-check-circle /></template>
+              </TableCell>
+              <TableCell>
+                <Badge variant="secondary" class="gap-1">
+                  <AppIcon name="check-circle" class="size-3.5 text-success" />
                   {{ record.status }}
-                </a-tag>
-              </template>
-            </a-table-column>
-            <a-table-column :title="t('environments.actions')" :width="130" align="right">
-              <template #cell="{ record }">
-                <div class="actions-row">
-                  <a-tooltip :content="t('environments.add_to_path')">
-                    <a-button type="text" size="mini" @click="addToPath(record)">
-                      <template #icon><icon-plus /></template>
-                    </a-button>
-                  </a-tooltip>
-                  <a-tooltip :content="t('environments.remove_from_path')">
-                    <a-button type="text" size="mini" @click="removeFromPath(record)">
-                      <template #icon><icon-minus /></template>
-                    </a-button>
-                  </a-tooltip>
-                  <a-tooltip :content="t('environments.view_config')">
-                    <a-button type="text" size="mini" @click="viewConfig(record)">
-                      <template #icon><icon-file /></template>
-                    </a-button>
-                  </a-tooltip>
-                </div>
-              </template>
-            </a-table-column>
-          </template>
-        </a-table>
-
-        <template #footer>
-          <div class="table-footer">
-            <span class="footer-count">
-              {{ tFormat("environments.count", { count: environments.length }) }}
-            </span>
-          </div>
-        </template>
-      </a-card>
-    </a-spin>
+                </Badge>
+              </TableCell>
+              <TableCell>
+                <TooltipProvider>
+                  <div class="actions-row">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon-sm" class="size-7" @click="addToPath(record)">
+                          <AppIcon name="plus" class="size-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{{ t("environments.add_to_path") }}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon-sm" class="size-7" @click="removeFromPath(record)">
+                          <AppIcon name="minus" class="size-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{{ t("environments.remove_from_path") }}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon-sm" class="size-7" @click="viewConfig(record)">
+                          <AppIcon name="file" class="size-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{{ t("environments.view_config") }}</TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <div class="table-footer">
+          <span class="footer-count">
+            {{ tFormat("environments.count", { count: environments.length }) }}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- 版本展开面板（独立于表格下方渲染） -->
     <template v-for="env in environments" :key="env.name">
-      <a-card
+      <Card
         v-if="expanded[env.name] && versionManagedTypes.includes(env.lang_type)"
-        :bordered="true"
-        class="version-panel"
+        class="version-panel shadow-sm"
       >
-        <template #title>
-          <div class="version-head">
-            <span class="version-title">{{ t("environments.versions") }}</span>
-            <a-button
-              size="mini"
-              :loading="!!refreshing[env.name]"
-              @click="refreshVersions(env)"
-            >
-              <template #icon><icon-refresh /></template>
-              {{ t("environments.refresh") }}
-            </a-button>
-          </div>
-        </template>
-
-        <div v-if="loadingVersions[env.name]" class="version-loading">
-          <a-spin :size="14" style="margin-right: 8px" />
-          {{ t("common.loading") }}
-        </div>
-
-        <div v-else-if="versionsMap[env.name] && versionsMap[env.name].length > 0" class="version-list">
-          <div
-            v-for="ver in versionsMap[env.name]"
-            :key="ver.version"
-            class="version-row"
-            :class="{ active: ver.is_active }"
+        <CardHeader class="flex-row items-center justify-between space-y-0 py-3">
+          <CardTitle class="version-title">{{ t("environments.versions") }}</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            :disabled="!!refreshing[env.name]"
+            @click="refreshVersions(env)"
           >
-            <div class="version-left">
-              <icon-check-circle-fill v-if="ver.is_active" class="active-icon" />
-              <icon-radio-button-unchecked v-else class="inactive-icon" />
-              <span class="version-mono">{{ ver.version }}</span>
-              <span v-if="ver.path" class="version-path">{{ ver.path }}</span>
-            </div>
-            <div class="version-right">
-              <span v-if="ver.is_active" class="active-label">{{ t("environments.active") }}</span>
-              <a-button
-                v-else
-                size="mini"
-                type="primary"
-                :loading="!!switchingVersion[env.name]"
-                @click="switchVersion(env, ver)"
-              >
-                {{ t("environments.switch") }}
-              </a-button>
+            <AppIcon name="refresh" :spin="!!refreshing[env.name]" class="size-3.5" />
+            {{ t("environments.refresh") }}
+          </Button>
+        </CardHeader>
+
+        <CardContent>
+          <div v-if="loadingVersions[env.name]" class="version-loading">
+            <Spinner class="mr-2 size-3.5" />
+            {{ t("common.loading") }}
+          </div>
+
+          <div v-else-if="versionsMap[env.name] && versionsMap[env.name].length > 0" class="version-list">
+            <div
+              v-for="ver in versionsMap[env.name]"
+              :key="ver.version"
+              class="version-row"
+              :class="{ active: ver.is_active }"
+            >
+              <div class="version-left">
+                <AppIcon v-if="ver.is_active" name="check-circle-fill" class="active-icon size-4" />
+                <AppIcon v-else name="radio-button-unchecked" class="inactive-icon size-4" />
+                <span class="version-mono">{{ ver.version }}</span>
+                <span v-if="ver.path" class="version-path">{{ ver.path }}</span>
+              </div>
+              <div class="version-right">
+                <span v-if="ver.is_active" class="active-label">{{ t("environments.active") }}</span>
+                <Button
+                  v-else
+                  size="sm"
+                  :disabled="!!switchingVersion[env.name]"
+                  @click="switchVersion(env, ver)"
+                >
+                  <Spinner v-if="switchingVersion[env.name]" class="size-3.5" />
+                  {{ t("environments.switch") }}
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <a-empty v-else :description="t('environments.no_versions')" style="padding: 16px 0" />
-      </a-card>
+          <Empty v-else class="py-4">
+            <EmptyContent>
+              <EmptyDescription>{{ t("environments.no_versions") }}</EmptyDescription>
+            </EmptyContent>
+          </Empty>
+        </CardContent>
+      </Card>
     </template>
 
-    <!-- Create Environment Modal -->
-    <a-modal
-      v-model:visible="showCreateModal"
-      :title="`${t('environments.title')} - ${t('environments.new')}`"
-      :on-before-ok="createEnvironment"
-      :ok-button-props="{ disabled: !newEnvName.trim() || !newEnvPath.trim() || creating, loading: creating }"
-    >
-      <a-form layout="vertical">
-        <a-form-item :label="t('environments.name')">
-          <a-input v-model="newEnvName" :placeholder="t('environments.name_placeholder')" />
-        </a-form-item>
-        <a-form-item :label="t('environments.path')">
-          <a-input v-model="newEnvPath" :placeholder="t('environments.path_placeholder')" />
-        </a-form-item>
-      </a-form>
-    </a-modal>
+    <!-- Create Environment Dialog -->
+    <Dialog v-model:open="showCreateModal">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{{ `${t('environments.title')} - ${t('environments.new')}` }}</DialogTitle>
+        </DialogHeader>
+        <div class="space-y-3">
+          <div class="grid gap-2">
+            <Label for="new-env-name">{{ t("environments.name") }}</Label>
+            <Input
+              id="new-env-name"
+              v-model="newEnvName"
+              :placeholder="t('environments.name_placeholder')"
+            />
+          </div>
+          <div class="grid gap-2">
+            <Label for="new-env-path">{{ t("environments.path") }}</Label>
+            <Input
+              id="new-env-path"
+              v-model="newEnvPath"
+              :placeholder="t('environments.path_placeholder')"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="showCreateModal = false">
+            {{ t("common.cancel") }}
+          </Button>
+          <Button
+            :disabled="!newEnvName.trim() || !newEnvPath.trim() || creating"
+            @click="createEnvironment"
+          >
+            <Spinner v-if="creating" class="size-4" />
+            {{ t("common.confirm") }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
 <style scoped>
 .empty-hint {
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   margin-top: 4px;
 }
 .env-name-cell {
@@ -379,12 +473,12 @@ onMounted(() => {
 }
 .env-name {
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 .env-path {
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
 }
 .actions-row {
   display: flex;
@@ -392,27 +486,21 @@ onMounted(() => {
   gap: 2px;
 }
 .table-footer {
-  padding: 10px 0;
+  padding: 10px 14px;
 }
 .footer-count {
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .version-panel {
   margin-top: 8px;
-  border-radius: 8px;
-}
-.version-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 .version-title {
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .version-loading {
   display: flex;
@@ -420,7 +508,7 @@ onMounted(() => {
   justify-content: center;
   padding: 20px;
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .version-list {
   display: flex;
@@ -438,11 +526,11 @@ onMounted(() => {
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 .version-row:hover {
-  background-color: var(--color-fill-1);
+  background-color: var(--color-muted);
 }
 .version-row.active {
-  border-color: var(--color-primary-6);
-  background-color: var(--color-primary-1);
+  border-color: var(--color-primary);
+  background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 .version-left {
   display: flex;
@@ -450,20 +538,20 @@ onMounted(() => {
   gap: 8px;
 }
 .active-icon {
-  color: var(--color-primary-6);
+  color: var(--color-primary);
 }
 .inactive-icon {
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
 }
 .version-mono {
   font-family: "JetBrains Mono", monospace;
   font-size: 13px;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 .version-path {
   font-family: "JetBrains Mono", monospace;
   font-size: 11px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .version-right {
   display: flex;
@@ -471,6 +559,6 @@ onMounted(() => {
 }
 .active-label {
   font-size: 12px;
-  color: var(--color-primary-6);
+  color: var(--color-primary);
 }
 </style>

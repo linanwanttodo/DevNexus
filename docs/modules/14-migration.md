@@ -6,11 +6,11 @@
 
 **通信链路**:
 ```
-Migration.svelte ──→ invoke("export_migration")        ──→ migration.rs
-               ──→ invoke("save_export_file")         ──→ migration.rs
-               ──→ invoke("parse_migration_manifest") ──→ migration.rs
-               ──→ invoke("load_migration_file")      ──→ migration.rs
-               ──→ invoke("import_migration")         ──→ migration.rs
+Migration.vue ──→ invoke("export_migration")        ──→ migration.rs
+             ──→ invoke("save_export_file")         ──→ migration.rs
+             ──→ invoke("parse_migration_manifest") ──→ migration.rs
+             ──→ invoke("load_migration_file")      ──→ migration.rs
+             ──→ invoke("import_migration")         ──→ migration.rs
 ```
 
 ---

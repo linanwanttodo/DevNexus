@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
+import AppIcon from "./AppIcon.vue";
 import { t } from "../lib/i18n.js";
 import { APP_VERSION } from "../lib/version.js";
 
@@ -38,18 +39,18 @@ async function loadResourceUsage() {
 }
 
 const navItems = [
-  { route: "/dashboard", label: () => t("nav.dashboard"), icon: "icon-dashboard" },
-  { route: "/environments", label: () => t("nav.environments"), icon: "icon-code" },
-  { route: "/migration", label: () => t("nav.migration"), icon: "icon-swap" },
-  { route: "/software", label: () => t("nav.software"), icon: "icon-apps" },
-  { route: "/containers", label: () => t("nav.containers"), icon: "icon-command" },
-  { route: "/mirrors", label: () => t("nav.mirrors"), icon: "icon-sync" },
-  { route: "/processes", label: () => t("nav.processes"), icon: "icon-thunderbolt" },
-  { route: "/passwords", label: () => t("nav.passwords"), icon: "icon-lock" },
-  { route: "/cookies", label: () => t("nav.cookies"), icon: "icon-idcard" },
-  { route: "/uninstall", label: () => t("nav.uninstall"), icon: "icon-delete" },
-  { route: "/api-hub", label: () => t("nav.api_hub"), icon: "icon-branch" },
-  { route: "/settings", label: () => t("nav.settings"), icon: "icon-settings" },
+  { route: "/dashboard", label: () => t("nav.dashboard"), icon: "dashboard" },
+  { route: "/environments", label: () => t("nav.environments"), icon: "code" },
+  { route: "/migration", label: () => t("nav.migration"), icon: "swap" },
+  { route: "/software", label: () => t("nav.software"), icon: "apps" },
+  { route: "/containers", label: () => t("nav.containers"), icon: "command" },
+  { route: "/mirrors", label: () => t("nav.mirrors"), icon: "sync" },
+  { route: "/processes", label: () => t("nav.processes"), icon: "thunderbolt" },
+  { route: "/passwords", label: () => t("nav.passwords"), icon: "lock" },
+  { route: "/cookies", label: () => t("nav.cookies"), icon: "idcard" },
+  { route: "/uninstall", label: () => t("nav.uninstall"), icon: "delete" },
+  { route: "/api-hub", label: () => t("nav.api_hub"), icon: "branch" },
+  { route: "/settings", label: () => t("nav.settings"), icon: "settings" },
 ];
 
 const selectedKey = computed(() => {
@@ -71,8 +72,8 @@ const memBar = computed(() =>
   resourceUsage.value ? Math.min(resourceUsage.value.memory_percent, 100) : 0
 );
 
-function handleClick(key) {
-  router.push(key);
+function handleClick(routePath) {
+  router.push(routePath);
 }
 </script>
 
@@ -80,47 +81,61 @@ function handleClick(key) {
   <aside class="sidebar" aria-label="Main navigation">
     <!-- Logo area -->
     <div class="logo">
-      <icon-terminal class="logo-icon" />
+      <svg
+        class="logo-icon"
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <polyline points="4 17 10 11 4 5" />
+        <line x1="12" y1="19" x2="20" y2="19" />
+      </svg>
       <span class="logo-text">DevNexus</span>
     </div>
 
     <!-- Navigation -->
-    <a-menu
-      class="nav-menu"
-      :selected-keys="[selectedKey]"
-      @menu-item-click="handleClick"
-      :auto-open-selected="true"
-    >
-      <a-menu-item v-for="item in navItems" :key="item.route">
-        <template #icon>
-          <component :is="item.icon" />
-        </template>
-        {{ item.label() }}
-      </a-menu-item>
-    </a-menu>
+    <nav class="nav-menu">
+      <button
+        v-for="item in navItems"
+        :key="item.route"
+        type="button"
+        class="nav-item"
+        :class="{ active: selectedKey === item.route }"
+        @click="handleClick(item.route)"
+      >
+        <AppIcon :name="item.icon" class="nav-item-icon" />
+        <span>{{ item.label() }}</span>
+      </button>
+    </nav>
 
     <!-- Status Bar -->
     <div v-if="resourceUsage" class="status-bar">
       <div class="status-row">
         <span class="status-name">CPU</span>
-        <a-progress
-          :percent="cpuBar"
-          :show-text="false"
-          :color="{ from: 'rgb(var(--primary-5))', to: 'rgb(var(--primary-6))' }"
-          size="small"
-          class="status-bar-progress"
-        />
+        <div class="status-track">
+          <div
+            class="status-fill"
+            :style="{ width: cpuBar + '%' }"
+            :class="cpuBar > 80 ? 'fill-high' : 'fill-normal'"
+          ></div>
+        </div>
         <span class="status-value">{{ cpuPercent }}%</span>
       </div>
       <div class="status-row">
         <span class="status-name">MEM</span>
-        <a-progress
-          :percent="memBar"
-          :show-text="false"
-          :color="{ from: 'rgb(var(--green-5))', to: 'rgb(var(--green-6))' }"
-          size="small"
-          class="status-bar-progress"
-        />
+        <div class="status-track">
+          <div
+            class="status-fill"
+            :style="{ width: memBar + '%' }"
+            :class="memBar > 80 ? 'fill-high' : 'fill-green'"
+          ></div>
+        </div>
         <span class="status-value">{{ memPercent }}%</span>
       </div>
     </div>
@@ -155,7 +170,7 @@ function handleClick(key) {
   flex-shrink: 0;
   height: 100%;
   border-right: 1px solid var(--color-border);
-  background-color: var(--color-bg-2, #161616);
+  background-color: var(--color-sidebar);
 }
 
 .logo {
@@ -169,33 +184,61 @@ function handleClick(key) {
 }
 
 .logo-icon {
-  font-size: 18px;
-  color: var(--color-primary-6);
+  color: var(--color-sidebar-primary);
 }
 
 .logo-text {
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--color-text-1);
+  color: var(--color-sidebar-foreground);
 }
 
 .nav-menu {
   flex: 1;
   overflow-y: auto;
   padding: 8px;
-  border: none;
-  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   overflow-x: hidden;
 }
 
-.nav-menu :deep(.arco-menu-inner) {
-  padding: 8px;
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-sidebar-foreground);
+  opacity: 0.72;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    opacity 0.12s ease;
 }
 
-.nav-menu :deep(.arco-menu-item) {
-  border-radius: 6px;
-  margin-bottom: 2px;
+.nav-item:hover {
+  background-color: var(--color-sidebar-accent);
+  opacity: 1;
+}
+
+.nav-item.active {
+  background-color: var(--color-sidebar-accent);
+  color: var(--color-sidebar-foreground);
+  opacity: 1;
+  font-weight: 500;
+}
+
+.nav-item-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 .status-bar {
@@ -216,19 +259,42 @@ function handleClick(key) {
 .status-name {
   width: 28px;
   font-size: 10px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   font-family: "JetBrains Mono", monospace;
 }
 
-.status-bar-progress {
+.status-track {
   flex: 1;
+  height: 4px;
+  border-radius: 9999px;
+  background-color: var(--color-muted);
+  overflow: hidden;
+}
+
+.status-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+}
+
+.fill-normal {
+  background-color: var(--color-primary);
+}
+
+.fill-green {
+  background-color: var(--color-primary);
+  opacity: 0.85;
+}
+
+.fill-high {
+  background-color: var(--color-destructive);
 }
 
 .status-value {
   width: 32px;
   text-align: right;
   font-size: 10px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   font-family: "JetBrains Mono", monospace;
 }
 
@@ -246,16 +312,16 @@ function handleClick(key) {
 
 .github-link {
   display: flex;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   transition: color 0.15s ease;
 }
 
 .github-link:hover {
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 
 .version {
   font-size: 11px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 </style>

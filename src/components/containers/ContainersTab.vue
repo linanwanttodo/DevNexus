@@ -1,7 +1,31 @@
 <script setup>
-import { computed } from "vue";
 import { t } from "../../lib/i18n.js";
 import ContainerIcons from "../../icons/ContainerIcons.vue";
+import AppIcon from "../AppIcon.vue";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyMedia,
+} from "@/components/ui/empty";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const props = defineProps({
   items: { type: Array, default: () => [] },
@@ -30,136 +54,181 @@ const statusIcon = (status) =>
     : status === "paused"
       ? "container-paused"
       : "container-exited";
-
-const columns = computed(() => [
-  { title: "", slotName: "status", width: 40 },
-  { title: t("docker.name"), slotName: "name" },
-  { title: t("docker.image"), slotName: "image" },
-  { title: t("docker.ports"), slotName: "ports" },
-  { title: t("docker.created"), slotName: "created", width: 130 },
-  { title: t("docker.actions"), slotName: "actions", align: "right", width: 320 },
-]);
 </script>
 
 <template>
   <div>
     <div class="flex items-center justify-between mb-4">
-      <a-checkbox :model-value="showAll" @change="(c) => emit('show-all-change', c)">
+      <label class="flex cursor-pointer items-center gap-2 text-sm">
+        <Checkbox
+          :model-value="showAll"
+          @update:model-value="(c) => emit('show-all-change', !!c)"
+        />
         {{ t("docker.show_all") }}
-      </a-checkbox>
-      <a-button size="small" @click="emit('refresh')" :disabled="loading">
-        <template #icon>
-          <icon-refresh :spin="loading" />
-        </template>
+      </label>
+      <Button
+        size="sm"
+        variant="outline"
+        :disabled="loading"
+        @click="emit('refresh')"
+      >
+        <AppIcon name="refresh" :spin="loading" class="size-4" />
         {{ t("common.refresh") }}
-      </a-button>
+      </Button>
     </div>
 
-    <a-card :bordered="true" class="section-card">
-      <a-spin :loading="loading && items.length === 0" class="w-full">
-        <a-alert
-          v-if="error"
-          type="error"
-          :message="error"
-          action=" "
-        >
-          <template #action>
-            <a-button size="mini" @click="emit('refresh')">{{ t("common.retry") }}</a-button>
-          </template>
-        </a-alert>
-
-        <a-empty
-          v-else-if="items.length === 0"
-          :description="search ? t('docker.no_matching') : t('docker.no_containers')"
-        >
-          <template #image>
-            <ContainerIcons name="container" :size="36" class="empty-icon" />
-          </template>
-        </a-empty>
-
-        <a-table
-          v-else
-          :data="items"
-          :columns="columns"
-          :pagination="false"
-          :bordered="{ wrapper: false, cell: false }"
-          :loading="loading"
-          size="small"
-          :row-key="(r) => r.id"
-        >
-          <template #status="{ record }">
-            <ContainerIcons :name="statusIcon(record.status)" :size="16" />
-          </template>
-          <template #name="{ record }">
-            <div class="cell-stack">
-              <span class="cell-name">{{ record.name }}</span>
-              <span class="cell-mono">{{ shortId(record.id) }}</span>
-            </div>
-          </template>
-          <template #image="{ record }">
-            <span class="cell-mono">{{ record.image }}</span>
-          </template>
-          <template #ports="{ record }">
-            <span class="cell-mono cell-muted">{{ record.ports || "-" }}</span>
-          </template>
-          <template #created="{ record }">
-            <span class="cell-muted">{{ record.created || "-" }}</span>
-          </template>
-          <template #actions="{ record }">
-            <div class="actions-row">
-              <a-button
-                v-if="record.status === 'running'"
-                size="mini"
-                status="warning"
-                :disabled="actionLoading === record.name"
-                @click="emit('action', record.name, 'pause')"
-              >{{ t("docker.pause") }}</a-button>
-              <a-button
-                v-if="record.status === 'running'"
-                size="mini"
-                status="danger"
-                :disabled="actionLoading === record.name"
-                @click="emit('action', record.name, 'stop')"
-              >{{ t("docker.stop") }}</a-button>
-              <a-button
-                v-else-if="record.status === 'paused'"
-                size="mini"
-                :disabled="actionLoading === record.name"
-                @click="emit('action', record.name, 'unpause')"
-              >{{ t("docker.unpause") }}</a-button>
-              <a-button
-                v-else
-                size="mini"
-                type="primary"
-                status="success"
-                :disabled="actionLoading === record.name"
-                @click="emit('action', record.name, 'start')"
-              >{{ t("docker.start") }}</a-button>
-              <a-button
-                size="mini"
-                :disabled="actionLoading === record.name"
-                @click="emit('action', record.name, 'restart')"
-              >{{ t("docker.restart") }}</a-button>
-              <a-button size="mini" @click="emit('logs', record.name)">
-                <template #icon><icon-file /></template>
-              </a-button>
-              <a-button size="mini" @click="emit('terminal', record.name)">
-                <template #icon><icon-code-square /></template>
-              </a-button>
-              <a-button
-                size="mini"
-                status="danger"
-                :disabled="actionLoading === record.name"
-                @click="emit('action', record.name, 'rm')"
-              >{{ t("docker.delete") }}</a-button>
-            </div>
-          </template>
-        </a-table>
-        <div v-if="items.length" class="table-footer">
-          <span>{{ items.length }} {{ t("docker.containers_count") }}</span>
+    <Card class="section-card shadow-sm">
+      <CardContent class="p-0">
+        <!-- Loading -->
+        <div v-if="loading && items.length === 0" class="space-y-3 p-4">
+          <Skeleton class="h-8 w-full" />
+          <Skeleton class="h-8 w-full" />
+          <Skeleton class="h-8 w-full" />
         </div>
-      </a-spin>
-    </a-card>
+
+        <!-- Error -->
+        <Alert v-else-if="error" variant="destructive" class="m-4">
+          <AlertTitle>{{ t("error.title") }}</AlertTitle>
+          <AlertDescription>{{ error }}</AlertDescription>
+          <Button
+            variant="outline"
+            size="sm"
+            class="mt-3"
+            @click="emit('refresh')"
+          >
+            {{ t("common.retry") }}
+          </Button>
+        </Alert>
+
+        <!-- Empty -->
+        <Empty v-else-if="items.length === 0" class="py-5">
+          <EmptyMedia>
+            <ContainerIcons name="container" :size="36" class="empty-icon" />
+          </EmptyMedia>
+          <EmptyContent>
+            <EmptyDescription>
+              {{ search ? t("docker.no_matching") : t("docker.no_containers") }}
+            </EmptyDescription>
+          </EmptyContent>
+        </Empty>
+
+        <!-- Table -->
+        <template v-else>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead class="w-10" />
+                <TableHead>{{ t("docker.name") }}</TableHead>
+                <TableHead>{{ t("docker.image") }}</TableHead>
+                <TableHead>{{ t("docker.ports") }}</TableHead>
+                <TableHead class="w-[130px]">{{ t("docker.created") }}</TableHead>
+                <TableHead class="w-[320px] text-right">
+                  {{ t("docker.actions") }}
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="record in items" :key="record.id">
+                <TableCell>
+                  <ContainerIcons :name="statusIcon(record.status)" :size="16" />
+                </TableCell>
+                <TableCell>
+                  <div class="cell-stack">
+                    <span class="cell-name">{{ record.name }}</span>
+                    <span class="cell-mono">{{ shortId(record.id) }}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span class="cell-mono">{{ record.image }}</span>
+                </TableCell>
+                <TableCell>
+                  <span class="cell-mono cell-muted">{{ record.ports || "-" }}</span>
+                </TableCell>
+                <TableCell>
+                  <span class="cell-muted">{{ record.created || "-" }}</span>
+                </TableCell>
+                <TableCell>
+                  <div class="actions-row">
+                    <Button
+                      v-if="record.status === 'running'"
+                      size="sm"
+                      variant="outline"
+                      :disabled="actionLoading === record.name"
+                      @click="emit('action', record.name, 'pause')"
+                    >
+                      {{ t("docker.pause") }}
+                    </Button>
+                    <Button
+                      v-if="record.status === 'running'"
+                      size="sm"
+                      variant="destructive"
+                      :disabled="actionLoading === record.name"
+                      @click="emit('action', record.name, 'stop')"
+                    >
+                      {{ t("docker.stop") }}
+                    </Button>
+                    <Button
+                      v-else-if="record.status === 'paused'"
+                      size="sm"
+                      variant="outline"
+                      :disabled="actionLoading === record.name"
+                      @click="emit('action', record.name, 'unpause')"
+                    >
+                      {{ t("docker.unpause") }}
+                    </Button>
+                    <Button
+                      v-else
+                      size="sm"
+                      :disabled="actionLoading === record.name"
+                      @click="emit('action', record.name, 'start')"
+                    >
+                      <Spinner
+                        v-if="actionLoading === record.name"
+                        class="size-3.5"
+                      />
+                      {{ t("docker.start") }}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      :disabled="actionLoading === record.name"
+                      @click="emit('action', record.name, 'restart')"
+                    >
+                      {{ t("docker.restart") }}
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      @click="emit('logs', record.name)"
+                    >
+                      <AppIcon name="file" class="size-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      @click="emit('terminal', record.name)"
+                    >
+                      <AppIcon name="code-square" class="size-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      :disabled="actionLoading === record.name"
+                      @click="emit('action', record.name, 'rm')"
+                    >
+                      {{ t("docker.delete") }}
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+          <div class="table-footer">
+            <span>{{ items.length }} {{ t("docker.containers_count") }}</span>
+          </div>
+        </template>
+      </CardContent>
+    </Card>
   </div>
 </template>
 
@@ -173,15 +242,15 @@ const columns = computed(() => [
 }
 .cell-name {
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 .cell-mono {
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
 }
 .cell-muted {
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .actions-row {
   display: flex;
@@ -194,13 +263,13 @@ const columns = computed(() => [
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 8px 4px 0;
+  padding: 8px 16px 0;
   font-size: 12px;
-  color: var(--color-text-3);
-  border-top: 1px solid var(--color-border-2);
+  color: var(--color-muted-foreground);
+  border-top: 1px solid var(--color-border);
   margin-top: 8px;
 }
 .empty-icon {
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 </style>

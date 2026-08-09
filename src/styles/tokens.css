@@ -38,5 +38,8 @@
   --nx-page-max-width: 1200px;
 
   /* ── 区块卡片间距（统一 section 之间的纵向间隔）── */
-  --nx-section-gap: 16px;
+  --nx-section-gap: 8px;
+
+  /* ── 页面容器纵向内边距（收紧上下留白）── */
+  --nx-page-py: 12px;
 }

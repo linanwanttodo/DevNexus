@@ -5,6 +5,36 @@ import { showToast } from "../lib/toast.js";
 import { showConfirm } from "../lib/confirm.js";
 import { t, tFormat, getLang } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
+import AppIcon from "../components/AppIcon.vue";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyMedia,
+} from "@/components/ui/empty";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import ProviderForm from "../components/hub/ProviderForm.vue";
 
 const activeTab = ref("stats");
@@ -150,9 +180,6 @@ function localeTag() {
 function fmtTime(ts) {
   return ts ? new Date(ts * 1000).toLocaleTimeString(localeTag()) : "-";
 }
-function fmtDate(ts) {
-  return ts ? new Date(ts * 1000).toLocaleDateString(localeTag()) : "-";
-}
 function fmtLatency(ms) {
   return !ms ? "-" : ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
@@ -160,22 +187,91 @@ function statusColor(c) {
   return c >= 200 && c < 300 ? "ok" : c >= 400 ? "bad" : "warn";
 }
 
-function getChartHours() {
-  return stats.value?.by_hour
-    ? Object.entries(stats.value.by_hour).sort((a, b) => Number(a[0]) - Number(b[0]))
-    : [];
+// ── GitHub 风格贡献热力图：53 周 × 7 天 ───────────────
+const HEATMAP_WEEKS = 53;
+
+function dayMs(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
+function heatmapDayKey(ms) {
+  // 与后端 (timestamp / 86400) * 86400 对齐（UTC 日界）
+  return Math.floor(ms / 1000 / 86400) * 86400;
+}
+
+// 从本周日起往前铺满 53 周，生成 [ms, count] 网格（周日→周六 = 列内 7 行）
+function heatmapCells() {
+  const dayMap = stats.value?.by_day || {};
+  const todayMs = dayMs(Date.now());
+  const start = todayMs - (HEATMAP_WEEKS * 7 - 1) * 86400000;
+  const firstSunday = start - new Date(start).getUTCDay() * 86400000;
+  const cells = [];
+  for (let ms = firstSunday; ms <= todayMs; ms += 86400000) {
+    cells.push({
+      ms,
+      count: dayMap[heatmapDayKey(ms)]?.requests || 0,
+    });
+  }
+  return cells;
+}
+
+// 每列（周）的周三代表该周，月份变化时在顶部标注
+function heatmapMonths(cells) {
+  const labels = Array(HEATMAP_WEEKS).fill("");
+  let prev = "";
+  for (let w = 0; w < HEATMAP_WEEKS; w++) {
+    const idx = w * 7 + 3;
+    if (idx >= cells.length) break;
+    const wed = new Date(cells[idx].ms);
+    const name = wed.toLocaleDateString(localeTag(), { month: "short" });
+    if (name !== prev) {
+      labels[w] = name;
+      prev = name;
+    }
+  }
+  return labels;
+}
+
+function heatmapMax(cells) {
+  return cells.length ? Math.max(...cells.map((c) => c.count), 1) : 1;
+}
+
+// GitHub 式 5 档配色：0 → 底色，其余按量分 4 级
+function heatmapColor(count, max) {
+  if (!count) return "var(--color-accent)";
+  const pct = count / Math.max(max, 1);
+  const lvl = pct <= 0.25 ? 0.3 : pct <= 0.5 ? 0.45 : pct <= 0.75 ? 0.6 : 0.85;
+  return `color-mix(in srgb, var(--color-primary) ${(lvl * 100).toFixed(1)}%, var(--color-accent))`;
+}
+function heatmapTooltip(cell) {
+  const date = new Date(cell.ms).toISOString().slice(0, 10);
+  return t("apiHub.heatmap.requestTitle")
+    .replace("{date}", date)
+    .replace("{count}", cell.count);
+}
+// 过去一年请求总数（用于标题下的摘要行）
+const heatmapTotal = computed(() => {
+  const cells = heatmapCells();
+  return cells.reduce((sum, c) => sum + c.count, 0);
+});
+
+// 一次计算整张热力图：格子、月份标注、最大值
+const heatmap = computed(() => {
+  const cells = heatmapCells();
+  return {
+    cells,
+    months: heatmapMonths(cells),
+    max: heatmapMax(cells),
+    cols: Math.ceil(cells.length / 7),
+  };
+});
+
 function getModelEntries() {
   return stats.value?.by_model
     ? Object.entries(stats.value.by_model).sort(
         (a, b) => Number(b[1]?.requests) - Number(a[1]?.requests)
       )
     : [];
-}
-function heatmapColor(requests, max) {
-  const pct = Math.min(requests / Math.max(max, 1), 1);
-  const alpha = (0.12 + pct * 0.88).toFixed(3);
-  return `rgb(var(--primary-6) / ${alpha})`;
 }
 function getAlias(p, id) {
   return p.model_aliases?.[id] || id;
@@ -244,10 +340,6 @@ const metricCards = computed(() =>
     : []
 );
 
-const hourMax = computed(() => {
-  const hours = getChartHours();
-  return hours.length ? Math.max(...hours.map((h) => h[1].requests), 1) : 1;
-});
 const modelMax = computed(() => {
   const models = getModelEntries();
   return models.length ? models[0][1].requests : 1;
@@ -272,111 +364,157 @@ const logColumns = computed(() => [
     </div>
 
     <!-- ════ 聚合网关 (Gateway) ════ -->
-    <a-card :bordered="true" class="gateway-card">
-      <div class="gateway-head">
-        <div class="gateway-title-row">
-          <span class="status-dot" :class="status?.running ? 'on' : 'off'"></span>
-          <h2 class="gateway-title">{{ t("apiHub.gateway.title") }}</h2>
-          <a-tag color="arcoblue" size="small">localhost:{{ status?.port }}</a-tag>
-          <a-tag v-if="status?.running && status?.auth_token" color="green" size="small">
-            Auth Token 已启用
-          </a-tag>
+    <Card class="gateway-card">
+      <CardContent>
+        <div class="gateway-head">
+          <div class="gateway-title-row">
+            <span class="status-dot" :class="status?.running ? 'on' : 'off'"></span>
+            <h2 class="gateway-title">{{ t("apiHub.gateway.title") }}</h2>
+            <Badge class="bg-primary/10 text-primary">localhost:{{ status?.port }}</Badge>
+            <Badge
+              v-if="status?.running && status?.auth_token"
+              class="bg-success/10 text-success dark:text-success"
+            >
+              Auth Token 已启用
+            </Badge>
+          </div>
+          <p class="gateway-desc">{{ t("apiHub.gateway.desc") }}</p>
         </div>
-        <p class="gateway-desc">{{ t("apiHub.gateway.desc") }}</p>
-      </div>
 
-      <div class="endpoint-grid">
-        <button
-          v-for="ep in endpoints"
-          :key="ep"
-          type="button"
-          class="endpoint-btn"
-          :title="t('apiHub.gateway.copyTooltip')"
-          @click="copyEndpoint(ep)"
-        >
-          <icon-copy class="endpoint-icon" />
-          <span class="endpoint-text">{{ ep }}</span>
-        </button>
-      </div>
-
-      <!-- Auth token display -->
-      <div v-if="status?.running && status?.auth_token" class="token-row">
-        <div class="token-info">
-          <icon-lock class="token-icon" />
-          <span class="token-label">X-DevNexus-Token</span>
-          <code class="token-value">{{ status.auth_token }}</code>
+        <div class="endpoint-grid">
+          <button
+            v-for="ep in endpoints"
+            :key="ep"
+            type="button"
+            class="endpoint-btn"
+            :title="t('apiHub.gateway.copyTooltip')"
+            @click="copyEndpoint(ep)"
+          >
+            <AppIcon name="copy" class="endpoint-icon size-4" />
+            <span class="endpoint-text">{{ ep }}</span>
+          </button>
         </div>
-        <a-button size="mini" @click="copyToken">
-          <template #icon><icon-copy /></template>
-          {{ t("apiHub.gateway.copyTooltip") }}
-        </a-button>
-      </div>
-    </a-card>
+
+        <!-- Auth token display -->
+        <div v-if="status?.running && status?.auth_token" class="token-row">
+          <div class="token-info">
+            <AppIcon name="lock" class="token-icon size-4" />
+            <span class="token-label">X-DevNexus-Token</span>
+            <code class="token-value">{{ status.auth_token }}</code>
+          </div>
+          <Button size="sm" variant="outline" @click="copyToken">
+            <AppIcon name="copy" class="size-3.5" />
+            {{ t("apiHub.gateway.copyTooltip") }}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- ════ Tabs ════ -->
-    <a-tabs v-model:active-key="activeTab" class="apihub-tabs">
-      <a-tab-pane
-        v-for="tab in tabs"
-        :key="tab.id"
-        :title="tab.label"
-      >
-        <!-- ════ STATS ════ -->
-        <template v-if="tab.id === 'stats'">
-          <a-alert v-if="error" type="error" class="mb-4" :message="error" />
-          <div v-if="loading && !providers.length" class="loading-block">
-            <a-skeleton :animation="true">
-              <a-skeleton-line :rows="6" />
-            </a-skeleton>
-          </div>
-          <template v-else-if="stats">
-            <!-- Metric cards -->
-            <a-row :gutter="16" class="mb-5">
-              <a-col v-for="card in metricCards" :key="card.label" :span="6">
-                <a-card :bordered="true" class="metric-card">
-                  <div class="metric-head">
-                    <icon-fire v-if="card.icon === 'fire'" class="metric-icon" />
-                    <icon-chat-line v-else-if="card.icon === 'chat'" class="metric-icon" />
-                    <icon-check-circle v-else-if="card.icon === 'check'" class="metric-icon" />
-                    <icon-clock-circle v-else class="metric-icon" />
-                    <span class="metric-label">{{ card.label }}</span>
-                  </div>
-                  <div class="metric-value">{{ card.value }}</div>
-                </a-card>
-              </a-col>
-            </a-row>
+    <Tabs v-model="activeTab" class="apihub-tabs">
+      <TabsList class="mb-4">
+        <TabsTrigger v-for="tab in tabs" :key="tab.id" :value="tab.id">
+          {{ tab.label }}
+        </TabsTrigger>
+      </TabsList>
 
-            <!-- Heatmap -->
-            <a-card :bordered="true" class="mb-4">
-              <template #title>
-                <div class="card-head-row">
-                  <span>{{ t("apiHub.heatmap.title") }}</span>
-                  <div class="legend">
-                    <span>{{ t("apiHub.heatmap.less") }}</span>
-                    <span
-                      v-for="hv in [0.15, 0.35, 0.55, 0.75, 0.95]"
-                      :key="hv"
-                      class="legend-cell"
-                      :style="{ background: heatmapColor(hv, 1) }"
-                    ></span>
-                    <span>{{ t("apiHub.heatmap.more") }}</span>
+      <!-- ════ STATS ════ -->
+      <TabsContent value="stats">
+        <Alert v-if="error" variant="destructive" class="mb-4">
+          <AppIcon name="close-circle-fill" class="size-4" />
+          <AlertTitle>{{ t("error.title") }}</AlertTitle>
+          <AlertDescription>{{ error }}</AlertDescription>
+        </Alert>
+
+        <div v-if="loading && !providers.length" class="loading-block">
+          <div class="space-y-3 py-2">
+            <Skeleton v-for="i in 6" :key="i" class="h-4 w-full" />
+          </div>
+        </div>
+
+        <template v-else-if="stats">
+          <!-- Metric cards -->
+          <div class="mb-3 grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Card v-for="card in metricCards" :key="card.label" class="metric-card">
+              <CardContent class="pt-4">
+                <div class="metric-head">
+                  <AppIcon v-if="card.icon === 'fire'" name="fire" class="metric-icon size-4" />
+                  <AppIcon v-else-if="card.icon === 'chat'" name="chat-line" class="metric-icon size-4" />
+                  <AppIcon v-else-if="card.icon === 'check'" name="check-circle" class="metric-icon size-4" />
+                  <AppIcon v-else name="clock-circle" class="metric-icon size-4" />
+                  <span class="metric-label">{{ card.label }}</span>
+                </div>
+                <div class="metric-value">{{ card.value }}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <!-- Heatmap: GitHub 风格贡献图 -->
+          <Card class="mb-4">
+            <CardHeader class="flex-row items-center justify-between space-y-0">
+              <CardTitle class="text-sm font-medium">{{ t("apiHub.heatmap.title") }}</CardTitle>
+              <div class="legend">
+                <span>{{ t("apiHub.heatmap.less") }}</span>
+                <span
+                  v-for="lv in [0, 0.3, 0.55, 0.8, 1]"
+                  :key="lv"
+                  class="legend-cell"
+                  :style="{ background: heatmapColor(lv, 1) }"
+                ></span>
+                <span>{{ t("apiHub.heatmap.more") }}</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <template v-if="stats.total_requests > 0">
+                <p class="heatmap-summary">
+                  {{ tFormat("apiHub.heatmap.summary", { count: heatmapTotal }) }}
+                </p>
+                <div class="heatmap-wrap">
+                  <!-- 左列：星期标签 -->
+                  <div class="heatmap-days">
+                    <span class="heatmap-day-label"></span>
+                    <span class="heatmap-day-label">Mon</span>
+                    <span class="heatmap-day-label"></span>
+                    <span class="heatmap-day-label">Wed</span>
+                    <span class="heatmap-day-label"></span>
+                    <span class="heatmap-day-label">Fri</span>
+                    <span class="heatmap-day-label"></span>
+                  </div>
+                  <div class="heatmap-body">
+                    <div class="heatmap-months" :style="{ gridTemplateColumns: `repeat(${heatmap.cols}, 12px)` }">
+                      <span v-for="(m, i) in heatmap.months" :key="i" class="heatmap-month">
+                        {{ m }}
+                      </span>
+                    </div>
+                    <div class="heatmap-grid">
+                      <div
+                        v-for="cell in heatmap.cells"
+                        :key="cell.ms"
+                        class="heatmap-cell"
+                        :style="{ background: heatmapColor(cell.count, heatmap.max) }"
+                        :title="heatmapTooltip(cell)"
+                      ></div>
+                    </div>
                   </div>
                 </div>
               </template>
-              <div v-if="getChartHours().length > 0" class="heatmap-grid">
-                <div
-                  v-for="[ts, hd] in getChartHours()"
-                  :key="ts"
-                  class="heatmap-cell"
-                  :style="{ background: heatmapColor(hd.requests, hourMax) }"
-                  :title="t('apiHub.heatmap.requestTitle').replace('{date}', fmtDate(Number(ts))).replace('{count}', hd.requests)"
-                ></div>
-              </div>
-              <a-empty v-else :description="t('apiHub.empty.noData')" />
-            </a-card>
+              <Empty v-else class="py-4">
+                <EmptyMedia>
+                  <AppIcon name="bar-chart" class="logs-empty-icon size-5" />
+                </EmptyMedia>
+                <EmptyContent>
+                  <EmptyDescription>{{ t("apiHub.empty.noData") }}</EmptyDescription>
+                </EmptyContent>
+              </Empty>
+            </CardContent>
+          </Card>
 
-            <!-- Model Usage -->
-            <a-card :bordered="true">
-              <template #title>{{ t("apiHub.models.usageRanking") }}</template>
+          <!-- Model Usage -->
+          <Card>
+            <CardHeader>
+              <CardTitle class="text-sm font-medium">{{ t("apiHub.models.usageRanking") }}</CardTitle>
+            </CardHeader>
+            <CardContent>
               <div v-if="getModelEntries().length > 0" class="model-rank">
                 <div
                   v-for="([model, md], i) in getModelEntries().slice(0, 15)"
@@ -398,161 +536,202 @@ const logColumns = computed(() => [
                   {{ tFormat("apiHub.models.onlyTop15", { count: getModelEntries().length }) }}
                 </div>
               </div>
-              <a-empty v-else :description="t('apiHub.empty.noData')" />
-            </a-card>
-          </template>
-          <a-card v-else :bordered="true" class="empty-state">
-            <icon-bar-chart class="empty-state-icon" />
-            <div class="empty-state-text">{{ t("apiHub.empty.waiting") }}</div>
-          </a-card>
+              <Empty v-else class="py-4">
+                <EmptyContent>
+                  <EmptyDescription>{{ t("apiHub.empty.noData") }}</EmptyDescription>
+                </EmptyContent>
+              </Empty>
+            </CardContent>
+          </Card>
         </template>
 
-        <!-- ════ PROVIDERS ════ -->
-        <template v-else-if="tab.id === 'providers'">
-          <div class="toolbar">
-            <span class="toolbar-count">
-              {{ tFormat("apiHub.providerCount", { count: providers.length }) }}
-            </span>
-            <a-button v-if="!showForm" type="primary" size="small" @click="beginAdd">
-              <template #icon><icon-plus /></template>
-              {{ t("apiHub.addProvider") }}
-            </a-button>
-          </div>
+        <Card v-else class="empty-state">
+          <AppIcon name="bar-chart" class="empty-state-icon size-7" />
+          <div class="empty-state-text">{{ t("apiHub.empty.waiting") }}</div>
+        </Card>
+      </TabsContent>
 
-          <!-- Add/Edit form -->
+      <!-- ════ PROVIDERS ════ -->
+      <TabsContent value="providers">
+        <div class="toolbar">
+          <span class="toolbar-count">
+            {{ tFormat("apiHub.providerCount", { count: providers.length }) }}
+          </span>
+          <Button v-if="!showForm" size="sm" @click="beginAdd">
+            <AppIcon name="plus" class="size-4" />
+            {{ t("apiHub.addProvider") }}
+          </Button>
+        </div>
+
+        <!-- Add/Edit form -->
+        <ProviderForm
+          v-if="showForm"
+          :mode="editingId ? 'edit' : 'add'"
+          :title="editingId ? t('apiHub.editProvider') : t('apiHub.addProvider')"
+          :subtitle="providers.find((p) => p.id === editingId)?.name || ''"
+          :initial="providers.find((p) => p.id === editingId) || null"
+          :protocol-options="protocolOptions"
+          :on-save="saveProvider"
+          :on-cancel="cancelForm"
+        />
+
+        <!-- Provider list -->
+        <div v-for="p in providers" :key="p.id" class="provider-card">
           <ProviderForm
-            v-if="showForm"
-            :mode="editingId ? 'edit' : 'add'"
-            :title="editingId ? t('apiHub.editProvider') : t('apiHub.addProvider')"
-            :subtitle="providers.find((p) => p.id === editingId)?.name || ''"
-            :initial="providers.find((p) => p.id === editingId) || null"
+            v-if="showForm && editingId === p.id"
+            mode="edit"
+            :title="t('apiHub.editProvider')"
+            :subtitle="p.name"
+            :initial="p"
             :protocol-options="protocolOptions"
             :on-save="saveProvider"
             :on-cancel="cancelForm"
           />
-
-          <!-- Provider list -->
-          <div v-for="p in providers" :key="p.id" class="provider-card">
-            <ProviderForm
-              v-if="showForm && editingId === p.id"
-              mode="edit"
-              :title="t('apiHub.editProvider')"
-              :subtitle="p.name"
-              :initial="p"
-              :protocol-options="protocolOptions"
-              :on-save="saveProvider"
-              :on-cancel="cancelForm"
-            />
-            <div v-else class="provider-row">
-              <div class="provider-info">
-                <div class="provider-avatar">
-                  <icon-relation class="provider-avatar-icon" />
-                </div>
-                <div class="provider-main">
-                  <div class="provider-title-row">
-                    <span class="provider-name">{{ p.name }}</span>
-                    <a-tag color="arcoblue" size="small">{{ protocolName(p.protocol) }}</a-tag>
-                    <span class="provider-status" :class="p.enabled ? 'on' : 'off'">
-                      <span class="mini-dot" :class="p.enabled ? 'on' : 'off'"></span>
-                      {{ p.enabled ? t("apiHub.status.active") : t("apiHub.status.disabled") }}
-                    </span>
-                  </div>
-                  <div class="provider-url">{{ p.base_url }}</div>
-                  <div class="provider-models">
-                    <a-tag v-for="m in p.models.slice(0, 8)" :key="m" size="mini" class="model-tag">
-                      {{ getAlias(p, m) }}
-                    </a-tag>
-                    <span v-if="p.models.length > 8" class="model-more">+{{ p.models.length - 8 }}</span>
-                  </div>
-                </div>
+          <div v-else class="provider-row">
+            <div class="provider-info">
+              <div class="provider-avatar">
+                <AppIcon name="relation" class="provider-avatar-icon size-4" />
               </div>
-              <div class="provider-actions">
-                <a-button type="text" size="small" @click="beginEdit(p)" :title="t('apiHub.edit')">
-                  <template #icon><icon-edit /></template>
-                </a-button>
-                <a-button type="text" size="small" status="danger" @click="deleteProvider(p.id)" :title="t('apiHub.delete')">
-                  <template #icon><icon-delete /></template>
-                </a-button>
+              <div class="provider-main">
+                <div class="provider-title-row">
+                  <span class="provider-name">{{ p.name }}</span>
+                  <Badge class="bg-primary/10 text-primary">{{ protocolName(p.protocol) }}</Badge>
+                  <span class="provider-status" :class="p.enabled ? 'on' : 'off'">
+                    <span class="mini-dot" :class="p.enabled ? 'on' : 'off'"></span>
+                    {{ p.enabled ? t("apiHub.status.active") : t("apiHub.status.disabled") }}
+                  </span>
+                </div>
+                <div class="provider-url">{{ p.base_url }}</div>
+                <div class="provider-models">
+                  <Badge
+                    v-for="m in p.models.slice(0, 8)"
+                    :key="m"
+                    variant="secondary"
+                    class="model-tag"
+                  >
+                    {{ getAlias(p, m) }}
+                  </Badge>
+                  <span v-if="p.models.length > 8" class="model-more">+{{ p.models.length - 8 }}</span>
+                </div>
               </div>
             </div>
+            <div class="provider-actions">
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-7 w-7"
+                :title="t('apiHub.edit')"
+                @click="beginEdit(p)"
+              >
+                <AppIcon name="edit" class="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-7 w-7 text-destructive hover:text-destructive"
+                :title="t('apiHub.delete')"
+                @click="deleteProvider(p.id)"
+              >
+                <AppIcon name="delete" class="size-4" />
+              </Button>
+            </div>
           </div>
+        </div>
 
-          <!-- Empty state -->
-          <a-card v-if="providers.length === 0 && !showForm" :bordered="true" class="empty-state">
-            <icon-relation class="empty-state-icon" />
-            <div class="empty-state-text">{{ t("apiHub.empty.noProviders") }}</div>
-            <p class="empty-state-hint">{{ t("apiHub.empty.addHint") }}</p>
-            <a-button type="primary" size="small" class="mt-3" @click="beginAdd">
-              <template #icon><icon-plus /></template>
-              {{ t("apiHub.addFirstProvider") }}
-            </a-button>
-          </a-card>
-        </template>
+        <!-- Empty state -->
+        <Card v-if="providers.length === 0 && !showForm" class="empty-state">
+          <AppIcon name="relation" class="empty-state-icon size-7" />
+          <div class="empty-state-text">{{ t("apiHub.empty.noProviders") }}</div>
+          <p class="empty-state-hint">{{ t("apiHub.empty.addHint") }}</p>
+          <Button size="sm" class="mt-3" @click="beginAdd">
+            <AppIcon name="plus" class="size-4" />
+            {{ t("apiHub.addFirstProvider") }}
+          </Button>
+        </Card>
+      </TabsContent>
 
-        <!-- ════ LOGS ════ -->
-        <template v-else>
-          <a-card :bordered="true">
-            <a-table
-              :data="logs"
-              :columns="logColumns"
-              :pagination="false"
-              :bordered="{ wrapper: false, cell: false }"
-              size="small"
-              :scroll="{ y: 500 }"
-            >
-              <template #time="{ record }">
-                <span class="log-mono log-muted">{{ fmtTime(record.timestamp) }}</span>
-              </template>
-              <template #model="{ record }">
-                <span class="log-model">
-                  {{ record.model }}
-                  <icon-water-drop
-                    v-if="record.is_streaming"
-                    class="log-stream"
-                    :title="t('apiHub.logs.streaming')"
-                  />
-                </span>
-              </template>
-              <template #provider="{ record }">
-                <span class="log-muted">{{ record.provider_name }}</span>
-              </template>
-              <template #tokens="{ record }">
-                <span class="log-tokens">
-                  <span class="log-token-val">↑{{ fmtTokens(record.input_tokens) }}</span>
-                  <span class="log-token-sep">/</span>
-                  <span class="log-token-val">↓{{ fmtTokens(record.output_tokens) }}</span>
-                </span>
-              </template>
-              <template #latency="{ record }">
-                <span class="log-muted">{{ fmtLatency(record.latency_ms) }}</span>
-              </template>
-              <template #status="{ record }">
-                <span
-                  class="log-status"
-                  :class="statusColor(record.status_code)"
-                  :title="record.error_message || ''"
-                >
-                  <span class="status-mini-dot"></span>
-                  {{ record.status_code || "—" }}
-                </span>
-              </template>
-              <template #empty>
-                <div class="logs-empty">
-                  <icon-file class="logs-empty-icon" />
-                  <div class="logs-empty-text">{{ t("apiHub.logs.empty") }}</div>
-                </div>
-              </template>
-            </a-table>
-          </a-card>
-        </template>
-      </a-tab-pane>
-    </a-tabs>
+      <!-- ════ LOGS ════ -->
+      <TabsContent value="logs">
+        <Card>
+          <CardContent class="p-0">
+            <div class="max-h-[500px] overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead
+                      v-for="col in logColumns"
+                      :key="col.slotName"
+                      :class="[
+                        col.align === 'right' && 'text-right',
+                        col.align === 'center' && 'text-center',
+                      ]"
+                      :style="col.width ? { width: col.width + 'px' } : {}"
+                    >
+                      {{ col.title }}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow v-for="(record, i) in logs" :key="i">
+                    <TableCell>
+                      <span class="log-mono log-muted">{{ fmtTime(record.timestamp) }}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span class="log-model">
+                        {{ record.model }}
+                        <AppIcon
+                          v-if="record.is_streaming"
+                          name="water-drop"
+                          class="log-stream size-3"
+                          :title="t('apiHub.logs.streaming')"
+                        />
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span class="log-muted">{{ record.provider_name }}</span>
+                    </TableCell>
+                    <TableCell class="text-right">
+                      <span class="log-tokens">
+                        <span class="log-token-val">↑{{ fmtTokens(record.input_tokens) }}</span>
+                        <span class="log-token-sep">/</span>
+                        <span class="log-token-val">↓{{ fmtTokens(record.output_tokens) }}</span>
+                      </span>
+                    </TableCell>
+                    <TableCell class="text-right">
+                      <span class="log-muted">{{ fmtLatency(record.latency_ms) }}</span>
+                    </TableCell>
+                    <TableCell class="text-center">
+                      <span
+                        class="log-status"
+                        :class="statusColor(record.status_code)"
+                        :title="record.error_message || ''"
+                      >
+                        <span class="status-mini-dot"></span>
+                        {{ record.status_code || "—" }}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+
+              <Empty v-if="logs.length === 0" class="py-4">
+                <EmptyMedia>
+                  <AppIcon name="file" class="logs-empty-icon size-5" />
+                </EmptyMedia>
+                <EmptyContent>
+                  <EmptyDescription>{{ t("apiHub.logs.empty") }}</EmptyDescription>
+                </EmptyContent>
+              </Empty>
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
+    </Tabs>
   </div>
 </template>
 
 <style scoped>
 .gateway-card {
-  border-radius: 10px;
   margin-bottom: 24px;
 }
 .gateway-head {
@@ -574,20 +753,20 @@ const logColumns = computed(() => [
   display: inline-block;
 }
 .status-dot.on {
-  background-color: rgb(var(--green-6));
+  background-color: var(--color-success);
 }
 .status-dot.off {
-  background-color: var(--color-text-4);
+  background-color: var(--color-muted-foreground);
 }
 .gateway-title {
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
   margin: 0;
 }
 .gateway-desc {
   font-size: 11px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
   margin: 0;
 }
 .endpoint-grid {
@@ -601,23 +780,22 @@ const logColumns = computed(() => [
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border: 1px solid var(--color-border-2);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background-color: var(--color-fill-1);
+  background-color: var(--color-muted);
   cursor: pointer;
   font-family: "JetBrains Mono", monospace;
   font-size: 11px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
   text-align: left;
   transition: all 0.15s;
   overflow: hidden;
 }
 .endpoint-btn:hover {
-  border-color: rgb(var(--primary-6));
-  color: var(--color-text-1);
+  border-color: var(--color-primary);
+  color: var(--color-foreground);
 }
 .endpoint-icon {
-  font-size: 14px;
   opacity: 0.5;
   flex-shrink: 0;
 }
@@ -633,8 +811,8 @@ const logColumns = computed(() => [
   gap: 8px;
   margin-top: 12px;
   padding: 10px 12px;
-  background-color: var(--color-fill-1);
-  border: 1px dashed var(--color-border-3);
+  background-color: var(--color-muted);
+  border: 1px dashed var(--color-border);
   border-radius: 8px;
 }
 .token-info {
@@ -644,19 +822,19 @@ const logColumns = computed(() => [
   min-width: 0;
 }
 .token-icon {
-  color: rgb(var(--green-6));
+  color: var(--color-success);
   flex-shrink: 0;
 }
 .token-label {
   font-size: 11px;
   font-weight: 600;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
   flex-shrink: 0;
 }
 .token-value {
   font-family: "JetBrains Mono", monospace;
   font-size: 11px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -677,18 +855,17 @@ const logColumns = computed(() => [
   margin-bottom: 8px;
 }
 .metric-icon {
-  font-size: 14px;
   opacity: 0.6;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .metric-label {
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .metric-value {
   font-size: 20px;
   font-weight: 600;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
   letter-spacing: -0.02em;
   white-space: nowrap;
   overflow: hidden;
@@ -705,26 +882,68 @@ const logColumns = computed(() => [
   align-items: center;
   gap: 6px;
   font-size: 10px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
 }
 .legend-cell {
   width: 12px;
   height: 12px;
   border-radius: 3px;
 }
+.heatmap-summary {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.heatmap-wrap {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.heatmap-days {
+  display: grid;
+  grid-template-rows: repeat(7, 12px);
+  gap: 3px;
+  font-size: 10px;
+  color: var(--color-muted-foreground);
+  flex-shrink: 0;
+}
+.heatmap-day-label {
+  height: 12px;
+  line-height: 12px;
+}
+.heatmap-body {
+  min-width: 0;
+}
+.heatmap-months {
+  display: grid;
+  gap: 3px;
+  height: 18px;
+  margin-bottom: 3px;
+}
+.heatmap-month {
+  font-size: 10px;
+  color: var(--color-muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+}
 .heatmap-grid {
   display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 6px;
+  grid-template-rows: repeat(7, 12px);
+  grid-auto-flow: column;
+  grid-auto-columns: 12px;
+  gap: 3px;
 }
 .heatmap-cell {
-  height: 16px;
+  width: 12px;
+  height: 12px;
   border-radius: 3px;
   transition: filter 0.15s;
   cursor: pointer;
 }
 .heatmap-cell:hover {
-  filter: brightness(1.15);
+  filter: brightness(1.2);
 }
 .model-rank {
   display: flex;
@@ -741,7 +960,7 @@ const logColumns = computed(() => [
   width: 20px;
   text-align: right;
   font-size: 11px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
   font-variant-numeric: tabular-nums;
 }
 .rank-model {
@@ -750,41 +969,41 @@ const logColumns = computed(() => [
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 12px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
   font-family: "JetBrains Mono", monospace;
 }
 .rank-bar-track {
   flex: 1;
   height: 10px;
   border-radius: 5px;
-  background-color: var(--color-fill-2);
+  background-color: var(--color-accent);
   overflow: hidden;
 }
 .rank-bar {
   height: 100%;
   border-radius: 5px;
-  background-color: rgb(var(--primary-6));
+  background-color: var(--color-primary);
   transition: width 1s ease-out;
 }
 .rank-tokens {
   width: 110px;
   text-align: right;
   font-size: 11px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   font-variant-numeric: tabular-nums;
 }
 .rank-requests {
   width: 80px;
   text-align: right;
   font-size: 11px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   font-variant-numeric: tabular-nums;
 }
 .rank-more {
   padding-top: 4px;
   text-align: center;
   font-size: 11px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
 }
 .toolbar {
   display: flex;
@@ -794,7 +1013,7 @@ const logColumns = computed(() => [
 }
 .toolbar-count {
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -806,8 +1025,8 @@ const logColumns = computed(() => [
   align-items: flex-start;
   justify-content: space-between;
   padding: 16px;
-  background-color: var(--color-bg-2);
-  border: 1px solid var(--color-border-2);
+  background-color: var(--color-card);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
 }
 .provider-info {
@@ -821,15 +1040,14 @@ const logColumns = computed(() => [
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background-color: rgb(var(--primary-6), 0.12);
+  background-color: color-mix(in srgb, var(--color-primary) 12%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 .provider-avatar-icon {
-  color: rgb(var(--primary-6));
-  font-size: 18px;
+  color: var(--color-primary);
 }
 .provider-main {
   min-width: 0;
@@ -844,7 +1062,7 @@ const logColumns = computed(() => [
 .provider-name {
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 .provider-status {
   display: inline-flex;
@@ -853,10 +1071,10 @@ const logColumns = computed(() => [
   font-size: 10px;
 }
 .provider-status.on {
-  color: rgb(var(--green-6));
+  color: var(--color-success);
 }
 .provider-status.off {
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
 }
 .mini-dot {
   width: 6px;
@@ -865,15 +1083,15 @@ const logColumns = computed(() => [
   display: inline-block;
 }
 .mini-dot.on {
-  background-color: rgb(var(--green-6));
+  background-color: var(--color-success);
 }
 .mini-dot.off {
-  background-color: var(--color-text-4);
+  background-color: var(--color-muted-foreground);
 }
 .provider-url {
   margin-top: 4px;
   font-size: 11px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
   font-family: "JetBrains Mono", monospace;
   white-space: nowrap;
   overflow: hidden;
@@ -890,7 +1108,7 @@ const logColumns = computed(() => [
 }
 .model-more {
   font-size: 10px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
   align-self: center;
 }
 .provider-actions {
@@ -904,45 +1122,43 @@ const logColumns = computed(() => [
   text-align: center;
 }
 .empty-state-icon {
-  font-size: 28px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
 }
 .empty-state-text {
   margin-top: 8px;
   font-size: 14px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .empty-state-hint {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
 }
 .log-mono {
   font-family: "JetBrains Mono", monospace;
   font-size: 11px;
 }
 .log-muted {
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .log-model {
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 .log-stream {
-  font-size: 12px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
   margin-left: 2px;
   vertical-align: middle;
 }
 .log-tokens {
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   font-variant-numeric: tabular-nums;
 }
 .log-token-val {
-  color: var(--color-text-2);
+  color: var(--color-foreground);
 }
 .log-token-sep {
   opacity: 0.3;
@@ -955,13 +1171,13 @@ const logColumns = computed(() => [
   font-size: 12px;
 }
 .log-status.ok {
-  color: rgb(var(--green-6));
+  color: var(--color-success);
 }
 .log-status.bad {
-  color: rgb(var(--red-6));
+  color: var(--color-danger);
 }
 .log-status.warn {
-  color: rgb(var(--orange-6));
+  color: var(--color-warning);
 }
 .status-mini-dot {
   width: 6px;
@@ -970,17 +1186,7 @@ const logColumns = computed(() => [
   background-color: currentColor;
   display: inline-block;
 }
-.logs-empty {
-  padding: 40px 0;
-  text-align: center;
-}
 .logs-empty-icon {
-  font-size: 22px;
-  color: var(--color-text-4);
-}
-.logs-empty-text {
-  font-size: 12px;
-  color: var(--color-text-4);
-  margin-top: 4px;
+  color: var(--color-muted-foreground);
 }
 </style>

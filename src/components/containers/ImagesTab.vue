@@ -1,7 +1,30 @@
 <script setup>
-import { computed } from "vue";
 import { t } from "../../lib/i18n.js";
 import ContainerIcons from "../../icons/ContainerIcons.vue";
+import AppIcon from "../AppIcon.vue";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyMedia,
+} from "@/components/ui/empty";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const props = defineProps({
   items: { type: Array, default: () => [] },
@@ -16,98 +39,128 @@ const emit = defineEmits(["pull", "build", "refresh", "push", "tag", "remove"]);
 function shortId(id) {
   return id ? id.substring(0, 12) : "";
 }
-
-const columns = computed(() => [
-  { title: t("docker.repository"), slotName: "repo" },
-  { title: t("docker.tag"), slotName: "tag", width: 110 },
-  { title: t("docker.image_id"), slotName: "id", width: 120 },
-  { title: t("docker.created"), slotName: "created", width: 130 },
-  { title: t("docker.size"), slotName: "size", align: "right", width: 100 },
-  { title: t("docker.actions"), slotName: "actions", align: "right", width: 190 },
-]);
 </script>
 
 <template>
   <div>
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">
-        <a-button size="small" @click="emit('pull')">
-          <template #icon><icon-download /></template>
+        <Button size="sm" @click="emit('pull')">
+          <AppIcon name="download" class="size-4" />
           {{ t("docker.pull") }}
-        </a-button>
-        <a-button size="small" @click="emit('build')">
-          <template #icon><icon-build /></template>
+        </Button>
+        <Button size="sm" variant="outline" @click="emit('build')">
+          <AppIcon name="build" class="size-4" />
           {{ t("docker.build") }}
-        </a-button>
+        </Button>
       </div>
-      <a-button size="small" @click="emit('refresh')" :disabled="loading">
-        <template #icon>
-          <icon-refresh :spin="loading" />
-        </template>
+      <Button
+        size="sm"
+        variant="outline"
+        :disabled="loading"
+        @click="emit('refresh')"
+      >
+        <AppIcon name="refresh" :spin="loading" class="size-4" />
         {{ t("common.refresh") }}
-      </a-button>
+      </Button>
     </div>
 
-    <a-card :bordered="true" class="section-card">
-      <a-spin :loading="loading && items.length === 0" class="w-full">
-        <a-alert v-if="error" type="error" :message="error">
-          <template #action>
-            <a-button size="mini" @click="emit('refresh')">{{ t("common.retry") }}</a-button>
-          </template>
-        </a-alert>
-
-        <a-empty
-          v-else-if="items.length === 0"
-          :description="search ? t('docker.no_matching') : t('docker.no_images')"
-        >
-          <template #image>
-            <ContainerIcons name="image" :size="36" class="empty-icon" />
-          </template>
-        </a-empty>
-
-        <a-table
-          v-else
-          :data="items"
-          :columns="columns"
-          :pagination="false"
-          :bordered="{ wrapper: false, cell: false }"
-          :loading="loading"
-          size="small"
-          :row-key="(r) => r.id"
-        >
-          <template #repo="{ record }">
-            <span class="cell-name">{{ record.repository }}</span>
-          </template>
-          <template #tag="{ record }">
-            <a-tag size="small" class="mono-tag">{{ record.tag }}</a-tag>
-          </template>
-          <template #id="{ record }">
-            <span class="cell-mono cell-muted">{{ shortId(record.id) }}</span>
-          </template>
-          <template #created="{ record }">
-            <span class="cell-muted">{{ record.created || "-" }}</span>
-          </template>
-          <template #size="{ record }">
-            <span class="cell-muted">{{ record.size || "-" }}</span>
-          </template>
-          <template #actions="{ record }">
-            <div class="actions-row">
-              <a-button size="mini" @click="emit('push', record)">{{ t("docker.push") }}</a-button>
-              <a-button size="mini" @click="emit('tag', record)">{{ t("docker.tag") }}</a-button>
-              <a-button
-                size="mini"
-                status="danger"
-                :disabled="actionLoading === record.id"
-                @click="emit('remove', record.id, `${record.repository}:${record.tag}`)"
-              >{{ t("docker.delete") }}</a-button>
-            </div>
-          </template>
-        </a-table>
-        <div v-if="items.length" class="table-footer">
-          <span>{{ items.length }} {{ t("docker.images_count") }}</span>
+    <Card class="section-card shadow-sm">
+      <CardContent class="p-0">
+        <!-- Loading -->
+        <div v-if="loading && items.length === 0" class="space-y-3 p-4">
+          <Skeleton class="h-8 w-full" />
+          <Skeleton class="h-8 w-full" />
+          <Skeleton class="h-8 w-full" />
         </div>
-      </a-spin>
-    </a-card>
+
+        <!-- Error -->
+        <Alert v-else-if="error" variant="destructive" class="m-4">
+          <AlertTitle>{{ t("error.title") }}</AlertTitle>
+          <AlertDescription>{{ error }}</AlertDescription>
+          <Button
+            variant="outline"
+            size="sm"
+            class="mt-3"
+            @click="emit('refresh')"
+          >
+            {{ t("common.retry") }}
+          </Button>
+        </Alert>
+
+        <!-- Empty -->
+        <Empty v-else-if="items.length === 0" class="py-5">
+          <EmptyMedia>
+            <ContainerIcons name="image" :size="36" class="empty-icon" />
+          </EmptyMedia>
+          <EmptyContent>
+            <EmptyDescription>
+              {{ search ? t("docker.no_matching") : t("docker.no_images") }}
+            </EmptyDescription>
+          </EmptyContent>
+        </Empty>
+
+        <!-- Table -->
+        <template v-else>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{{ t("docker.repository") }}</TableHead>
+                <TableHead class="w-[110px]">{{ t("docker.tag") }}</TableHead>
+                <TableHead class="w-[120px]">{{ t("docker.image_id") }}</TableHead>
+                <TableHead class="w-[130px]">{{ t("docker.created") }}</TableHead>
+                <TableHead class="w-[100px] text-right">{{ t("docker.size") }}</TableHead>
+                <TableHead class="w-[190px] text-right">
+                  {{ t("docker.actions") }}
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="record in items" :key="record.id">
+                <TableCell>
+                  <span class="cell-name">{{ record.repository }}</span>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary" class="mono-tag font-normal">
+                    {{ record.tag }}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <span class="cell-mono cell-muted">{{ shortId(record.id) }}</span>
+                </TableCell>
+                <TableCell>
+                  <span class="cell-muted">{{ record.created || "-" }}</span>
+                </TableCell>
+                <TableCell class="text-right">
+                  <span class="cell-muted">{{ record.size || "-" }}</span>
+                </TableCell>
+                <TableCell>
+                  <div class="actions-row">
+                    <Button size="sm" variant="outline" @click="emit('push', record)">
+                      {{ t("docker.push") }}
+                    </Button>
+                    <Button size="sm" variant="outline" @click="emit('tag', record)">
+                      {{ t("docker.tag") }}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      :disabled="actionLoading === record.id"
+                      @click="emit('remove', record.id, `${record.repository}:${record.tag}`)"
+                    >
+                      {{ t("docker.delete") }}
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+          <div class="table-footer">
+            <span>{{ items.length }} {{ t("docker.images_count") }}</span>
+          </div>
+        </template>
+      </CardContent>
+    </Card>
   </div>
 </template>
 
@@ -117,14 +170,14 @@ const columns = computed(() => [
 }
 .cell-name {
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 .cell-mono {
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
 }
 .cell-muted {
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .mono-tag {
   font-family: "JetBrains Mono", monospace;
@@ -139,13 +192,13 @@ const columns = computed(() => [
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 8px 4px 0;
+  padding: 8px 16px 0;
   font-size: 12px;
-  color: var(--color-text-3);
-  border-top: 1px solid var(--color-border-2);
+  color: var(--color-muted-foreground);
+  border-top: 1px solid var(--color-border);
   margin-top: 8px;
 }
 .empty-icon {
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 </style>

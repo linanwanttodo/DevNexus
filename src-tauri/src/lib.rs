@@ -28,6 +28,17 @@ pub fn run() {
         .manage(version_cache)
         .manage(api_hub_state)
         .setup(move |app| {
+            // 开发模式下强制禁用 WebView 缓存，并在窗口加载后硬刷新一次，确保显示最新代码
+            #[cfg(debug_assertions)]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.clear_all_browsing_data();
+                let w = window.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                    let _ = w.eval("location.reload(true)");
+                });
+            }
+
             // 启动 API Hub 后台服务
             let state = app.state::<api_hub::types::AppState>();
             let hub = Arc::new(state.inner().clone());
@@ -86,6 +97,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::system::get_system_info,
             commands::system::get_resource_usage,
+            commands::system::get_hardware_status,
             commands::system::get_app_version,
             commands::environment::list_environments,
             commands::environment::add_to_path,
@@ -113,16 +125,9 @@ pub fn run() {
             commands::password_manager::list_passwords,
             commands::password_manager::get_password,
             commands::password_manager::delete_password,
-            commands::password_manager::is_locked,
-            commands::password_manager::set_master_password,
-            commands::password_manager::unlock,
-            commands::password_manager::lock,
-            commands::password_manager::has_master_password,
             commands::password_manager::update_password,
             commands::password_manager::export_chrome_csv,
             commands::password_manager::import_chrome_csv,
-            commands::password_manager::save_to_file,
-            commands::password_manager::load_from_file,
             commands::cookie_extractor::get_supported_browsers,
             commands::cookie_extractor::extract_cookies,
             commands::cookie_extractor::export_as_netscape,

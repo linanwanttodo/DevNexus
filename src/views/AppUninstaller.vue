@@ -5,6 +5,31 @@ import { showToast } from "../lib/toast.js";
 import { showConfirm } from "../lib/confirm.js";
 import { t, tFormat } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
+import AppIcon from "../components/AppIcon.vue";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Alert,
+  AlertDescription,
+} from "@/components/ui/alert";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyMedia,
+} from "@/components/ui/empty";
 
 const apps = ref([]);
 const loading = ref(true);
@@ -258,262 +283,269 @@ onMounted(() => {
         <h1 class="page-title">{{ t("uninstall_mgr.title") }}</h1>
         <p class="page-desc">{{ t("uninstall_mgr.desc") }}</p>
       </div>
-      <a-button @click="loadApps">
-        <template #icon><icon-refresh /></template>
+      <Button variant="outline" @click="loadApps">
+        <AppIcon name="refresh" class="size-4" />
         {{ t("common.refresh") }}
-      </a-button>
+      </Button>
     </div>
 
     <!-- Search & Filter -->
-    <div class="toolbar-row">
-      <a-input
-        v-model="search"
-        allow-clear
-        :placeholder="t('uninstall_mgr.search')"
-        class="search-input"
-      >
-        <template #prefix><icon-search /></template>
-      </a-input>
-      <a-select v-model="sourceFilter" class="source-select">
-        <a-option value="all">{{ t("uninstall_mgr.all_sources") }}</a-option>
-        <a-option v-for="src in sources" :key="src" :value="src">{{ src }}</a-option>
-      </a-select>
+    <div class="mb-4 flex items-center gap-3">
+      <div class="relative flex-1">
+        <AppIcon
+          name="search"
+          class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          v-model="search"
+          :placeholder="t('uninstall_mgr.search')"
+          class="pl-9"
+        />
+      </div>
+      <Select v-model="sourceFilter">
+        <SelectTrigger class="w-[180px]">
+          <SelectValue :placeholder="t('uninstall_mgr.all_sources')" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">{{ t("uninstall_mgr.all_sources") }}</SelectItem>
+          <SelectItem v-for="src in sources" :key="src" :value="src">{{ src }}</SelectItem>
+        </SelectContent>
+      </Select>
     </div>
 
     <!-- App List -->
-    <a-card :bordered="true" class="app-list-card">
-      <a-spin :loading="loading" class="w-full">
-        <!-- Error -->
-        <a-result
-          v-if="error"
-          status="error"
-          :title="error"
+    <Card class="shadow-sm">
+      <!-- Loading -->
+      <CardContent v-if="loading" class="space-y-3 py-4">
+        <Skeleton class="h-10 w-full" />
+        <Skeleton class="h-10 w-full" />
+        <Skeleton class="h-10 w-full" />
+      </CardContent>
+
+      <!-- Error -->
+      <CardContent v-else-if="error" class="py-4">
+        <Alert variant="destructive">
+          <AppIcon name="close-circle-fill" class="size-4" />
+          <AlertDescription>{{ error }}</AlertDescription>
+        </Alert>
+        <Button variant="default" class="mt-3" @click="loadApps">
+          {{ t("common.retry") }}
+        </Button>
+      </CardContent>
+
+      <!-- Empty -->
+      <CardContent v-else-if="apps.length === 0" class="py-4">
+        <Empty class="py-5">
+          <EmptyMedia>
+            <AppIcon name="delete" class="size-10 text-muted-foreground/60" />
+          </EmptyMedia>
+          <EmptyContent>
+            <EmptyDescription>
+              {{ t("uninstall_mgr.no_apps") }}
+            </EmptyDescription>
+          </EmptyContent>
+        </Empty>
+      </CardContent>
+
+      <template v-else>
+        <!-- Column headers -->
+        <div class="flex items-center border-b border-border px-4 py-2 text-xs font-medium text-muted-foreground">
+          <div class="col-name">{{ t("uninstall_mgr.app_name") }}</div>
+          <div class="col-version">{{ t("uninstall_mgr.version") }}</div>
+          <div class="col-source">{{ t("uninstall_mgr.source") }}</div>
+          <div class="col-actions">{{ t("common.actions") }}</div>
+        </div>
+
+        <!-- Rows -->
+        <div
+          v-for="app in filtered"
+          :key="`${app.name}-${app.source}`"
+          class="border-b border-border last:border-b-0"
         >
-          <template #extra>
-            <a-button type="primary" @click="loadApps">{{ t("common.retry") }}</a-button>
-          </template>
-        </a-result>
-
-        <!-- Empty -->
-        <a-empty v-else-if="apps.length === 0" :description="t('uninstall_mgr.no_apps')">
-          <template #image>
-            <icon-delete class="empty-icon-img" />
-          </template>
-        </a-empty>
-
-        <template v-else>
-          <!-- Column headers -->
-          <div class="list-header">
-            <div class="col-name">{{ t("uninstall_mgr.app_name") }}</div>
-            <div class="col-version">{{ t("uninstall_mgr.version") }}</div>
-            <div class="col-source">{{ t("uninstall_mgr.source") }}</div>
-            <div class="col-actions">{{ t("common.actions") }}</div>
-          </div>
-
-          <!-- Rows -->
-          <div v-for="app in filtered" :key="`${app.name}-${app.source}`" class="app-item">
-            <!-- Main row -->
-            <div class="app-row">
-              <!-- Name -->
-              <div class="col-name">
-                <img
-                  v-if="app.icon"
-                  :src="app.icon"
-                  alt=""
-                  class="app-icon"
-                  loading="lazy"
-                  @error="(e) => (e.target.style.display = 'none')"
-                />
-                <span v-else class="app-icon-fallback">
-                  <icon-apps />
-                </span>
-                <span class="app-name">{{ app.name }}</span>
-                <a-tag
-                  v-if="residueScans[app.name]"
-                  color="orange"
-                  size="small"
-                  class="residue-badge"
-                >
-                  {{ tFormat("uninstall_mgr.residues_found", { count: residueScans[app.name].total_items }) }}
-                </a-tag>
-              </div>
-
-              <!-- Version -->
-              <div class="col-version">
-                <a-typography-text code>{{ app.version }}</a-typography-text>
-              </div>
-
-              <!-- Source -->
-              <div class="col-source">
-                <a-tag color="arcoblue" size="small">{{ app.source }}</a-tag>
-              </div>
-
-              <!-- Actions -->
-              <div class="col-actions">
-                <a-button
-                  size="mini"
-                  :loading="scanning === app.name"
-                  :disabled="cleaningResidues === app.name"
-                  @click="toggleScan(app)"
-                >
-                  <template #icon><icon-search /></template>
-                  {{ residueScans[app.name] ? t("uninstall_mgr.close_scan") : t("uninstall_mgr.residue_scan") }}
-                </a-button>
-                <a-button
-                  size="mini"
-                  status="danger"
-                  :loading="uninstalling === app.name"
-                  :disabled="uninstalling !== null || scanning === app.name"
-                  @click="handleUninstall(app)"
-                >
-                  {{ t("uninstall_mgr.uninstall") }}
-                </a-button>
-              </div>
-            </div>
-
-            <!-- Residue scan panel (expandable) -->
-            <div v-if="residueScans[app.name]" class="residue-panel">
-              <a-alert
-                v-if="scanErrors[app.name]"
-                type="error"
-                :message="scanErrors[app.name]"
+          <!-- Main row -->
+          <div class="flex items-center px-4 py-3 transition-colors hover:bg-muted">
+            <!-- Name -->
+            <div class="col-name">
+              <img
+                v-if="app.icon"
+                :src="app.icon"
+                alt=""
+                class="size-7 shrink-0 rounded-md object-contain"
+                loading="lazy"
+                @error="(e) => (e.target.style.display = 'none')"
               />
-              <template v-else>
-                <!-- Summary bar -->
-                <div class="residue-summary">
-                  <div class="summary-stats">
-                    <span>
-                      <span class="stat-num">{{ residueScans[app.name].total_items }}</span>
-                      {{ t("uninstall_mgr.residues_count") }}
-                    </span>
-                    <span>
-                      {{ t("uninstall_mgr.total_size") }}
-                      <span class="stat-num">{{ formatSize(residueScans[app.name].total_size) }}</span>
-                    </span>
-                  </div>
-                  <div class="summary-actions">
-                    <a-button
-                      size="mini"
-                      :loading="cleaningResidues === app.name"
-                      :disabled="cleaningResidues !== null || scanning !== null"
-                      @click="cleanSelected(app.name)"
-                    >
-                      <template #icon><icon-clean /></template>
-                      {{ t("uninstall_mgr.clean_selected") }}
-                    </a-button>
-                    <a-button
-                      size="mini"
-                      status="danger"
-                      :loading="uninstalling === app.name"
-                      :disabled="uninstalling !== null || cleaningResidues !== null"
-                      @click="handleForceUninstall(app)"
-                    >
-                      <template #icon><icon-delete /></template>
-                      {{ t("uninstall_mgr.force_uninstall") }}
-                    </a-button>
-                  </div>
-                </div>
+              <span v-else class="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                <AppIcon name="apps" class="size-4" />
+              </span>
+              <span class="min-w-0 truncate text-sm font-medium text-foreground">{{ app.name }}</span>
+              <Badge
+                v-if="residueScans[app.name]"
+                variant="outline"
+                class="shrink-0 text-warning"
+              >
+                {{ tFormat("uninstall_mgr.residues_found", { count: residueScans[app.name].total_items }) }}
+              </Badge>
+            </div>
 
-                <!-- Residue items grouped by category -->
-                <a-empty
-                  v-if="getAllItems(residueScans[app.name]).length === 0"
-                  :description="t('uninstall_mgr.no_residues')"
-                >
-                  <template #image>
-                    <icon-check-circle class="empty-ok-icon" />
-                  </template>
-                </a-empty>
+            <!-- Version -->
+            <div class="col-version">
+              <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                {{ app.version }}
+              </code>
+            </div>
 
-                <div
-                  v-for="key in residueKeys(residueScans[app.name])"
-                  v-else
-                  :key="key"
-                  class="residue-group"
-                >
-                  <template v-if="residueScans[app.name][key] && residueScans[app.name][key].length > 0">
-                    <button
-                      type="button"
-                      class="group-toggle"
-                      @click="toggleAllInKey(app.name, key, residueScans[app.name][key])"
-                    >
-                      <icon-folder v-if="key === 'directories'" />
-                      <icon-file v-else-if="key === 'files'" />
-                      <icon-shortcut v-else-if="key === 'shortcuts'" />
-                      <icon-tool v-else-if="key === 'services'" />
-                      <icon-database v-else />
-                      {{
-                        t("residue.category_" + (key === "registry_keys" ? "registry" : key))
-                      }}
-                      <span class="group-count">({{ residueScans[app.name][key].length }})</span>
-                    </button>
-                    <div
-                      v-for="item in residueScans[app.name][key]"
-                      :key="item.path"
-                      class="residue-item"
-                    >
-                      <a-checkbox
-                        :model-value="isSelected(app.name, item.path)"
-                        :disabled="!item.is_safe_to_delete"
-                        @change="(c) => toggleItem(app.name, item.path, c)"
-                      />
-                      <icon-settings v-if="item.category === 'config'" class="item-icon" />
-                      <icon-history v-else-if="item.category === 'cache'" class="item-icon" />
-                      <icon-file v-else-if="item.category === 'log'" class="item-icon" />
-                      <icon-delete v-else-if="item.category === 'temp'" class="item-icon" />
-                      <icon-folder v-else-if="item.category === 'data'" class="item-icon" />
-                      <icon-shortcut v-else-if="item.category === 'shortcut'" class="item-icon" />
-                      <icon-tool v-else-if="item.category === 'service'" class="item-icon" />
-                      <icon-database v-else-if="item.category === 'registry'" class="item-icon" />
-                      <icon-file v-else class="item-icon" />
-                      <span class="item-path" :title="item.path">{{ item.path }}</span>
-                      <span class="item-size">{{ item.size > 0 ? formatSize(item.size) : "" }}</span>
-                      <a-tag v-if="!item.is_safe_to_delete" color="orange" size="mini">
-                        {{ t("uninstall_mgr.caution") }}
-                      </a-tag>
-                    </div>
-                  </template>
-                </div>
-              </template>
+            <!-- Source -->
+            <div class="col-source">
+              <Badge variant="secondary">{{ app.source }}</Badge>
+            </div>
+
+            <!-- Actions -->
+            <div class="col-actions">
+              <Button
+                variant="outline"
+                size="sm"
+                :disabled="cleaningResidues === app.name"
+                @click="toggleScan(app)"
+              >
+                <Spinner v-if="scanning === app.name" class="size-3.5" />
+                <AppIcon v-else name="search" class="size-3.5" />
+                {{ residueScans[app.name] ? t("uninstall_mgr.close_scan") : t("uninstall_mgr.residue_scan") }}
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                :disabled="uninstalling !== null || scanning === app.name"
+                @click="handleUninstall(app)"
+              >
+                <Spinner v-if="uninstalling === app.name" class="size-3.5" />
+                {{ t("uninstall_mgr.uninstall") }}
+              </Button>
             </div>
           </div>
 
-          <!-- Footer count -->
-          <div class="list-footer">
-            <span>
-              {{ filtered.length }} / {{ apps.length }} {{ t("uninstall_mgr.apps_count") }}
-            </span>
+          <!-- Residue scan panel (expandable) -->
+          <div v-if="residueScans[app.name]" class="border-t border-border bg-muted px-4 py-3">
+            <Alert v-if="scanErrors[app.name]" variant="destructive" class="mb-3">
+              <AlertDescription>{{ scanErrors[app.name] }}</AlertDescription>
+            </Alert>
+            <template v-else>
+              <!-- Summary bar -->
+              <div class="mb-3 flex items-center justify-between">
+                <div class="flex items-center gap-4 text-xs text-muted-foreground">
+                  <span>
+                    <span class="font-semibold text-foreground">{{ residueScans[app.name].total_items }}</span>
+                    {{ t("uninstall_mgr.residues_count") }}
+                  </span>
+                  <span>
+                    {{ t("uninstall_mgr.total_size") }}
+                    <span class="font-semibold text-foreground">{{ formatSize(residueScans[app.name].total_size) }}</span>
+                  </span>
+                </div>
+                <div class="flex gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    :disabled="cleaningResidues !== null || scanning !== null"
+                    @click="cleanSelected(app.name)"
+                  >
+                    <Spinner v-if="cleaningResidues === app.name" class="size-3.5" />
+                    <AppIcon v-else name="clean" class="size-3.5" />
+                    {{ t("uninstall_mgr.clean_selected") }}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    :disabled="uninstalling !== null || cleaningResidues !== null"
+                    @click="handleForceUninstall(app)"
+                  >
+                    <Spinner v-if="uninstalling === app.name" class="size-3.5" />
+                    <AppIcon v-else name="delete" class="size-3.5" />
+                    {{ t("uninstall_mgr.force_uninstall") }}
+                  </Button>
+                </div>
+              </div>
+
+              <!-- No residues -->
+              <Empty
+                v-if="getAllItems(residueScans[app.name]).length === 0"
+                class="py-4"
+              >
+                <EmptyMedia>
+                  <AppIcon name="check-circle" class="size-8 text-success" />
+                </EmptyMedia>
+                <EmptyContent>
+                  <EmptyDescription>
+                    {{ t("uninstall_mgr.no_residues") }}
+                  </EmptyDescription>
+                </EmptyContent>
+              </Empty>
+
+              <!-- Residue items grouped by category -->
+              <div
+                v-for="key in residueKeys(residueScans[app.name])"
+                v-else
+                :key="key"
+                class="mb-2"
+              >
+                <template v-if="residueScans[app.name][key] && residueScans[app.name][key].length > 0">
+                  <button
+                    type="button"
+                    class="mb-1 flex cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-xs font-medium text-foreground hover:text-primary"
+                    @click="toggleAllInKey(app.name, key, residueScans[app.name][key])"
+                  >
+                    <AppIcon v-if="key === 'directories'" name="folder" class="size-3.5" />
+                    <AppIcon v-else-if="key === 'files'" name="file" class="size-3.5" />
+                    <AppIcon v-else-if="key === 'shortcuts'" name="shortcut" class="size-3.5" />
+                    <AppIcon v-else-if="key === 'services'" name="tool" class="size-3.5" />
+                    <AppIcon v-else name="database" class="size-3.5" />
+                    {{
+                      t("residue.category_" + (key === "registry_keys" ? "registry" : key))
+                    }}
+                    <span class="font-normal text-muted-foreground">({{ residueScans[app.name][key].length }})</span>
+                  </button>
+                  <div
+                    v-for="item in residueScans[app.name][key]"
+                    :key="item.path"
+                    class="flex items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-accent"
+                  >
+                    <Checkbox
+                      :model-value="isSelected(app.name, item.path)"
+                      :disabled="!item.is_safe_to_delete"
+                      @update:model-value="(c) => toggleItem(app.name, item.path, c)"
+                    />
+                    <AppIcon v-if="item.category === 'config'" name="settings" class="size-4 shrink-0 text-muted-foreground" />
+                    <AppIcon v-else-if="item.category === 'cache'" name="history" class="size-4 shrink-0 text-muted-foreground" />
+                    <AppIcon v-else-if="item.category === 'log'" name="file" class="size-4 shrink-0 text-muted-foreground" />
+                    <AppIcon v-else-if="item.category === 'temp'" name="delete" class="size-4 shrink-0 text-muted-foreground" />
+                    <AppIcon v-else-if="item.category === 'data'" name="folder" class="size-4 shrink-0 text-muted-foreground" />
+                    <AppIcon v-else-if="item.category === 'shortcut'" name="shortcut" class="size-4 shrink-0 text-muted-foreground" />
+                    <AppIcon v-else-if="item.category === 'service'" name="tool" class="size-4 shrink-0 text-muted-foreground" />
+                    <AppIcon v-else-if="item.category === 'registry'" name="database" class="size-4 shrink-0 text-muted-foreground" />
+                    <AppIcon v-else name="file" class="size-4 shrink-0 text-muted-foreground" />
+                    <span class="min-w-0 flex-1 truncate text-muted-foreground" :title="item.path">{{ item.path }}</span>
+                    <span class="shrink-0 font-mono text-muted-foreground">{{ item.size > 0 ? formatSize(item.size) : "" }}</span>
+                    <Badge v-if="!item.is_safe_to_delete" variant="outline" class="text-warning">
+                      {{ t("uninstall_mgr.caution") }}
+                    </Badge>
+                  </div>
+                </template>
+              </div>
+            </template>
           </div>
-        </template>
-      </a-spin>
-    </a-card>
+        </div>
+
+        <!-- Footer count -->
+        <div class="flex items-center justify-end border-t border-border px-4 py-2 text-xs text-muted-foreground">
+          <span>
+            {{ filtered.length }} / {{ apps.length }} {{ t("uninstall_mgr.apps_count") }}
+          </span>
+        </div>
+      </template>
+    </Card>
   </div>
 </template>
 
 <style scoped>
-.toolbar-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.search-input {
-  flex: 1;
-}
-.source-select {
-  width: 180px;
-}
-.app-list-card {
-  border-radius: var(--nx-radius-5);
-}
-.list-header {
-  display: flex;
-  align-items: center;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--color-border-2);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-text-3);
-}
 .col-name {
   width: 40%;
   min-width: 0;
@@ -534,142 +566,5 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
-}
-.app-item {
-  border-bottom: 1px solid var(--color-border-2);
-}
-.app-item:last-child {
-  border-bottom: none;
-}
-.app-row {
-  display: flex;
-  align-items: center;
-  padding: 12px 16px;
-  transition: background-color 0.15s;
-}
-.app-row:hover {
-  background-color: var(--color-fill-1);
-}
-.app-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-.app-icon-fallback {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background-color: var(--color-fill-2);
-  color: var(--color-text-3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.app-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.residue-badge {
-  flex-shrink: 0;
-}
-.residue-panel {
-  border-top: 1px solid var(--color-border-2);
-  background-color: var(--color-fill-1);
-  padding: 12px 16px;
-}
-.residue-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.summary-stats {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  font-size: 12px;
-  color: var(--color-text-3);
-}
-.stat-num {
-  font-weight: 600;
-  color: var(--color-text-1);
-}
-.summary-actions {
-  display: flex;
-  gap: 8px;
-}
-.residue-group {
-  margin-bottom: 8px;
-}
-.group-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-text-1);
-  padding: 2px 0;
-  margin-bottom: 4px;
-}
-.group-toggle:hover {
-  color: rgb(var(--primary-6));
-}
-.group-count {
-  color: var(--color-text-4);
-  font-weight: 400;
-}
-.residue-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-}
-.residue-item:hover {
-  background-color: var(--color-fill-2);
-}
-.item-icon {
-  color: var(--color-text-4);
-  flex-shrink: 0;
-}
-.item-path {
-  flex: 1;
-  color: var(--color-text-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.item-size {
-  flex-shrink: 0;
-  font-family: "JetBrains Mono", monospace;
-  color: var(--color-text-4);
-}
-.list-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 8px 16px;
-  border-top: 1px solid var(--color-border-2);
-  font-size: 12px;
-  color: var(--color-text-3);
-}
-.empty-icon-img {
-  font-size: 36px;
-  color: var(--color-text-4);
-}
-.empty-ok-icon {
-  font-size: 36px;
-  color: rgb(var(--green-6));
 }
 </style>

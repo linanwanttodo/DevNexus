@@ -6,14 +6,18 @@
 
 **通信链路**:
 ```
-PasswordManager.svelte ──→ invoke("check_password_manager_status") ──→ password_manager.rs
-                      ──→ invoke("set_master_password")           ──→ password_manager.rs
-                      ──→ invoke("unlock_password_manager")       ──→ password_manager.rs
-                      ──→ invoke("add_password_entry")            ──→ password_manager.rs
-                      ──→ invoke("get_password_entries")          ──→ password_manager.rs
-                      ──→ invoke("update_password_entry")         ──→ password_manager.rs
-                      ──→ invoke("delete_password_entry")         ──→ password_manager.rs
-                      ──→ invoke("generate_password")             ──→ password_manager.rs
+PasswordManager.vue ──→ invoke("is_locked")                ──→ password_manager.rs
+                    ──→ invoke("has_master_password")       ──→ password_manager.rs
+                    ──→ invoke("set_master_password")       ──→ password_manager.rs
+                    ──→ invoke("unlock")                    ──→ password_manager.rs
+                    ──→ invoke("lock")                      ──→ password_manager.rs
+                    ──→ invoke("add_password")              ──→ password_manager.rs
+                    ──→ invoke("list_passwords")            ──→ password_manager.rs
+                    ──→ invoke("get_password")              ──→ password_manager.rs
+                    ──→ invoke("update_password")           ──→ password_manager.rs
+                    ──→ invoke("delete_password")           ──→ password_manager.rs
+                    ──→ invoke("export_chrome_csv")        ──→ password_manager.rs
+                    ──→ invoke("import_chrome_csv")         ──→ password_manager.rs
 ```
 
 ---
@@ -21,59 +25,46 @@ PasswordManager.svelte ──→ invoke("check_password_manager_status") ──�
 ## 2. 数据结构
 
 ```rust
-/// 加密后的密码条目
-#[derive(Serialize, Deserialize, Debug, Clone)]
+/// 密码条目（密码字段为加密后的字符串，明文只在解锁后于内存中解密）
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PasswordEntry {
-    pub id: i64,
-    pub name: String,           // 条目名称，如 "GitHub"
-    pub username: String,       // 明文用户名/邮箱
-    pub encrypted_password: Vec<u8>,  // AES-256-GCM 加密的密码密文
-    pub url: Option<String>,    // 相关 URL
-    pub notes: Option<String>,  // 明文备注（不包含敏感信息）
-    pub category: String,       // "website" / "app" / "database" / "other"
-    pub created_at: String,
-    pub updated_at: String,
+    pub id: u32,                  // 自增主键
+    pub name: String,             // 条目名称，如 "GitHub"
+    pub username: String,         // 明文用户名/邮箱
+    pub password_encrypted: String, // AES-256-GCM 加密后的密文（base64）
+    pub url: Option<String>,      // 相关 URL
+    pub notes: Option<String>,    // 明文备注
+    pub created_at: String,       // 创建时间（RFC3339）
 }
 
-/// 解密后返回给前端的数据（密码解密为明文）
-#[derive(Serialize, Debug)]
-pub struct PasswordEntryView {
-    pub id: i64,
-    pub name: String,
-    pub username: String,
-    pub password: String,      // <-- 解密后的明文密码
-    pub url: Option<String>,
-    pub notes: Option<String>,
-    pub category: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-/// 加密状态
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub enum EncryptionStatus {
-    Uninitialized,   // 未设置主密码
-    Locked,          // 已设置主密码但未解锁
-    Unlocked,        // 已解锁，密钥保留在内存中
+/// 主密码验证器状态（用于判断是否需要解锁）
+pub struct PasswordManager {
+    pub entries: Arc<Mutex<Vec<PasswordEntry>>>,
+    pub next_id: Arc<Mutex<u32>>,
+    encryption_key: Arc<Mutex<[u8; 32]>>, // AES-256 密钥（解锁后驻留内存）
+    pub locked: Arc<Mutex<bool>>,          // 是否处于锁定状态
+    password_verifier: Arc<Mutex<Option<(Vec<u8>, Vec<u8>)>>>, // (salt, hash)
 }
 ```
 
-**前端对应** (`routes/PasswordManager.svelte`):
+**前端对应** (`views/PasswordManager.vue`):
 
 ```javascript
-let status = $state("locked");     // "uninitialized" | "locked" | "unlocked"
-let entries = $state([]);
-let searchQuery = $state("");
+import { ref } from "vue";
 
-// 搜索过滤
-let filtered = $derived(
-    searchQuery
-        ? entries.filter(e =>
-            e.name.toLowerCase().includes(searchQuery) ||
-            e.username.toLowerCase().includes(searchQuery) ||
-            e.url?.toLowerCase().includes(searchQuery)
+const locked = ref(true);        // 是否锁定（未设置主密码时自动解锁）
+const entries = ref([]);
+const searchQuery = ref("");
+
+// 搜索过滤（使用 computed）
+const filtered = computed(() =>
+    searchQuery.value
+        ? entries.value.filter(e =>
+            e.name.toLowerCase().includes(searchQuery.value) ||
+            e.username.toLowerCase().includes(searchQuery.value) ||
+            (e.url && e.url.toLowerCase().includes(searchQuery.value))
           )
-        : entries
+        : entries.value
 );
 ```
 
@@ -211,67 +202,41 @@ pub fn unlock(&mut self, password: &str) -> Result<(), String> {
 
 ### 3.5 密码生成器
 
-```rust
-pub fn generate_password(
-    length: u32,
-    use_uppercase: bool,
-    use_lowercase: bool,
-    use_numbers: bool,
-    use_symbols: bool,
-) -> String {
-    let mut charset = String::new();
-    if use_uppercase { charset.push_str("ABCDEFGHIJKLMNOPQRSTUVWXYZ"); }
-    if use_lowercase { charset.push_str("abcdefghijklmnopqrstuvwxyz"); }
-    if use_numbers  { charset.push_str("0123456789"); }
-    if use_symbols  { charset.push_str("!@#$%^&*()_+-=[]{}|;:,.<>?"); }
+> 注：密码生成在**前端**完成（纯客户端工具函数，不经由 Tauri 命令），生成的明文仅在用户点击「复制」时短暂存在内存中，不会写入加密存储。下方为生成算法的示意逻辑：
 
-    // 确保至少包含每个字符集的一个字符（如果启用）
-    let password: String = (0..length)
-        .map(|_| {
-            let idx = rand::thread_rng().gen_range(0..charset.len());
-            charset.chars().nth(idx).unwrap()
-        })
-        .collect();
+```javascript
+function generatePassword({ length, uppercase, lowercase, numbers, symbols }) {
+    let charset = "";
+    if (uppercase) charset += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    if (lowercase) charset += "abcdefghijklmnopqrstuvwxyz";
+    if (numbers)  charset += "0123456789";
+    if (symbols)  charset += "!@#$%^&*()_+-=[]{}|;:,.<>?";
 
-    password
+    let password = "";
+    const crypto = window.crypto || window.msCrypto;
+    for (let i = 0; i < length; i++) {
+        const idx = Math.floor((crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296) * charset.length);
+        password += charset[idx];
+    }
+    return password;
 }
 ```
 
 ---
 
-## 4. 数据库设计
+## 4. 存储设计
 
-使用 SQLite（通过 `rusqlite` crate），数据库文件位于:
+所有密码条目序列化（JSON）后经 AES-256-GCM 加密，整体写入单个文件 `entries.enc`，位于应用数据目录（由 `dirs::data_dir()` 提供，再拼接 `devnexus/`）：
 
 | 平台 | 路径 |
 |------|------|
-| macOS | `~/Library/Application Support/devnexus/passwords.db` |
-| Linux | `~/.local/share/devnexus/passwords.db` |
-| Windows | `%APPDATA%/devnexus/passwords.db` |
+| macOS | `~/Library/Application Support/devnexus/entries.enc` |
+| Linux | `~/.local/share/devnexus/entries.enc` |
+| Windows | `%APPDATA%/devnexus/entries.enc` |
 
-### 4.1 表结构
-
-```sql
--- 验证表（存储主密码的加密验证令牌）
-CREATE TABLE IF NOT EXISTS master_token (
-    id INTEGER PRIMARY KEY,
-    encrypted_token BLOB NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
--- 密码条目表
-CREATE TABLE IF NOT EXISTS password_entries (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    username TEXT NOT NULL,
-    encrypted_password BLOB NOT NULL,
-    url TEXT,
-    notes TEXT,
-    category TEXT NOT NULL DEFAULT 'other',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-```
+- 主密码本身不落盘，仅保存由随机 `salt` + 派生 `hash` 组成的验证器（`password_verifier`）
+- 未设置主密码时应用自动解锁，首次设置后会进入锁定态
+- 文件为「密文整体」而非逐条 BLOB，解密后在内存中以 `Vec<PasswordEntry>` 形式持有
 
 ---
 
@@ -353,12 +318,10 @@ async function copyToClipboard(text) {
 ```rust
 #[test] fn test_encrypt_decrypt()
 #[test] fn test_derive_key_consistency()
-#[test] fn test_generate_password_length()
-#[test] fn test_generate_password_charsets()
 #[test] fn test_entry_serialization()
 ```
 
-测试覆盖: 加密解密往返（同一密码加密再解密得到原文）、密钥派生一致性、密码生成器长度和字符集合规。
+测试覆盖: 加密解密往返（同一密码加密再解密得到原文）、密钥派生一致性、条目序列化完整。
 
 ---
 
@@ -366,12 +329,12 @@ async function copyToClipboard(text) {
 
 | 设计 | 说明 |
 |------|------|
-| 主密码不存储 | 主密码本身不出现在数据库中，仅存储跳板用的加密验证令牌 |
-| 密钥不在磁盘 | CryptoEngine 仅在 `Unlocked` 状态保存在进程内存中 |
+| 主密码不存储 | 主密码本身不落盘，仅保存 (salt, hash) 验证器用于校验 |
+| 密钥不在磁盘 | AES-256 密钥仅在解锁后驻留进程内存（`encryption_key`），锁定即清除 |
 | AES-256-GCM | 认证加密，防止密文被篡改 |
-| PBKDF2 100k 轮 | 抗暴力破解（增加每次尝试的计算成本） |
-| 内存中的密钥 | `Locked` 后 `crypto` 被 `take()` 移出，密钥从内存清除 |
-| SQLite 本地 | 数据库文件本身就存储在本机，无需网络传输 |
+| PBKDF2 派生 | 由主密码派生密钥，增加暴力破解成本 |
+| 整体加密文件 | 所有条目密文汇总为单个 `entries.enc`，本地存储，无网络传输 |
+| 自动解锁 | 未设置主密码时自动解锁便于首次使用；设置后进入锁定态 |
 
 ---
 

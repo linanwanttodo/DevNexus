@@ -2,23 +2,24 @@
 
 > 开发者一站式工具集 — 跨平台桌面工具应用
 
-DevNexus 是一款面向开发者的系统工具集合，提供系统信息监控、软件包管理、环境管理、容器管理、API Hub、镜像源配置、端口管理、定时任务、密码管理和浏览器 Cookie 提取等功能的桌面应用。基于 Tauri 2.0 + Rust + Svelte 5 构建。
+DevNexus 是一款面向开发者的系统工具集合，提供系统信息监控、软件包管理、环境管理、容器管理、API Hub、镜像源配置、端口管理、密码管理、浏览器 Cookie 提取、深度卸载、版本管理与环境迁移等功能的桌面应用。基于 Tauri 2.0 + Rust + Vue 3 构建。
 
 ## 功能概览
 
 | 功能            | 说明 | 文档 |
 |---------------|------|------|
 | **系统仪表板**     | 查看系统硬件信息、CPU/内存/磁盘实时使用率、系统运行时间 | [01-system.md](modules/01-system.md) |
-| **软件中心**      | 浏览器/安装/卸载 37+ 款开发者工具，支持跨平台包管理器自动适配 | [02-software.md](modules/02-software.md) |
+| **软件中心**      | 浏览/安装/卸载开发者工具，支持跨平台包管理器自动适配 | [02-software.md](modules/02-software.md) |
 | **环境管理**      | 检测 Python/Node/Java/Go/Rust 等运行时环境，管理 PATH 配置 | [03-environment.md](modules/03-environment.md) |
 | **容器管理**      | Docker/Podman 容器、镜像、卷、网络一站式管理 | [13-containers.md](modules/13-containers.md) |
 | **API Hub**      | 本地 AI 统一网关，OpenAI/Anthropic/Google 多协议格式转换 | [11-api-hub.md](modules/11-api-hub.md) |
-| **镜像设置**      | 一键切换 12 种包管理器和语言运行时的镜像源，延迟测试与推荐 | [04-mirror.md](modules/04-mirror.md) |
+| **镜像设置**      | 一键切换多种包管理器和语言运行时的镜像源，延迟测试与推荐 | [04-mirror.md](modules/04-mirror.md) |
 | **进程/端口管理**  | 列出监听端口及占用进程，一键释放冲突端口 | [05-port.md](modules/05-port.md) |
 | **密码管理器**     | AES-256-GCM 加密本地密码存储，支持强密码生成 | [07-password.md](modules/07-password.md) |
-| **Cookie 提取** | 从浏览器导出 Cookie 为 Netscape/cURL 格式 | [08-cookie.md](modules/08-cookie.md) |
+| **Cookie 提取** | 从浏览器导出 Cookie 为 Netscape/cURL/JSON 格式 | [08-cookie.md](modules/08-cookie.md) |
 | **深度卸载**    | 残留文件扫描，跨平台清理已知工具的配置文件和数据目录 | [09-uninstall.md](modules/09-uninstall.md) |
-| **版本管理**    | 多语言版本检测与切换，支持 pyenv/fnm/rustup 等 6 种版本管理器 | [10-version.md](modules/10-version.md) |
+| **版本管理**    | 多语言版本检测与切换，支持 pyenv/fnm/rustup 等版本管理器 | [10-version.md](modules/10-version.md) |
+| **环境迁移**    | 导出/导入开发环境配置（PATH、软件清单、运行时版本） | [14-migration.md](modules/14-migration.md) |
 
 ## 跨平台支持
 
@@ -32,16 +33,16 @@ DevNexus 是一款面向开发者的系统工具集合，提供系统信息监�
 
 ## 技术栈
 
-**后端**: Rust + Tauri 2.0 + sysinfo + serde + rusqlite + aes-gcm + cron
+**后端**: Rust + Tauri 2.0 + sysinfo + serde + rusqlite + aes-gcm + axum
 
-**前端**: Svelte 5 + Tailwind CSS + Lucide Icons
+**前端**: Vue 3 + Tailwind CSS v4 + @lucide/vue
 
 **构建**: Vite + Tauri CLI
 
 ## 快速开始
 
 ```bash
-# 先决条件: Rust 1.77+, Node.js 18+, pnpm 9+
+# 先决条件: Rust 1.77+, Node.js 20+, pnpm 9+
 
 # 安装依赖
 pnpm install
@@ -73,6 +74,7 @@ docs/
 │   ├── 10-version.md     # 版本管理
 │   ├── 11-api-hub.md     # API Hub
 │   ├── 13-containers.md  # 容器管理
+│   ├── 14-migration.md   # 环境迁移
 │   └── 99-cross-platform.md  # 跨平台实现详解
 └── README.md             # 本文件
 ```

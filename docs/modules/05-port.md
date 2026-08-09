@@ -6,8 +6,8 @@
 
 **通信链路**:
 ```
-ProcessManager.svelte ──→ invoke("list_ports")  ──→ process_ports.rs
-                  ──→ invoke("kill_port")    ──→ process_ports.rs
+ProcessManager.vue ──→ invoke("list_ports")  ──→ process_ports.rs
+                ──→ invoke("kill_port")    ──→ process_ports.rs
 ```
 
 ---
@@ -25,20 +25,22 @@ pub struct PortEntry {
 }
 ```
 
-**前端对应** (`routes/ProcessManager.svelte`):
+**前端对应** (`views/ProcessManager.vue`):
 
 ```javascript
-let ports = $state([]);
-let search = $derived(getSearchQuery());
+import { ref, computed } from "vue";
 
-let filtered = $derived(
-    search.trim()
-        ? ports.filter(p =>
-            p.port.toString().includes(search) ||
-            p.process_name.toLowerCase().includes(search.toLowerCase()) ||
-            p.pid.toString().includes(search)
+const ports = ref([]);
+const search = ref(getSearchQuery());
+
+const filtered = computed(() =>
+    search.value.trim()
+        ? ports.value.filter(p =>
+            p.port.toString().includes(search.value) ||
+            p.process_name.toLowerCase().includes(search.value.toLowerCase()) ||
+            p.pid.toString().includes(search.value)
           )
-        : ports
+        : ports.value
 );
 ```
 
@@ -230,19 +232,17 @@ Windows 使用 `taskkill /F` 强制终止，无优雅退出选项（Windows 下�
     </tr>
   </thead>
   <tbody>
-    {#each filtered as entry}
-      <tr>
-        <td><span class="font-mono">{entry.port}</span></td>
-        <td><span class="text-xs">{entry.protocol}</span></td>
-        <td>{entry.process_name}</td>
-        <td class="font-mono">{entry.pid}</td>
-        <td>
-          <button onclick={() => killPort(entry.port)} disabled={killing !== null}>
-            {killing === entry.port ? "Killing..." : "Kill"}
-          </button>
-        </td>
-      </tr>
-    {/each}
+    <tr v-for="entry in filtered" :key="entry.pid + '-' + entry.port">
+      <td><span class="font-mono">{{ entry.port }}</span></td>
+      <td><span class="text-xs">{{ entry.protocol }}</span></td>
+      <td>{{ entry.process_name }}</td>
+      <td class="font-mono">{{ entry.pid }}</td>
+      <td>
+        <button @click="killPort(entry.port)" :disabled="killing !== null">
+          {{ killing === entry.port ? "Killing..." : "Kill" }}
+        </button>
+      </td>
+    </tr>
   </tbody>
 </table>
 ```

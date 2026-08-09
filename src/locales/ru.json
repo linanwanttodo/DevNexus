@@ -7,7 +7,6 @@
     "details": "Детали ошибки"
   },
   "errors": {
-    "vault_locked": "Хранилище заблокировано",
     "provider_exists": "Провайдер уже существует",
     "already_exists": "Уже существует",
     "invalid_version": "Недопустимая строка версии"
@@ -38,8 +37,6 @@
     "light": "Светлая",
     "dark": "Тёмная",
     "system": "Системная",
-    "compact_mode": "Компактный режим",
-    "compact_mode_desc": "Уменьшить отступы",
     "notifications": "Уведомления",
     "build_alerts": "Ошибки сборки",
     "build_alerts_desc": "Уведомлять при сбоях",
@@ -89,7 +86,15 @@
     "kernel": "Ядро",
     "running": "Работает",
     "stopped": "Остановлен",
-    "loading": "Загрузка..."
+    "loading": "Загрузка...",
+    "cpu_temp": "Темп. ЦП",
+    "gpu": "GPU",
+    "gpu_vram": "Видеопамять",
+    "battery": "Батарея",
+    "battery_charging": "Зарядка",
+    "battery_discharging": "Разрядка",
+    "battery_full": "Полный",
+    "not_available": "Н/Д"
   },
   "ports": {
     "title": "Менеджер портов",
@@ -223,7 +228,6 @@
     "additional_info": "Дополнительная информация...",
     "export_csv": "Экспорт CSV",
     "import_csv": "Импорт CSV",
-    "save_encrypted": "Сохранить зашифрованным",
     "no_passwords_desc": "Добавьте свой первый пароль",
     "created": "Создан",
     "actions": "Действия",
@@ -238,39 +242,13 @@
     "export_failed": "Ошибка экспорта: {error}",
     "import_success": "Импортировано {count} паролей",
     "import_failed": "Ошибка импорта: {error}",
-    "master_pwd_save": "Введите мастер-пароль для шифрования:",
-    "file_path_save": "Введите путь для сохранения:",
-    "save_success": "Пароль сохранён",
-    "save_failed": "Ошибка сохранения: {error}",
-    "master_pwd_load": "Введите мастер-пароль для расшифровки:",
-    "file_path_load": "Введите путь к файлу:",
-    "load_success": "Загружено {count} паролей",
-    "load_failed": "Ошибка загрузки: {error}",
     "copied": "Скопировано в буфер обмена",
-    "master_too_short": "Мастер-пароль должен содержать не менее 4 символов",
-    "master_set_ok": "Мастер-пароль успешно установлен",
-    "set_master_failed": "Не удалось установить мастер-пароль: {error}",
-    "unlocked": "Менеджер паролей разблокирован",
-    "incorrect": "Неверный мастер-пароль",
-    "unlock_failed": "Не удалось разблокировать: {error}",
-    "locked": "Менеджер паролей заблокирован",
-    "no_match": "Пароли не совпадают",
     "edit": "Изменить",
     "edit_title": "Изменить пароль",
     "edit_success": "Пароль обновлён",
     "edit_failed": "Не удалось обновить пароль: {error}",
     "keep_password": "Оставьте пустым, чтобы сохранить текущий",
-    "title_edit": "Изменить пароль",
-    "title_locked": "Password Manager Locked",
-    "desc_locked": "Enter your master password to unlock and access your passwords",
-    "master_password_placeholder": "Enter master password",
-    "unlock": "Unlock",
-    "title_setup": "Set Up Master Password",
-    "desc_setup": "This is your first time using the password manager. Set a master password to encrypt and store all passwords securely.",
-    "setup_password_placeholder": "Enter master password (min 4 chars)",
-    "setup_password_confirm_placeholder": "Re-enter master password",
-    "setup": "Set & Unlock",
-    "lock": "Lock"
+    "title_edit": "Изменить пароль"
   },
   "cookies": {
     "title": "Извлечение Cookie",
@@ -571,7 +549,7 @@
     },
     "gateway": {
       "title": "Агрегирующий шлюз",
-      "desc": "Единая точка входа — маршрутизация по имени модели и конвертация между OpenAI / Anthropic / Gemini",
+      "desc": "Единая точка входа — маршрутизация по имени модели и конвертация между протоколами OpenAI / Anthropic",
       "copyTooltip": "Нажмите, чтобы скопировать endpoint",
       "copied": "Endpoint шлюза скопирован",
       "copyFailed": "Не удалось скопировать"
@@ -640,7 +618,8 @@
       "title": "Тепловая карта активности",
       "less": "Меньше",
       "more": "Больше",
-      "requestTitle": "{date}: запросов {count}"
+      "requestTitle": "{count} запросов · {date}",
+      "summary": "{count} запросов за последний год"
     },
     "status": {
       "active": "Активен",

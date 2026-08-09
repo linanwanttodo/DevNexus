@@ -6,6 +6,29 @@ import { showConfirm } from "../lib/confirm.js";
 import { t, tFormat } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
 import BrandIcons from "../icons/BrandIcons.vue";
+import AppIcon from "../components/AppIcon.vue";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyMedia,
+} from "@/components/ui/empty";
+import {
+  Alert,
+  AlertTitle,
+} from "@/components/ui/alert";
+import { Spinner } from "@/components/ui/spinner";
 
 const MAX_DISPLAY = 500;
 const browsers = ref([]);
@@ -120,14 +143,6 @@ const selectedBrowserCount = computed(() => {
   return b?.cookie_count || 0;
 });
 
-const columns = computed(() => [
-  { title: t("cookies.name"), slotName: "name" },
-  { title: t("cookies.value"), slotName: "value" },
-  { title: t("cookies.domain"), slotName: "domain", width: 160 },
-  { title: t("cookies.expires"), slotName: "expires", width: 120 },
-  { title: t("cookies.actions"), slotName: "actions", align: "right", width: 70 },
-]);
-
 onMounted(() => {
   loadBrowsers();
 });
@@ -142,129 +157,151 @@ onMounted(() => {
     </div>
 
     <!-- Browser Selection -->
-    <a-card :bordered="true" class="section-card mb-5">
-      <div class="card-head-row">
-        <h2 class="card-title">{{ t("cookies.select_browser") }}</h2>
+    <Card class="section-card mb-3">
+      <CardHeader class="flex-row items-center justify-between space-y-0">
+        <CardTitle class="text-sm font-medium">
+          {{ t("cookies.select_browser") }}
+        </CardTitle>
         <span v-if="selectedBrowser" class="found-count">
           {{ selectedBrowserCount }} {{ t("cookies.found") }}
         </span>
-      </div>
-
-      <div class="browser-grid">
-        <button
-          v-for="browser in browsers"
-          :key="browser.name"
-          class="browser-card"
-          :class="{ active: selectedBrowser === browser.name }"
-          @click="selectedBrowser = browser.name"
-        >
-          <div class="browser-inner">
-            <BrandIcons :name="browser.name.toLowerCase()" :size="28" class="browser-icon" />
-            <div>
-              <div class="browser-name">{{ browser.name }}</div>
-              <div class="browser-count">{{ browser.cookie_count }} {{ t("cookies.cookies_label") }}</div>
+      </CardHeader>
+      <CardContent>
+        <div class="browser-grid">
+          <button
+            v-for="browser in browsers"
+            :key="browser.name"
+            class="browser-card"
+            :class="{ active: selectedBrowser === browser.name }"
+            @click="selectedBrowser = browser.name"
+          >
+            <div class="browser-inner">
+              <BrandIcons :name="browser.name.toLowerCase()" :size="28" class="browser-icon" />
+              <div>
+                <div class="browser-name">{{ browser.name }}</div>
+                <div class="browser-count">{{ browser.cookie_count }} {{ t("cookies.cookies_label") }}</div>
+              </div>
             </div>
-          </div>
-        </button>
-      </div>
+          </button>
+        </div>
 
-      <a-alert v-if="browsers.length === 0" type="warning" class="mt-4">
-        {{ t("cookies.no_browsers") }}
-      </a-alert>
-    </a-card>
+        <Alert v-if="browsers.length === 0" class="mt-4">
+          <AlertTitle>{{ t("cookies.no_browsers") }}</AlertTitle>
+        </Alert>
+      </CardContent>
+    </Card>
 
     <!-- Filter and Extract -->
-    <a-card :bordered="true" class="section-card mb-5">
-      <div class="extract-row">
+    <Card class="section-card mb-3">
+      <CardContent class="extract-row pt-6">
         <div class="filter-col">
           <label class="field-label">{{ t("cookies.domain_filter") }}</label>
-          <a-input
+          <Input
             v-model="domainFilter"
             :placeholder="t('cookies.filter_placeholder')"
           />
         </div>
-        <a-button
-          type="primary"
-          size="large"
-          :loading="extracting"
-          :disabled="!selectedBrowser"
+        <Button
+          size="lg"
+          :disabled="!selectedBrowser || extracting"
           @click="extractCookies"
         >
-          <template #icon><icon-download /></template>
+          <Spinner v-if="extracting" />
+          <AppIcon v-else name="download" />
           {{ extracting ? t("cookies.extracting") : t("cookies.extract") }}
-        </a-button>
-      </div>
-    </a-card>
+        </Button>
+      </CardContent>
+    </Card>
 
     <!-- Results -->
     <template v-if="cookies.length > 0">
-      <a-alert
+      <Alert
         v-if="cookies.length >= MAX_DISPLAY"
-        type="warning"
         class="mb-4"
-        :message="tFormat('cookies.display_limit', { count: MAX_DISPLAY })"
-      />
-      <a-card :bordered="true" class="section-card">
-        <template #title>
-          <div class="card-head-row">
-            <span class="results-count">
-              <span class="count-num">{{ cookies.length }}</span> {{ t("cookies.cookies_extracted") }}
-            </span>
-            <div class="toolbar-actions">
-              <a-button size="small" @click="copyAllCookies">
-                <template #icon><icon-copy /></template>
-                {{ t("cookies.copy_all") }}
-              </a-button>
-              <a-button size="small" @click="exportJSON">
-                <template #icon><icon-export /></template>
-                {{ t("cookies.export_json") }}
-              </a-button>
-              <a-button size="small" @click="exportNetscape">
-                <template #icon><icon-export /></template>
-                {{ t("cookies.export_netscape") }}
-              </a-button>
-            </div>
+      >
+        <AlertTitle>
+          {{ tFormat("cookies.display_limit", { count: MAX_DISPLAY }) }}
+        </AlertTitle>
+      </Alert>
+      <Card class="section-card">
+        <CardHeader class="flex-row items-center justify-between space-y-0">
+          <CardTitle class="text-sm font-medium results-count">
+            <span class="count-num">{{ cookies.length }}</span> {{ t("cookies.cookies_extracted") }}
+          </CardTitle>
+          <div class="toolbar-actions">
+            <Button variant="outline" size="sm" @click="copyAllCookies">
+              <AppIcon name="copy" />
+              {{ t("cookies.copy_all") }}
+            </Button>
+            <Button variant="outline" size="sm" @click="exportJSON">
+              <AppIcon name="export" />
+              {{ t("cookies.export_json") }}
+            </Button>
+            <Button variant="outline" size="sm" @click="exportNetscape">
+              <AppIcon name="export" />
+              {{ t("cookies.export_netscape") }}
+            </Button>
           </div>
-        </template>
-        <a-table
-          :data="cookies"
-          :columns="columns"
-          :pagination="false"
-          :bordered="{ wrapper: false, cell: false }"
-          size="small"
-          :scroll="{ y: 384 }"
-        >
-          <template #name="{ record }">
-            <span class="cookie-name" :title="record.name">{{ record.name }}</span>
-          </template>
-          <template #value="{ record }">
-            <span class="cookie-value" :title="record.value">{{ record.value }}</span>
-          </template>
-          <template #domain="{ record }">
-            <span class="cookie-domain">{{ record.domain }}</span>
-          </template>
-          <template #expires="{ record }">
-            <span class="cookie-domain">{{ formatDate(record.expires) }}</span>
-          </template>
-          <template #actions="{ record }">
-            <a-button type="text" size="mini" @click="copyCookie(record)" :title="t('cookies.copy_cookie')">
-              <template #icon><icon-copy /></template>
-            </a-button>
-          </template>
-        </a-table>
-      </a-card>
+        </CardHeader>
+        <CardContent>
+          <Table class="max-h-[384px] overflow-y-auto">
+            <TableHeader>
+              <TableRow>
+                <TableHead class="w-[200px]">{{ t("cookies.name") }}</TableHead>
+                <TableHead>{{ t("cookies.value") }}</TableHead>
+                <TableHead class="w-[160px]">{{ t("cookies.domain") }}</TableHead>
+                <TableHead class="w-[120px]">{{ t("cookies.expires") }}</TableHead>
+                <TableHead class="w-[70px] text-right">{{ t("cookies.actions") }}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="record in cookies" :key="record.name + record.domain">
+                <TableCell class="font-medium">
+                  <span class="cookie-name" :title="record.name">{{ record.name }}</span>
+                </TableCell>
+                <TableCell>
+                  <span class="cookie-value" :title="record.value">{{ record.value }}</span>
+                </TableCell>
+                <TableCell>
+                  <span class="cookie-domain">{{ record.domain }}</span>
+                </TableCell>
+                <TableCell>
+                  <span class="cookie-domain">{{ formatDate(record.expires) }}</span>
+                </TableCell>
+                <TableCell class="text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    :title="t('cookies.copy_cookie')"
+                    @click="copyCookie(record)"
+                  >
+                    <AppIcon name="copy" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </template>
 
-    <a-card
+    <Card
       v-else-if="!extracting && selectedBrowser"
-      :bordered="true"
       class="empty-state"
     >
-      <icon-cookie class="empty-icon" />
-      <div class="empty-text">{{ t("cookies.no_cookies") }}</div>
-      <div class="empty-hint">{{ t("cookies.extract_begin") }}</div>
-      <div class="empty-warn">{{ t("cookies.extract_hint") }}</div>
-    </a-card>
+      <CardContent class="empty-state-inner">
+        <Empty>
+          <EmptyMedia>
+            <AppIcon name="cookie" class="size-9 text-muted-foreground/60" />
+          </EmptyMedia>
+          <EmptyContent>
+            <EmptyDescription class="empty-text">{{ t("cookies.no_cookies") }}</EmptyDescription>
+            <p class="empty-hint">{{ t("cookies.extract_begin") }}</p>
+            <p class="empty-warn">{{ t("cookies.extract_hint") }}</p>
+          </EmptyContent>
+        </Empty>
+      </CardContent>
+    </Card>
   </div>
 </template>
 
@@ -272,21 +309,9 @@ onMounted(() => {
 .section-card {
   border-radius: 10px;
 }
-.card-head-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-.card-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-1);
-  margin: 0;
-}
 .found-count {
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .browser-grid {
   display: grid;
@@ -295,20 +320,20 @@ onMounted(() => {
   margin-top: 16px;
 }
 .browser-card {
-  border: 1px solid var(--color-border-2);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 12px;
   text-align: left;
   cursor: pointer;
-  background-color: var(--color-fill-1);
+  background-color: var(--color-muted);
   transition: all 0.15s;
 }
 .browser-card:hover {
-  border-color: rgb(var(--primary-6), 0.6);
+  border-color: color-mix(in srgb, var(--color-primary) 60%, transparent);
 }
 .browser-card.active {
-  border-color: rgb(var(--primary-6));
-  background-color: rgb(var(--primary-6), 0.08);
+  border-color: var(--color-primary);
+  background-color: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 .browser-inner {
   display: flex;
@@ -316,19 +341,19 @@ onMounted(() => {
   gap: 12px;
 }
 .browser-icon {
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
 }
 .browser-card.active .browser-icon {
-  color: rgb(var(--primary-6));
+  color: var(--color-primary);
 }
 .browser-name {
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 .browser-count {
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .extract-row {
   display: flex;
@@ -342,11 +367,11 @@ onMounted(() => {
   display: block;
   margin-bottom: 6px;
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .results-count {
   font-size: 14px;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 .count-num {
   font-weight: 600;
@@ -358,7 +383,7 @@ onMounted(() => {
 .cookie-name {
   font-size: 13px;
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
   display: block;
   max-width: 200px;
   white-space: nowrap;
@@ -368,7 +393,7 @@ onMounted(() => {
 .cookie-value {
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
   display: block;
   max-width: 300px;
   white-space: nowrap;
@@ -377,30 +402,25 @@ onMounted(() => {
 }
 .cookie-domain {
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .empty-state {
   border-radius: 10px;
-  padding: 32px;
-  text-align: center;
 }
-.empty-icon {
-  font-size: 36px;
-  color: var(--color-text-4);
+.empty-state-inner {
+  padding: 32px;
 }
 .empty-text {
-  margin-top: 12px;
   font-size: 14px;
-  color: var(--color-text-3);
 }
 .empty-hint {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
 }
 .empty-warn {
   margin-top: 12px;
   font-size: 12px;
-  color: rgb(var(--orange-6));
+  color: rgb(249 115 22);
 }
 </style>

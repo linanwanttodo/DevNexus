@@ -6,9 +6,10 @@
 
 **通信链路**:
 ```
-CookieExtractor.svelte ──→ invoke("list_cookies")      ──→ cookie_extractor.rs
-                   ──→ invoke("export_cookies")     ──→ cookie_extractor.rs
-                   ──→ invoke("list_browsers")      ──→ cookie_extractor.rs
+CookieExtractor.vue ──→ invoke("get_supported_browsers") ──→ cookie_extractor.rs
+                  ──→ invoke("extract_cookies")          ──→ cookie_extractor.rs
+                  ──→ invoke("export_as_netscape")       ──→ cookie_extractor.rs
+                  ──→ invoke("export_as_json")           ──→ cookie_extractor.rs
 ```
 
 ---
@@ -43,14 +44,16 @@ pub enum CookieExportFormat {
 }
 ```
 
-**前端对应** (`routes/CookieExtractor.svelte`):
+**前端对应** (`views/CookieExtractor.vue`):
 
 ```javascript
-let browsers = $state([]);
-let selectedBrowser = $state(null);
-let cookies = $state([]);
-let searchQuery = $state("");
-let exportFormat = $state("Netscape");
+import { ref } from "vue";
+
+const browsers = ref([]);
+const selectedBrowser = ref(null);
+const cookies = ref([]);
+const searchQuery = ref("");
+const exportFormat = ref("Netscape");
 ```
 
 ---
@@ -284,13 +287,11 @@ pub fn export_cookies(
 
 ```html
 <div class="grid grid-cols-3 gap-4">
-  {#each browsers as browser}
-    <button onclick={() => selectBrowser(browser)}>
-      <BrowserIcon name={browser.name} />
-      <span>{browser.name}</span>
-      <span class="text-nx-text-muted">{browser.cookie_count} cookies</span>
-    </button>
-  {/each}
+  <button v-for="browser in browsers" :key="browser.name" @click="selectBrowser(browser)">
+    <BrowserIcon :name="browser.name" />
+    <span>{{ browser.name }}</span>
+    <span class="text-nx-text-muted">{{ browser.cookie_count }} cookies</span>
+  </button>
 </div>
 ```
 
@@ -302,17 +303,15 @@ pub fn export_cookies(
     <tr><th>Domain</th><th>Name</th><th>Value</th><th>Expires</th></tr>
   </thead>
   <tbody>
-    {#each filteredCookies as cookie}
-      <tr>
-        <td class="font-mono text-xs">{cookie.domain}</td>
-        <td>{cookie.name}</td>
-        <td>
-          <span class="obscured">{obscureValue(cookie.value)}</span>
-          <button onclick={() => copyToClipboard(cookie.value)}>Copy</button>
-        </td>
-        <td>{cookie.expires}</td>
-      </tr>
-    {/each}
+    <tr v-for="cookie in filteredCookies" :key="cookie.domain + cookie.name">
+      <td class="font-mono text-xs">{{ cookie.domain }}</td>
+      <td>{{ cookie.name }}</td>
+      <td>
+        <span class="obscured">{{ obscureValue(cookie.value) }}</span>
+        <button @click="copyToClipboard(cookie.value)">Copy</button>
+      </td>
+      <td>{{ cookie.expires }}</td>
+    </tr>
   </tbody>
 </table>
 ```

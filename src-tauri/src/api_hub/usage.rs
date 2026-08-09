@@ -263,6 +263,34 @@ fn aggregate_stats_sync(conn: &rusqlite::Connection) -> Option<UsageStats> {
         }
     }
 
+    // 最近 365 天按天聚合（GitHub 风格贡献热力图数据源）
+    {
+        let since = chrono::Utc::now().timestamp() - 365 * 86400;
+        let mut stmt = conn
+            .prepare_cached(
+                "SELECT (timestamp / 86400) * 86400 AS day_key, COUNT(*),
+                        COALESCE(SUM(input_tokens), 0),
+                        COALESCE(SUM(output_tokens), 0)
+                 FROM request_logs WHERE timestamp >= ?1 GROUP BY day_key",
+            )
+            .ok()?;
+        let rows = stmt
+            .query_map(rusqlite::params![since], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    DailyStats {
+                        requests: row.get::<_, i64>(1)?.max(0) as u64,
+                        input_tokens: row.get::<_, i64>(2)?.max(0) as u64,
+                        output_tokens: row.get::<_, i64>(3)?.max(0) as u64,
+                    },
+                ))
+            })
+            .ok()?;
+        for row in rows.flatten() {
+            stats.by_day.insert(row.0, row.1);
+        }
+    }
+
     stats.avg_latency_ms = stats
         .total_latency_ms
         .checked_div(stats.total_requests.max(1))
@@ -306,6 +334,15 @@ fn stats_from_iter<'a>(logs: impl Iterator<Item = &'a RequestLog>) -> UsageStats
             h_entry.requests += 1;
             h_entry.input_tokens += log.input_tokens;
             h_entry.output_tokens += log.output_tokens;
+        }
+
+        // 按天聚合（最近 365 天 → GitHub 风格热力图）
+        if secs_ago < 365 * 86400 {
+            let day_key = (log.timestamp / 86400) * 86400;
+            let d_entry = stats.by_day.entry(day_key).or_insert(DailyStats::default());
+            d_entry.requests += 1;
+            d_entry.input_tokens += log.input_tokens;
+            d_entry.output_tokens += log.output_tokens;
         }
     }
 
@@ -365,6 +402,7 @@ pub struct UsageStats {
     pub avg_latency_ms: u64,
     pub by_model: std::collections::HashMap<String, ModelStats>,
     pub by_hour: std::collections::HashMap<i64, HourlyStats>,
+    pub by_day: std::collections::HashMap<i64, DailyStats>,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize)]
@@ -376,6 +414,13 @@ pub struct ModelStats {
 
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct HourlyStats {
+    pub requests: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct DailyStats {
     pub requests: u64,
     pub input_tokens: u64,
     pub output_tokens: u64,

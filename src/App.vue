@@ -2,6 +2,11 @@
 import TitleBar from "./components/TitleBar.vue";
 import Sidebar from "./components/Sidebar.vue";
 import ErrorBoundary from "./components/ErrorBoundary.vue";
+import ConfirmDialog from "./components/ConfirmDialog.vue";
+import Sonner from "./components/ui/sonner/Sonner.vue";
+import { getTheme } from "./lib/stores.js";
+
+const theme = getTheme();
 </script>
 
 <template>
@@ -19,6 +24,9 @@ import ErrorBoundary from "./components/ErrorBoundary.vue";
         </router-view>
       </main>
     </div>
+
+    <ConfirmDialog />
+    <Sonner :theme="theme" position="bottom-right" rich-colors />
   </div>
 </template>
 
@@ -29,7 +37,7 @@ import ErrorBoundary from "./components/ErrorBoundary.vue";
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background-color: var(--color-bg-1, #161616);
+  background-color: var(--color-background);
 }
 
 .app-body {
@@ -42,11 +50,11 @@ import ErrorBoundary from "./components/ErrorBoundary.vue";
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  background-color: var(--color-fill-2, transparent);
+  background-color: transparent;
 }
 
 .app-main :deep(.page) {
-  padding: var(--nx-space-5) var(--nx-space-6);
+  padding: var(--nx-page-py, 12px) 24px;
   max-width: var(--nx-page-max-width);
   margin: 0 auto;
 }

@@ -4,6 +4,24 @@ import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
+import AppIcon from "../components/AppIcon.vue";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 
 const groups = ref([]);
 const loading = ref(true);
@@ -139,105 +157,117 @@ onMounted(() => {
         <p class="page-desc">{{ t("mirrors.description") }}</p>
       </div>
       <div class="flex gap-2 items-center">
-        <a-select v-model="selectedCountry" style="width: 130px">
-          <a-option v-for="c in countries" :key="c.id" :value="c.id">
-            {{ c.label }}
-          </a-option>
-        </a-select>
-        <a-button @click="loadMirrors">{{ t("common.refresh") }}</a-button>
+        <Select v-model="selectedCountry">
+          <SelectTrigger class="w-[130px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem v-for="c in countries" :key="c.id" :value="c.id">
+              {{ c.label }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" @click="loadMirrors">{{ t("common.refresh") }}</Button>
       </div>
     </div>
 
-    <a-spin :loading="loading" style="width: 100%">
-      <a-result
-        v-if="error"
-        status="error"
-        :title="error"
-        style="padding: 48px 0"
+    <!-- 加载态 -->
+    <div v-if="loading" class="space-y-3">
+      <Skeleton v-for="i in 2" :key="i" class="h-36 w-full" />
+    </div>
+
+    <!-- 错误 -->
+    <Alert v-else-if="error" variant="destructive" class="py-4">
+      <AppIcon name="close-circle-fill" class="size-4" />
+      <AlertTitle>{{ t("error.title") }}</AlertTitle>
+      <AlertDescription>{{ error }}</AlertDescription>
+      <Button variant="outline" size="sm" class="mt-2" @click="loadMirrors">
+        {{ t("common.retry") }}
+      </Button>
+    </Alert>
+
+    <div v-else class="group-list">
+      <Card
+        v-for="group in filteredGroups"
+        :key="group.id"
+        class="section-card shadow-sm"
       >
-        <template #extra>
-          <a-button type="primary" @click="loadMirrors">{{ t("common.retry") }}</a-button>
-        </template>
-      </a-result>
+        <CardHeader class="pb-3">
+          <div class="group-head">
+            <span class="group-label">{{ group.label }}</span>
+            <span v-if="group.current_url" class="text-xs text-muted-foreground">
+              {{ t("mirrors.active_prefix") }}: {{ group.current_url }}
+            </span>
+          </div>
+        </CardHeader>
 
-      <div v-else class="group-list">
-        <a-card
-          v-for="group in filteredGroups"
-          :key="group.id"
-          :bordered="true"
-          class="section-card"
-        >
-          <template #title>
-            <div class="group-head">
-              <span class="group-label">{{ group.label }}</span>
-              <a-typography-text
-                v-if="group.current_url"
-                type="secondary"
-                style="font-size: 12px"
-              >
-                {{ t("mirrors.active_prefix") }}: {{ group.current_url }}
-              </a-typography-text>
-            </div>
-          </template>
-
+        <CardContent class="pt-0">
           <div class="mirror-list">
             <div
               v-for="mirror in group.mirrors"
               :key="mirror.url"
               class="mirror-row"
-              :class="{ active: mirror.is_active }"
+              :class="mirror.is_active ? 'border-primary/60 bg-primary/10' : ''"
             >
               <div class="mirror-left">
                 <span class="country-flag">{{ getCountryFlag(mirror.country) }}</span>
                 <div class="mirror-info">
                   <div class="mirror-name">{{ mirror.name }}</div>
-                  <a-typography-text code type="secondary" class="mirror-url">
-                    {{ mirror.url }}
-                  </a-typography-text>
+                  <code class="mirror-url">{{ mirror.url }}</code>
                 </div>
               </div>
               <div class="mirror-right">
-                <a-button
-                  size="mini"
-                  @click="testMirror(group.id, mirror.url)"
+                <Button
+                  variant="outline"
+                  size="sm"
                   :disabled="!!testingUrls[mirror.url] || testingGroup !== null"
+                  @click="testMirror(group.id, mirror.url)"
                 >
+                  <Spinner v-if="testingUrls[mirror.url]" class="size-3.5" />
                   {{ testingUrls[mirror.url] ? "..." : latencyLabel(mirror) }}
-                </a-button>
-                <a-tag v-if="mirror.is_active" color="green">{{ t("mirrors.active") }}</a-tag>
-                <a-tag v-else-if="mirror.recommended" color="arcoblue">{{ t("mirrors.recommended") }}</a-tag>
-                <a-button
+                </Button>
+                <Badge
+                  v-if="mirror.is_active"
+                  class="border-transparent bg-success/15 text-success dark:text-success"
+                >
+                  {{ t("mirrors.active") }}
+                </Badge>
+                <Badge v-else-if="mirror.recommended" variant="secondary">
+                  {{ t("mirrors.recommended") }}
+                </Badge>
+                <Button
                   v-if="mirror.is_active || mirror.recommended"
-                  size="mini"
-                  type="primary"
+                  size="sm"
                   @click="switchMirror(group.id, mirror.url)"
                 >
                   {{ t("mirrors.use") }}
-                </a-button>
-                <a-button
+                </Button>
+                <Button
                   v-else
-                  size="mini"
+                  variant="outline"
+                  size="sm"
                   @click="switchMirror(group.id, mirror.url)"
                 >
                   {{ t("mirrors.use") }}
-                </a-button>
+                </Button>
               </div>
             </div>
           </div>
+        </CardContent>
 
-          <template #footer>
-            <a-button
-              size="mini"
-              :loading="testingGroup === group.id"
-              :disabled="testingGroup !== null"
-              @click="testAllMirrors(group)"
-            >
-              {{ testingGroup === group.id ? "..." : t("mirrors.test_all") }}
-            </a-button>
-          </template>
-        </a-card>
-      </div>
-    </a-spin>
+        <CardFooter class="border-t pt-3">
+          <Button
+            variant="outline"
+            size="sm"
+            :disabled="testingGroup !== null"
+            @click="testAllMirrors(group)"
+          >
+            <Spinner v-if="testingGroup === group.id" class="size-3.5" />
+            {{ testingGroup === group.id ? "..." : t("mirrors.test_all") }}
+          </Button>
+        </CardFooter>
+      </Card>
+    </div>
   </div>
 </template>
 
@@ -249,7 +279,7 @@ onMounted(() => {
 }
 .group-label {
   font-weight: 600;
-  color: var(--color-primary-6);
+  color: var(--color-primary);
   font-size: 14px;
 }
 .mirror-list {
@@ -264,15 +294,11 @@ onMounted(() => {
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 .mirror-row:hover {
-  border-color: var(--color-border-2);
-}
-.mirror-row.active {
-  border-color: var(--color-primary-6);
-  background-color: var(--color-primary-1);
+  border-color: var(--color-ring);
 }
 .mirror-left {
   display: flex;
@@ -285,7 +311,7 @@ onMounted(() => {
   width: 36px;
   flex-shrink: 0;
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   font-family: "JetBrains Mono", monospace;
 }
 .mirror-info {
@@ -293,7 +319,7 @@ onMounted(() => {
 }
 .mirror-name {
   font-size: 14px;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -305,6 +331,7 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
+  color: var(--color-muted-foreground);
 }
 .mirror-right {
   display: flex;

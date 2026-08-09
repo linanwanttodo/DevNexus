@@ -6,12 +6,32 @@ import { showConfirm } from "../lib/confirm.js";
 import { t } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
 import VaultDialog from "../components/VaultDialog.vue";
+import AppIcon from "../components/AppIcon.vue";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyMedia,
+} from "@/components/ui/empty";
 
-const locked = ref(true);
-const hasMasterPassword = ref(false);
-const masterPassword = ref("");
-const setupPassword = ref("");
-const setupPasswordConfirm = ref("");
 const passwords = ref([]);
 const loading = ref(true);
 const showAddModal = ref(false);
@@ -32,68 +52,6 @@ const editUsername = ref("");
 const editPassword = ref("");
 const editUrl = ref("");
 const editNotes = ref("");
-
-async function checkState() {
-  try {
-    const lockedState = await invoke("is_locked");
-    const hasPwd = await invoke("has_master_password");
-    locked.value = lockedState;
-    hasMasterPassword.value = hasPwd;
-  } catch (err) {
-    console.error("Failed to check password manager state:", err);
-    showToast(t("common.error_msg").replace("{error}", friendlyError(err)), "error");
-  }
-}
-
-async function setupMasterPassword() {
-  if (!setupPassword.value || setupPassword.value.length < 4) {
-    showToast(t("common.master_too_short"));
-    return;
-  }
-  if (setupPassword.value !== setupPasswordConfirm.value) {
-    showToast(t("common.no_match"));
-    return;
-  }
-  try {
-    await invoke("set_master_password", { masterPassword: setupPassword.value });
-    locked.value = false;
-    hasMasterPassword.value = true;
-    setupPassword.value = "";
-    setupPasswordConfirm.value = "";
-    await loadPasswords();
-    showToast(t("common.master_set_ok"));
-  } catch (err) {
-    showToast(t("common.set_master_failed").replace("{error}", friendlyError(err)));
-  }
-}
-
-async function unlock() {
-  if (!masterPassword.value) return;
-  try {
-    const success = await invoke("unlock", { masterPassword: masterPassword.value });
-    if (success) {
-      locked.value = false;
-      masterPassword.value = "";
-      await loadPasswords();
-      showToast(t("common.unlocked"));
-    } else {
-      showToast(t("common.incorrect"));
-    }
-  } catch (err) {
-    showToast(t("common.unlock_failed").replace("{error}", friendlyError(err)));
-  }
-}
-
-async function lockVault() {
-  try {
-    await invoke("lock");
-    locked.value = true;
-    passwords.value = [];
-    showToast(t("common.locked"));
-  } catch (err) {
-    console.error("Failed to lock:", err);
-  }
-}
 
 async function loadPasswords() {
   try {
@@ -211,31 +169,10 @@ async function importCSV({ file }) {
   }
 }
 
-async function saveToFile() {
-  const fileMasterPwd = prompt(t("passwords.master_pwd_save"));
-  if (!fileMasterPwd) return;
-  try {
-    const filePath = prompt(t("passwords.file_path_save"));
-    if (!filePath) return;
-    await invoke("save_to_file", { filePath, masterPassword: fileMasterPwd });
-    showToast(t("passwords.save_success"));
-  } catch (err) {
-    showToast(t("passwords.save_failed").replace("{error}", friendlyError(err)));
-  }
-}
-
-async function loadFromFile() {
-  const fileMasterPwd = prompt(t("passwords.master_pwd_load"));
-  if (!fileMasterPwd) return;
-  try {
-    const filePath = prompt(t("passwords.file_path_load"));
-    if (!filePath) return;
-    const count = await invoke("load_from_file", { filePath, masterPassword: fileMasterPwd });
-    await loadPasswords();
-    showToast(t("passwords.load_success").replace("{count}", count));
-  } catch (err) {
-    showToast(t("passwords.load_failed").replace("{error}", friendlyError(err)));
-  }
+// a-upload 适配：原生 file input 的 change → importCSV({ file })
+function onImportFile(e) {
+  const file = e.target.files && e.target.files[0];
+  if (file) importCSV({ file });
 }
 
 function resetForm() {
@@ -286,12 +223,7 @@ const editGroups = [
 ];
 
 onMounted(async () => {
-  await checkState();
-  if (!locked.value) {
-    await loadPasswords();
-  } else {
-    loading.value = false;
-  }
+  await loadPasswords();
 });
 </script>
 
@@ -303,152 +235,132 @@ onMounted(async () => {
         <h1 class="page-title">{{ t("passwords.title") }}</h1>
         <p class="page-desc">{{ t("passwords.desc") }}</p>
       </div>
-      <div v-if="!locked" class="flex gap-2 items-center">
-        <a-button @click="exportCSV">
-          <template #icon><icon-download /></template>
+      <div class="flex gap-2 items-center">
+        <Button variant="outline" @click="exportCSV">
+          <AppIcon name="download" class="size-4" />
           {{ t("passwords.export_csv") }}
-        </a-button>
-        <a-upload :show-file-list="false" :auto-upload="false" accept=".csv" @change="importCSV">
-          <a-button>
-            <template #icon><icon-upload /></template>
+        </Button>
+        <label class="cursor-pointer">
+          <span
+            class="inline-flex h-10 items-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            <AppIcon name="upload" class="size-4" />
             {{ t("passwords.import_csv") }}
-          </a-button>
-        </a-upload>
-        <a-button @click="saveToFile">
-          <template #icon><icon-save /></template>
-          {{ t("passwords.save_encrypted") }}
-        </a-button>
-        <a-button type="primary" @click="showAddModal = true">
-          <template #icon><icon-plus /></template>
+          </span>
+          <input type="file" accept=".csv" class="sr-only" @change="onImportFile" />
+        </label>
+        <Button @click="showAddModal = true">
+          <AppIcon name="plus" class="size-4" />
           {{ t("passwords.add") }}
-        </a-button>
-        <a-button status="danger" @click="lockVault">
-          <template #icon><icon-lock /></template>
-          {{ t("passwords.lock") }}
-        </a-button>
+        </Button>
       </div>
     </div>
 
-    <!-- Lock/Setup Screen -->
-    <div v-if="locked" class="lock-screen">
-      <!-- Unlock -->
-      <a-card v-if="hasMasterPassword" :bordered="true" class="lock-card">
-        <div class="lock-icon"><icon-lock /></div>
-        <h2 class="lock-title">{{ t("passwords.title_locked") }}</h2>
-        <p class="lock-desc">{{ t("passwords.desc_locked") }}</p>
-        <a-input-password
-          v-model="masterPassword"
-          :placeholder="t('passwords.master_password_placeholder')"
-          size="large"
-          class="lock-input"
-          @press-enter="unlock"
-        />
-        <a-button type="primary" long size="large" :disabled="!masterPassword" @click="unlock">
-          {{ t("passwords.unlock") }}
-        </a-button>
-      </a-card>
-
-      <!-- Setup Master Password -->
-      <a-card v-else :bordered="true" class="lock-card">
-        <div class="lock-icon"><icon-lock /></div>
-        <h2 class="lock-title">{{ t("passwords.title_setup") }}</h2>
-        <p class="lock-desc">{{ t("passwords.desc_setup") }}</p>
-        <a-input-password
-          v-model="setupPassword"
-          :placeholder="t('passwords.setup_password_placeholder')"
-          size="large"
-          class="lock-input"
-        />
-        <a-input-password
-          v-model="setupPasswordConfirm"
-          :placeholder="t('passwords.setup_password_confirm_placeholder')"
-          size="large"
-          class="lock-input"
-          @press-enter="setupMasterPassword"
-        />
-        <a-button
-          type="primary"
-          long
-          size="large"
-          :disabled="!setupPassword || !setupPasswordConfirm"
-          @click="setupMasterPassword"
-        >
-          {{ t("passwords.setup") }}
-        </a-button>
-      </a-card>
+    <div v-if="loading" class="flex justify-center py-14">
+      <Spinner />
     </div>
 
-    <a-spin v-else-if="loading" style="display: flex; justify-content: center; padding: 56px 0" />
+    <Empty v-else-if="passwords.length === 0" class="py-14">
+      <EmptyMedia>
+        <AppIcon name="lock" class="size-10 text-muted-foreground/60" />
+      </EmptyMedia>
+      <EmptyContent>
+        <EmptyDescription>
+          <div>{{ t("passwords.no_passwords") }}</div>
+          <div class="empty-hint">{{ t("passwords.no_passwords_desc") }}</div>
+        </EmptyDescription>
+      </EmptyContent>
+    </Empty>
 
-    <a-empty
-      v-else-if="passwords.length === 0"
-      style="padding: 56px 0"
-      :description="t('passwords.no_passwords')"
-    >
-      <template #description>
-        <div>{{ t("passwords.no_passwords") }}</div>
-        <div class="empty-hint">{{ t("passwords.no_passwords_desc") }}</div>
-      </template>
-    </a-empty>
-
-    <a-card v-else :bordered="true">
-      <a-table :data="passwords" :pagination="false" :row-key="'id'" :bordered="false" size="small">
-        <template #columns>
-          <a-table-column :title="t('passwords.name')">
-            <template #cell="{ record }">
-              <div class="name-cell">
-                <icon-lock class="name-icon" />
-                <span class="name-text">{{ record.name }}</span>
-              </div>
-            </template>
-          </a-table-column>
-          <a-table-column :title="t('passwords.username')" data-index="username">
-            <template #cell="{ record }">
-              <span class="username">{{ record.username }}</span>
-            </template>
-          </a-table-column>
-          <a-table-column title="URL">
-            <template #cell="{ record }">
-              <a-link v-if="record.url" :href="record.url" target="_blank" class="url-link">
-                {{ record.url }}
-              </a-link>
-              <span v-else class="muted">{{ t("passwords.no_url") }}</span>
-            </template>
-          </a-table-column>
-          <a-table-column :title="t('passwords.created')" data-index="created_at">
-            <template #cell="{ record }">
-              <span class="muted">{{ record.created_at }}</span>
-            </template>
-          </a-table-column>
-          <a-table-column :title="t('passwords.actions')" align="right" :width="190">
-            <template #cell="{ record }">
-              <div class="actions">
-                <a-tooltip :content="t('passwords.title_view')">
-                  <a-button type="text" size="mini" @click="viewPassword(record.id)">
-                    <template #icon><icon-eye /></template>
-                  </a-button>
-                </a-tooltip>
-                <a-tooltip :content="t('passwords.title_edit')">
-                  <a-button type="text" size="mini" @click="beginEdit(record)">
-                    <template #icon><icon-edit /></template>
-                  </a-button>
-                </a-tooltip>
-                <a-tooltip :content="t('passwords.title_copy')">
-                  <a-button type="text" size="mini" @click="copyToClipboard(record.username)">
-                    <template #icon><icon-copy /></template>
-                  </a-button>
-                </a-tooltip>
-                <a-tooltip :content="t('passwords.title_delete')">
-                  <a-button type="text" size="mini" status="danger" @click="deletePassword(record.id)">
-                    <template #icon><icon-delete /></template>
-                  </a-button>
-                </a-tooltip>
-              </div>
-            </template>
-          </a-table-column>
-        </template>
-      </a-table>
-    </a-card>
+    <Card v-else class="shadow-sm">
+      <CardContent class="p-0">
+        <TooltipProvider>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{{ t("passwords.name") }}</TableHead>
+                <TableHead>{{ t("passwords.username") }}</TableHead>
+                <TableHead>URL</TableHead>
+                <TableHead>{{ t("passwords.created") }}</TableHead>
+                <TableHead class="text-right">{{ t("passwords.actions") }}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="record in passwords" :key="record.id">
+                <TableCell>
+                  <div class="name-cell">
+                    <AppIcon name="lock" class="name-icon size-4" />
+                    <span class="name-text">{{ record.name }}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span class="username">{{ record.username }}</span>
+                </TableCell>
+                <TableCell>
+                  <a
+                    v-if="record.url"
+                    :href="record.url"
+                    target="_blank"
+                    class="url-link text-primary hover:underline"
+                  >
+                    {{ record.url }}
+                  </a>
+                  <span v-else class="muted">{{ t("passwords.no_url") }}</span>
+                </TableCell>
+                <TableCell>
+                  <span class="muted">{{ record.created_at }}</span>
+                </TableCell>
+                <TableCell class="text-right">
+                  <div class="actions">
+                    <Tooltip>
+                      <TooltipTrigger as-child>
+                        <Button variant="ghost" size="icon-sm" @click="viewPassword(record.id)">
+                          <AppIcon name="eye" class="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{{ t("passwords.title_view") }}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger as-child>
+                        <Button variant="ghost" size="icon-sm" @click="beginEdit(record)">
+                          <AppIcon name="edit" class="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{{ t("passwords.title_edit") }}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger as-child>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          @click="copyToClipboard(record.username)"
+                        >
+                          <AppIcon name="copy" class="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{{ t("passwords.title_copy") }}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger as-child>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          class="text-destructive hover:text-destructive"
+                          @click="deletePassword(record.id)"
+                        >
+                          <AppIcon name="delete" class="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{{ t("passwords.title_delete") }}</TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </TooltipProvider>
+      </CardContent>
+    </Card>
 
     <!-- Add Password Modal -->
     <VaultDialog
@@ -485,39 +397,8 @@ onMounted(async () => {
 <style scoped>
 .empty-hint {
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   margin-top: 4px;
-}
-.lock-screen {
-  display: flex;
-  justify-content: center;
-  margin-top: 48px;
-}
-.lock-card {
-  width: 100%;
-  max-width: 420px;
-  padding: 24px 8px;
-  text-align: center;
-  border-radius: 12px;
-}
-.lock-icon {
-  font-size: 44px;
-  color: var(--color-text-2);
-  margin-bottom: 12px;
-}
-.lock-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--color-text-1);
-  margin: 0 0 4px;
-}
-.lock-desc {
-  font-size: 13px;
-  color: var(--color-text-3);
-  margin: 0 0 20px;
-}
-.lock-input {
-  margin-bottom: 12px;
 }
 .name-cell {
   display: flex;
@@ -525,21 +406,21 @@ onMounted(async () => {
   gap: 8px;
 }
 .name-icon {
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
 }
 .name-text {
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 .username {
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
   font-size: 13px;
 }
 .url-link {
   font-size: 12px;
 }
 .muted {
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   font-size: 12px;
 }
 .actions {

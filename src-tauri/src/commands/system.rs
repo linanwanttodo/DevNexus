@@ -1,6 +1,28 @@
 use serde::Serialize;
+use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use sysinfo::System;
+
+/// 平台相关的系统硬件信息（温度 / GPU / 电池）
+#[derive(Serialize)]
+pub struct HardwareStatus {
+    /// CPU 最高温度（℃），无传感器时为空
+    pub cpu_temp_c: Option<f32>,
+    /// GPU 名称（nvidia-smi），未检测到 NVIDIA GPU 时为空
+    pub gpu_name: Option<String>,
+    /// GPU 显存使用量（MB）
+    pub gpu_memory_used_mb: Option<u64>,
+    /// GPU 显存总量（MB）
+    pub gpu_memory_total_mb: Option<u64>,
+    /// GPU 使用率（%）
+    pub gpu_usage_percent: Option<f32>,
+    /// GPU 温度（℃）
+    pub gpu_temp_c: Option<f32>,
+    /// 电池电量（%），非电池供电设备为空
+    pub battery_percent: Option<f32>,
+    /// 电池状态（Charging / Discharging / Full / ...）
+    pub battery_status: Option<String>,
+}
 
 /// 获取系统信息单例（避免每 5 秒重新分配 sysinfo 内部结构）
 fn system() -> &'static Mutex<System> {
@@ -95,6 +117,44 @@ mod tests {
         let json = serde_json::to_string(&usage).unwrap();
         assert!(json.contains("\"cpu_usage\":0.0"));
         assert!(json.contains("\"memory_percent\":0.0"));
+    }
+
+    #[test]
+    fn test_hardware_status_serialization() {
+        let status = HardwareStatus {
+            cpu_temp_c: Some(52.5),
+            gpu_name: Some("NVIDIA GeForce RTX 3060".to_string()),
+            gpu_memory_used_mb: Some(1024),
+            gpu_memory_total_mb: Some(12288),
+            gpu_usage_percent: Some(35.0),
+            gpu_temp_c: Some(61.0),
+            battery_percent: Some(87.0),
+            battery_status: Some("Charging".to_string()),
+        };
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(json.contains("\"cpu_temp_c\":52.5"));
+        assert!(json.contains("\"gpu_name\":\"NVIDIA GeForce RTX 3060\""));
+        assert!(json.contains("\"gpu_memory_used_mb\":1024"));
+        assert!(json.contains("\"battery_status\":\"Charging\""));
+    }
+
+    #[test]
+    fn test_hardware_status_optional_fields() {
+        // 台式机无电池、无 NVIDIA GPU 时全部字段应序列化为 null，而不是报错
+        let status = HardwareStatus {
+            cpu_temp_c: None,
+            gpu_name: None,
+            gpu_memory_used_mb: None,
+            gpu_memory_total_mb: None,
+            gpu_usage_percent: None,
+            gpu_temp_c: None,
+            battery_percent: None,
+            battery_status: None,
+        };
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(json.contains("\"cpu_temp_c\":null"));
+        assert!(json.contains("\"gpu_name\":null"));
+        assert!(json.contains("\"battery_percent\":null"));
     }
 }
 
@@ -197,4 +257,139 @@ pub fn get_resource_usage() -> Result<ResourceUsage, String> {
         disk_percent,
         uptime_secs: System::uptime(),
     })
+}
+
+// ---------- 硬件状态（温度 / GPU / 电池） ----------
+
+/// 收集硬件状态。各部分独立容错：某一部分失败不影响其他部分。
+#[tauri::command]
+pub fn get_hardware_status() -> Result<HardwareStatus, String> {
+    let cpu_temp_c = read_cpu_temperature();
+    let (gpu_name, gpu_memory_used_mb, gpu_memory_total_mb, gpu_usage_percent, gpu_temp_c) =
+        read_gpu_status();
+    let (battery_percent, battery_status) = read_battery_status();
+
+    Ok(HardwareStatus {
+        cpu_temp_c,
+        gpu_name,
+        gpu_memory_used_mb,
+        gpu_memory_total_mb,
+        gpu_usage_percent,
+        gpu_temp_c,
+        battery_percent,
+        battery_status,
+    })
+}
+
+/// 通过 sysinfo Components 读取 CPU 温度（Linux hwmon / Windows），取最高值
+fn read_cpu_temperature() -> Option<f32> {
+    sysinfo::Components::new_with_refreshed_list()
+        .iter()
+        .filter_map(|c| c.temperature())
+        .filter(|t| t.is_finite() && *t > 0.0)
+        .reduce(f32::max)
+}
+
+/// (GPU 名称, 显存已用 MB, 显存总量 MB, 利用率 %, 温度 ℃)
+type GpuStatus = (
+    Option<String>,
+    Option<u64>,
+    Option<u64>,
+    Option<f32>,
+    Option<f32>,
+);
+
+/// 通过 nvidia-smi 读取 NVIDIA GPU 显存/使用率/温度，未安装或非 NVIDIA 时返回 None
+fn read_gpu_status() -> GpuStatus {
+    let smi = match which::which("nvidia-smi") {
+        Ok(path) => path,
+        Err(_) => return (None, None, None, None, None),
+    };
+    let out = match Command::new(smi)
+        .args([
+            "--query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu",
+            "--format=csv,noheader,nounits",
+        ])
+        .output()
+    {
+        Ok(out) if out.status.success() => out,
+        _ => return (None, None, None, None, None),
+    };
+    let text = String::from_utf8_lossy(&out.stdout);
+    // 多 GPU 时取第一行
+    let Some(line) = text.lines().find(|l| !l.trim().is_empty()) else {
+        return (None, None, None, None, None);
+    };
+    let mut parts = line.split(',').map(|s| s.trim()).collect::<Vec<_>>();
+    if parts.is_empty() {
+        return (None, None, None, None, None);
+    }
+    let name = Some(parts.remove(0).to_string());
+    let mem_used = parts.first().and_then(|s| s.parse::<u64>().ok());
+    let mem_total = parts.get(1).and_then(|s| s.parse::<u64>().ok());
+    let usage = parts.get(2).and_then(|s| s.parse::<f32>().ok());
+    let temp = parts.get(3).and_then(|s| s.parse::<f32>().ok());
+    (name, mem_used, mem_total, usage, temp)
+}
+
+/// 读取电池状态。Linux 走 sysfs；macOS 通过 pmset；不支持时返回 None
+fn read_battery_status() -> (Option<f32>, Option<String>) {
+    #[cfg(target_os = "linux")]
+    {
+        let Ok(entries) = std::fs::read_dir("/sys/class/power_supply") else {
+            return (None, None);
+        };
+        for entry in entries.flatten() {
+            let Some(name) = entry.file_name().to_str().map(String::from) else {
+                continue;
+            };
+            if !name.starts_with("BAT") {
+                continue;
+            }
+            let capacity = std::fs::read_to_string(entry.path().join("capacity"))
+                .ok()
+                .and_then(|s| s.trim().parse::<f32>().ok());
+            let status = std::fs::read_to_string(entry.path().join("status"))
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty() && s != "Unknown");
+            if capacity.is_some() || status.is_some() {
+                return (capacity, status);
+            }
+        }
+        (None, None)
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let out = Command::new("pmset").arg("-g").arg("batt").output().ok();
+        let Some(out) = out.filter(|o| o.status.success()) else {
+            return (None, None);
+        };
+        let text = String::from_utf8_lossy(&out.stdout).to_string();
+        // 输出形如: -InternalBattery-0 (id=...) 83%; charging; 0:30 remaining
+        let percent = text
+            .split(';')
+            .next()
+            .and_then(|s| s.split('%').next())
+            .and_then(|s| s.split_whitespace().last())
+            .and_then(|s| s.parse::<f32>().ok());
+        let status = if text.contains("charging") {
+            Some("Charging".to_string())
+        } else if text.contains("discharging") {
+            Some("Discharging".to_string())
+        } else if text.contains("charged") {
+            Some("Full".to_string())
+        } else {
+            None
+        };
+        if percent.is_some() || status.is_some() {
+            return (percent, status);
+        }
+        return (None, None);
+    }
+
+    // Windows 不支持（需电池 API），返回 None
+    #[cfg(target_os = "windows")]
+    return (None, None);
 }

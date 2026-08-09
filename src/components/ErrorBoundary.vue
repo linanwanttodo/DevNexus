@@ -1,5 +1,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, onErrorCaptured } from "vue";
+import { Button } from "@/components/ui/button";
+import AppIcon from "./AppIcon.vue";
 import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
 import { getError, clearError as clearStoredError, captureError } from "../lib/error.js";
@@ -67,7 +69,7 @@ function handleClearError() {
   <div v-if="errorInfo" class="error-overlay">
     <div class="error-box">
       <div class="error-head">
-        <icon-exclamation-circle-fill class="error-icon" />
+        <AppIcon name="exclamation-circle-fill" class="size-7 text-destructive" />
         <h2 class="error-title">{{ t("error.title") || "Something went wrong" }}</h2>
       </div>
 
@@ -80,13 +82,13 @@ function handleClearError() {
         <pre class="error-stack">{{ errorInfo.stack }}</pre>
       </details>
 
-      <div class="error-actions">
-        <a-button @click="() => window.location.reload()">
+      <div class="flex gap-3">
+        <Button variant="outline" @click="() => window.location.reload()">
           {{ t("error.reload") || "Reload page" }}
-        </a-button>
-        <a-button type="primary" @click="handleClearError">
+        </Button>
+        <Button @click="handleClearError">
           {{ t("error.dismiss") || "Dismiss" }}
-        </a-button>
+        </Button>
       </div>
     </div>
   </div>
@@ -103,7 +105,7 @@ function handleClearError() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(0, 0, 0, 0.55);
+  background-color: rgb(0 0 0 / 0.55);
   backdrop-filter: blur(3px);
 }
 
@@ -111,10 +113,10 @@ function handleClearError() {
   max-width: 420px;
   margin: 0 16px;
   padding: 24px;
-  border-radius: 10px;
-  border: 1px solid var(--color-danger-6, rgba(255, 92, 92, 0.5));
-  background-color: var(--color-bg-2);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-destructive);
+  background-color: var(--color-card);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.4);
 }
 
 .error-head {
@@ -124,29 +126,24 @@ function handleClearError() {
   margin-bottom: 14px;
 }
 
-.error-icon {
-  font-size: 26px;
-  color: var(--color-danger-6);
-}
-
 .error-title {
   font-size: 17px;
   font-weight: 600;
   margin: 0;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 
 .error-msg {
   margin: 0 0 14px;
   font-size: 13px;
-  color: var(--color-text-2);
+  color: var(--color-muted-foreground);
   word-break: break-all;
 }
 
 .error-summary {
   cursor: pointer;
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
   margin-bottom: 6px;
 }
 
@@ -155,15 +152,10 @@ function handleClearError() {
   overflow: auto;
   margin: 0 0 14px;
   padding: 8px;
-  border-radius: 6px;
-  background-color: var(--color-fill-1);
+  border-radius: var(--radius-md);
+  background-color: var(--color-muted);
   font-family: "JetBrains Mono", monospace;
   font-size: 11px;
-  color: var(--color-text-3);
-}
-
-.error-actions {
-  display: flex;
-  gap: 12px;
+  color: var(--color-muted-foreground);
 }
 </style>

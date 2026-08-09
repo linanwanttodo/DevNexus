@@ -6,8 +6,8 @@
 
 **通信链路**:
 ```
-Dashboard.svelte ──→ invoke("get_system_info") ──→ system.rs
-                 ──→ invoke("get_resource_usage") ──→ system.rs
+Dashboard.vue ──→ invoke("get_system_info") ──→ system.rs
+              ──→ invoke("get_resource_usage") ──→ system.rs
 ```
 
 ---
@@ -39,17 +39,19 @@ pub struct ResourceUsage {
 }
 ```
 
-**前端对应** (`routes/Dashboard.svelte`):
+**前端对应** (`views/Dashboard.vue`):
 
 ```javascript
-let systemInfo = $state(null);
-let resourceUsage = $state(null);
+import { ref, computed } from "vue";
 
-// 通过 $derived 计算展示用的统计卡片
-let stats = $derived([
-  { label: "CPU Cores", value: systemInfo?.cpu_cores, ... },
-  { label: "Memory", value: resourceUsage?.memory_percent, ... },
-  { label: "Disk", value: resourceUsage?.disk_percent, ... },
+const systemInfo = ref(null);
+const resourceUsage = ref(null);
+
+// 通过 computed 计算展示用的统计卡片
+const stats = computed(() => [
+  { label: "CPU Cores", value: systemInfo.value?.cpu_cores, ... },
+  { label: "Memory", value: resourceUsage.value?.memory_percent, ... },
+  { label: "Disk", value: resourceUsage.value?.disk_percent, ... },
 ]);
 ```
 
@@ -120,12 +122,14 @@ fn cached_disk_total_gb() -> f64 {
 ### 3.3 前端定时轮询
 
 ```javascript
-onMount(() => {
+import { onMounted, onUnmounted } from "vue";
+
+onMounted(() => {
     loadSystemInfo();
     loadEnvironments();
     // 每 5 秒刷新一次资源使用情况
     const interval = setInterval(refreshResourceUsage, 5000);
-    return () => clearInterval(interval);
+    onUnmounted(() => clearInterval(interval));
 });
 ```
 

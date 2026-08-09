@@ -6,9 +6,9 @@
 
 **通信链路**:
 ```
-EnvironmentManager.svelte ──→ invoke("list_environments")   ──→ environment.rs
-                         ──→ invoke("add_to_path")          ──→ environment.rs
-                         ──→ invoke("remove_from_path")     ──→ environment.rs
+EnvironmentManager.vue ──→ invoke("list_environments")   ──→ environment.rs
+                        ──→ invoke("add_to_path")          ──→ environment.rs
+                        ──→ invoke("remove_from_path")     ──→ environment.rs
 ```
 
 ---
@@ -28,18 +28,19 @@ pub struct Environment {
 }
 ```
 
-**前端对应** (`routes/EnvironmentManager.svelte`):
+**前端对应** (`views/EnvironmentManager.vue`):
 
 ```javascript
-let environments = $state([]);
+import { ref, computed } from "vue";
 
-let filteredEnvs = $derived(
-    environments.filter(env => {
-        match filterType.value {
-            "all" => true,
-            "installed" => env.status === "Active",
-            "missing" => env.status !== "Active",
-        }
+const environments = ref([]);
+
+const filteredEnvs = computed(() =>
+    environments.value.filter(env => {
+        if (filterType.value === "all") return true;
+        if (filterType.value === "installed") return env.status === "Active";
+        if (filterType.value === "missing") return env.status !== "Active";
+        return true;
     })
 );
 ```
@@ -281,13 +282,16 @@ async function switchVersion(env, version) {
 
 ### 6.3 添加自定义 PATH 的对话框
 
-```javascript
-<dialog>
-  <h3>Add to PATH</h3>
-  <input bind:value={newEnvName} placeholder="Environment name" />
-  <input bind:value={newEnvPath} placeholder="/path/to/bin" />
-  <button onclick={handleAddToPath}>Add</button>
-</dialog>
+```html
+<!-- Vue 3 模板（<script setup> 中使用 ref + v-model） -->
+<template>
+  <dialog>
+    <h3>Add to PATH</h3>
+    <input v-model="newEnvName" placeholder="Environment name" />
+    <input v-model="newEnvPath" placeholder="/path/to/bin" />
+    <button @click="handleAddToPath">Add</button>
+  </dialog>
+</template>
 ```
 
 ---

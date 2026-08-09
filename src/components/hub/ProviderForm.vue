@@ -3,6 +3,17 @@ import { ref, computed } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "../../lib/toast.js";
 import { t, tFormat } from "../../lib/i18n.js";
+import AppIcon from "../AppIcon.vue";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import ModelList from "./ModelList.vue";
 
 const props = defineProps({
@@ -145,37 +156,43 @@ const currentProtocol = computed(() =>
     <!-- Header -->
     <div class="form-header">
       <div class="form-title-row">
-        <icon-edit v-if="isEdit" class="header-icon" />
-        <icon-plus-circle v-else class="header-icon" />
+        <AppIcon v-if="isEdit" name="edit" class="header-icon size-5" />
+        <AppIcon v-else name="plus-circle" class="header-icon size-5" />
         <span class="form-title">
           {{ isEdit ? `${title} — ${subtitle}` : title }}
         </span>
       </div>
-      <a-button type="text" @click="onCancel">
-        <template #icon><icon-close /></template>
-      </a-button>
+      <Button variant="ghost" size="icon" class="h-7 w-7" @click="onCancel">
+        <AppIcon name="close" class="size-4" />
+      </Button>
     </div>
 
     <!-- Form fields -->
     <div class="form-grid">
       <div>
         <label class="field-label">{{ t("apiHub.name") }}</label>
-        <a-input v-model="form.name" placeholder="My OpenAI" />
+        <Input v-model="form.name" placeholder="My OpenAI" />
       </div>
       <div class="span-2">
         <label class="field-label">{{ t("apiHub.protocolLabel") }}</label>
-        <a-select
+        <Select
           v-model="form.protocol"
           :disabled="isEdit"
-          @change="onProtocolChange"
+          @update:model-value="onProtocolChange"
         >
-          <a-option
-            v-for="pt in protocolOptions"
-            :key="pt.id"
-            :value="pt.id"
-            :label="pt.label"
-          />
-        </a-select>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem
+              v-for="pt in protocolOptions"
+              :key="pt.id"
+              :value="pt.id"
+            >
+              {{ pt.label }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
         <p class="protocol-hint">
           <code>{{ currentProtocol?.endpoint || "" }}</code>
           — {{ currentProtocol?.desc || "" }}
@@ -183,15 +200,16 @@ const currentProtocol = computed(() =>
       </div>
       <div class="span-2">
         <label class="field-label">{{ t("apiHub.baseUrl") }}</label>
-        <a-input v-model="form.base_url" placeholder="https://api.openai.com" />
+        <Input v-model="form.base_url" placeholder="https://api.openai.com" />
       </div>
       <div class="span-2">
         <label class="field-label">
           {{ t("apiHub.apiKey") }}
           <span class="hint-inline">{{ isEdit ? t("apiHub.maskedHint") : t("apiHub.optional") }}</span>
         </label>
-        <a-input-password
+        <Input
           v-model="form.api_key"
+          type="password"
           :placeholder="isEdit ? t('apiHub.apiKeyReplacePlaceholder') : 'sk-...'"
         />
       </div>
@@ -200,15 +218,15 @@ const currentProtocol = computed(() =>
     <!-- Model fetching -->
     <div class="model-section">
       <div class="model-toolbar">
-        <a-button
-          type="primary"
-          size="small"
-          :loading="fetchingModels"
+        <Button
+          size="sm"
+          :disabled="fetchingModels"
           @click="fetchModels"
         >
-          <template #icon><icon-download /></template>
+          <Spinner v-if="fetchingModels" class="size-3.5" />
+          <AppIcon v-else name="download" class="size-3.5" />
           {{ isEdit ? t("apiHub.refreshModels") : t("apiHub.fetchModels") }}
-        </a-button>
+        </Button>
         <span v-if="fetchedModels.length > 0" class="model-count">
           <template v-if="isEdit">
             {{ t("apiHub.models.selected") }} {{ selectedCount() }} / {{ fetchedModels.length }}
@@ -218,27 +236,39 @@ const currentProtocol = computed(() =>
           </template>
         </span>
         <div v-if="fetchedModels.length > 0 && !isEdit" class="toolbar-actions">
-          <a-button size="mini" @click="selectAll">{{ t("apiHub.selectAll") }}</a-button>
-          <a-button size="mini" @click="deselectAll">{{ t("apiHub.deselectAll") }}</a-button>
-          <a-button size="mini" @click="addingManualModel = !addingManualModel" :title="t('apiHub.manualAdd')">
-            <template #icon><icon-plus /></template>
-          </a-button>
+          <Button size="sm" variant="outline" class="h-6 px-2 text-xs" @click="selectAll">
+            {{ t("apiHub.selectAll") }}
+          </Button>
+          <Button size="sm" variant="outline" class="h-6 px-2 text-xs" @click="deselectAll">
+            {{ t("apiHub.deselectAll") }}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            class="h-6 px-2"
+            :title="t('apiHub.manualAdd')"
+            @click="addingManualModel = !addingManualModel"
+          >
+            <AppIcon name="plus" class="size-3.5" />
+          </Button>
         </div>
       </div>
 
       <!-- Manual add row (add mode with models) -->
       <div v-if="fetchedModels.length > 0 && !isEdit && addingManualModel" class="manual-row">
-        <a-input
+        <Input
           v-model="manualModelId"
           class="manual-input"
           :placeholder="t('apiHub.modelIdPlaceholder')"
-          @press-enter="confirmManualAdd"
+          @keydown.enter="confirmManualAdd"
           @keydown.esc="addingManualModel = false"
         />
-        <a-button type="primary" size="small" :disabled="!manualModelId.trim()" @click="confirmManualAdd">
+        <Button size="sm" :disabled="!manualModelId.trim()" @click="confirmManualAdd">
           {{ t("apiHub.confirm") }}
-        </a-button>
-        <a-button size="small" @click="addingManualModel = false">{{ t("apiHub.cancel") }}</a-button>
+        </Button>
+        <Button size="sm" variant="outline" @click="addingManualModel = false">
+          {{ t("apiHub.cancel") }}
+        </Button>
       </div>
 
       <ModelList
@@ -261,23 +291,23 @@ const currentProtocol = computed(() =>
         </template>
         <template v-else>
           <div class="empty-box">
-            <icon-download class="empty-icon" />
+            <AppIcon name="download" class="empty-icon size-6" />
             <div class="empty-hint">{{ t("apiHub.models.fetchHint") }}</div>
-            <a-button size="mini" @click="addingManualModel = true">
-              <template #icon><icon-plus /></template>
+            <Button size="sm" variant="outline" @click="addingManualModel = true">
+              <AppIcon name="plus" class="size-3.5" />
               {{ t("apiHub.manualAddHint") }}
-            </a-button>
+            </Button>
             <div v-if="addingManualModel" class="manual-row manual-center">
-              <a-input
+              <Input
                 v-model="manualModelId"
                 class="manual-input"
                 :placeholder="t('apiHub.modelIdPlaceholder')"
-                @press-enter="confirmManualAdd"
+                @keydown.enter="confirmManualAdd"
                 @keydown.esc="addingManualModel = false"
               />
-              <a-button type="primary" size="small" :disabled="!manualModelId.trim()" @click="confirmManualAdd">
+              <Button size="sm" :disabled="!manualModelId.trim()" @click="confirmManualAdd">
                 {{ t("apiHub.confirm") }}
-              </a-button>
+              </Button>
             </div>
           </div>
         </template>
@@ -286,25 +316,24 @@ const currentProtocol = computed(() =>
 
     <!-- Action buttons -->
     <div class="form-actions">
-      <a-button @click="onCancel">{{ t("apiHub.cancel") }}</a-button>
-      <a-button v-if="isEdit" type="primary" @click="submit">{{ t("apiHub.update") }}</a-button>
-      <a-button
+      <Button variant="outline" @click="onCancel">{{ t("apiHub.cancel") }}</Button>
+      <Button v-if="isEdit" @click="submit">{{ t("apiHub.update") }}</Button>
+      <Button
         v-else
-        type="primary"
         :disabled="!form.name || !form.base_url || selectedCount() === 0"
         @click="submit"
       >
         {{ t("apiHub.add") }}
         <span class="count-badge">({{ selectedCount() }} {{ t("apiHub.models.countBadge") }})</span>
-      </a-button>
+      </Button>
     </div>
   </div>
 </template>
 
 <style scoped>
 .provider-form {
-  background-color: var(--color-bg-2);
-  border: 1px solid var(--color-border-2);
+  background-color: var(--color-card);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 16px;
   margin-bottom: 16px;
@@ -324,13 +353,12 @@ const currentProtocol = computed(() =>
   gap: 6px;
 }
 .header-icon {
-  color: rgb(var(--primary-6));
-  font-size: 18px;
+  color: var(--color-primary);
 }
 .form-title {
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 }
 .form-grid {
   display: grid;
@@ -345,7 +373,7 @@ const currentProtocol = computed(() =>
   display: block;
   margin-bottom: 6px;
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .hint-inline {
   opacity: 0.6;
@@ -353,7 +381,7 @@ const currentProtocol = computed(() =>
 .protocol-hint {
   margin: 4px 0 0;
   font-size: 10px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
   font-family: "JetBrains Mono", monospace;
 }
 .model-section {
@@ -367,7 +395,7 @@ const currentProtocol = computed(() =>
 }
 .model-count {
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .toolbar-actions {
   margin-left: auto;
@@ -379,8 +407,8 @@ const currentProtocol = computed(() =>
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border-2);
-  background-color: var(--color-fill-1);
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-muted);
 }
 .manual-center {
   justify-content: center;
@@ -393,32 +421,31 @@ const currentProtocol = computed(() =>
 }
 .model-empty {
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .muted-text {
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .empty-box {
-  border: 1px dashed var(--color-border-3);
+  border: 1px dashed var(--color-border);
   border-radius: 8px;
   padding: 20px;
   text-align: center;
 }
 .empty-icon {
-  font-size: 24px;
-  color: var(--color-text-4);
+  color: var(--color-muted-foreground);
 }
 .empty-hint {
   margin: 6px 0 10px;
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-muted-foreground);
 }
 .form-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   padding-top: 12px;
-  border-top: 1px solid var(--color-border-2);
+  border-top: 1px solid var(--color-border);
 }
 .count-badge {
   opacity: 0.6;
