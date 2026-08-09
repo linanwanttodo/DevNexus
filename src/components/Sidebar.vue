@@ -50,6 +50,7 @@ const navItems = [
   { route: "/cookies", label: () => t("nav.cookies"), icon: "idcard" },
   { route: "/uninstall", label: () => t("nav.uninstall"), icon: "delete" },
   { route: "/api-hub", label: () => t("nav.api_hub"), icon: "branch" },
+  { route: "/island", label: () => t("nav.island"), icon: "island" },
   { route: "/settings", label: () => t("nav.settings"), icon: "settings" },
 ];
 

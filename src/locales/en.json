@@ -27,7 +27,8 @@
     "processes": "Processes & Ports",
     "containers": "Containers",
     "api_hub": "API Hub",
-    "migration": "Migration"
+    "migration": "Migration",
+    "island": "Dynamic Island"
   },
   "settings": {
     "title": "Settings",
@@ -68,7 +69,9 @@
   "titleBar": {
     "minimize": "Minimize",
     "maximize": "Maximize",
-    "close": "Close"
+    "close": "Close",
+    "pin": "Always on Top",
+    "unpin": "Exit Always on Top"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -656,5 +659,40 @@
       "streaming": "Streaming request",
       "empty": "No request logs"
     }
+  },
+  "island": {
+    "title": "Dynamic Island",
+    "enable": "Enable Dynamic Island",
+    "enable_desc": "Shows an always-on-top capsule at the top of the screen with a live clock. Click to expand details, drag to reposition.",
+    "preview": "Preview",
+    "preview_off": "Disabled",
+    "behaviors": "Interactions",
+    "behavior_click": "Click to expand",
+    "behavior_click_desc": "Click the capsule to stretch it open with the time, date and quick actions; click again to collapse.",
+    "behavior_drag": "Drag to move",
+    "behavior_drag_desc": "Press and drag to reposition — the location is remembered automatically.",
+    "show_now": "Show now",
+    "hide_now": "Hide now",
+    "enabled_state_on": "Enabled",
+    "enabled_state_off": "Disabled",
+    "visible_on": "Currently shown",
+    "visible_off": "Currently hidden",
+    "state_desc": "The enable switch above controls whether the island is shown.",
+    "ds_title": "DeepSeek Balance",
+    "ds_key_label": "API Key",
+    "ds_key_desc": "Enter your DeepSeek API key to show the balance on the Dynamic Island. Stored locally only.",
+    "ds_key_placeholder": "sk-...",
+    "ds_check": "Check balance",
+    "ds_available": "Balance available",
+    "ds_unavailable": "Balance insufficient",
+    "ds_granted": "Granted",
+    "ds_topped": "Topped up",
+    "ds_key_empty": "Please enter a DeepSeek API key first.",
+    "ds_hint": "Enter your key and check the balance — it will also appear on the Dynamic Island.",
+    "ds_saved": "Key saved — it is stored locally and used by the Dynamic Island.",
+    "ds_show_key": "Show API key",
+    "ds_hide_key": "Hide API key",
+    "not_tauri": "Dynamic Island is only available in the desktop app",
+    "not_tauri_desc": "This is the web preview. Use the desktop build for the full experience."
   }
 }

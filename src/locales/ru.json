@@ -27,7 +27,8 @@
     "processes": "Процессы и порты",
     "containers": "Контейнеры",
     "api_hub": "API Hub",
-    "migration": "Миграция"
+    "migration": "Миграция",
+    "island": "Dynamic Island"
   },
   "settings": {
     "title": "Настройки",
@@ -68,7 +69,9 @@
   "titleBar": {
     "minimize": "Свернуть",
     "maximize": "Развернуть",
-    "close": "Закрыть"
+    "close": "Закрыть",
+    "pin": "Поверх всех окон",
+    "unpin": "Отключить поверх окон"
   },
   "dashboard": {
     "title": "Панель",
@@ -656,5 +659,40 @@
       "streaming": "Стриминговый запрос",
       "empty": "Журнал запросов пуст"
     }
+  },
+  "island": {
+    "title": "Dynamic Island",
+    "enable": "Включить Dynamic Island",
+    "enable_desc": "Показывает плавающую капсулу в верхней части экрана с живыми часами. Клик — подробности, перетаскивание — перемещение.",
+    "preview": "Предпросмотр",
+    "preview_off": "Отключено",
+    "behaviors": "Взаимодействие",
+    "behavior_click": "Клик — развернуть",
+    "behavior_click_desc": "Клик по капсуле растягивает её: часы, дата и быстрые действия; повторный клик сворачивает.",
+    "behavior_drag": "Перетаскивание",
+    "behavior_drag_desc": "Держите и перетащите в любое место — позиция запоминается автоматически.",
+    "show_now": "Показать сейчас",
+    "hide_now": "Скрыть сейчас",
+    "enabled_state_on": "Включено",
+    "enabled_state_off": "Отключено",
+    "visible_on": "Сейчас показано",
+    "visible_off": "Сейчас скрыто",
+    "state_desc": "Переключатель выше управляет показом/скрытием Dynamic Island.",
+    "ds_title": "Баланс DeepSeek",
+    "ds_key_label": "API Key",
+    "ds_key_desc": "Введите API-ключ DeepSeek, чтобы показывать баланс на Dynamic Island. Хранится только локально.",
+    "ds_key_placeholder": "sk-...",
+    "ds_check": "Проверить баланс",
+    "ds_available": "Баланс доступен",
+    "ds_unavailable": "Баланс недостаточен",
+    "ds_granted": "Бонус",
+    "ds_topped": "Пополнено",
+    "ds_key_empty": "Сначала введите API-ключ DeepSeek.",
+    "ds_hint": "Введите ключ и проверьте баланс — он также появится на Dynamic Island.",
+    "ds_saved": "Ключ сохранён — хранится локально и используется Dynamic Island.",
+    "ds_show_key": "Показать API-ключ",
+    "ds_hide_key": "Скрыть API-ключ",
+    "not_tauri": "Dynamic Island доступен только в настольном приложении",
+    "not_tauri_desc": "Это веб-предпросмотр. Полный функционал доступен в настольной сборке."
   }
 }

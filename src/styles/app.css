@@ -15,6 +15,24 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 桌面应用 UI：禁用文本选择与原生拖拽，避免拖动窗口时
+     选中/拖出文字（曾导致桌面生成 "Dragged Text-*.txt"） */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* 允许在输入框/文本域内选择复制 */
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* 禁用图片/元素的 HTML5 原生拖拽（WebKit 会抢占 pointer 事件） */
+* {
+  -webkit-user-drag: none;
+  user-drag: none;
 }
 
 code,

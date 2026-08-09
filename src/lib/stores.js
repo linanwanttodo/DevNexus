@@ -1,4 +1,4 @@
-// src/lib/stores.js — Vue 版轻量全局状态（主题）
+// src/lib/stores.js — Vue 版轻量全局状态（主题 / 窗口置顶）
 // 路由状态由 vue-router 接管（hash 模式），此处仅保留主题等全局偏好。
 import { ref } from "vue";
 
@@ -32,4 +32,70 @@ export function applyTheme(pref) {
       : pref;
   document.documentElement.classList.toggle("dark", resolved === "dark");
   document.documentElement.setAttribute("data-theme", resolved);
+}
+
+// ---- 窗口置顶 ----
+// 持久化到 localStorage，重启后 TitleBar 会恢复状态
+const initialWindowTop =
+  typeof window !== "undefined"
+    ? localStorage.getItem("devnexus-window-top") === "1"
+    : false;
+
+const windowTop = ref(initialWindowTop);
+
+export function getWindowTop() {
+  return windowTop;
+}
+
+export function setWindowTop(value) {
+  windowTop.value = value;
+  if (typeof window !== "undefined") {
+    localStorage.setItem("devnexus-window-top", value ? "1" : "0");
+  }
+}
+
+// ---- 灵动岛 ----
+// 持久化到 localStorage，主应用启动时按此恢复悬浮窗显示
+const initialIslandEnabled =
+  typeof window !== "undefined"
+    ? localStorage.getItem("devnexus-island-enabled") === "1"
+    : false;
+
+const islandEnabled = ref(initialIslandEnabled);
+
+export function getIslandEnabled() {
+  return islandEnabled;
+}
+
+export function setIslandEnabled(value) {
+  islandEnabled.value = value;
+  if (typeof window !== "undefined") {
+    localStorage.setItem("devnexus-island-enabled", value ? "1" : "0");
+  }
+}
+
+// ---- DeepSeek API Key（灵动岛余额查询用）----
+// 双写：localStorage（本窗口回显）+ Rust 内存（跨窗口共享，岛窗口读取）。
+// 不要只用 localStorage——Tauri 多窗口的 localStorage 按 origin 隔离，
+// 主窗口写入后岛窗口读不到，会一直显示"未配置 Key"。
+const initialDeepSeekKey =
+  typeof window !== "undefined"
+    ? localStorage.getItem("devnexus-deepseek-key") || ""
+    : "";
+
+const deepSeekKey = ref(initialDeepSeekKey);
+
+export function getDeepSeekKey() {
+  return deepSeekKey;
+}
+
+export function setDeepSeekKey(value) {
+  deepSeekKey.value = value;
+  if (typeof window !== "undefined") {
+    localStorage.setItem("devnexus-deepseek-key", value);
+    // 同步到 Rust 侧内存，供独立窗口（灵动岛）读取
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke("deepseek_set_key", { key: value }))
+      .catch(() => {});
+  }
 }

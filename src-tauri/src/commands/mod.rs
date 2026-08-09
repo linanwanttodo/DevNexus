@@ -1,6 +1,7 @@
 pub mod container;
 pub mod cookie_extractor;
 pub mod environment;
+pub mod island_bridge;
 pub mod migration;
 pub mod mirror;
 pub mod password_manager;
