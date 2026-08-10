@@ -257,13 +257,107 @@ pub async fn island_media_control(action: String) -> Result<(), String> {
 
 /// 启动系统通知监听（在 setup 中调用一次）
 pub fn init(app: tauri::AppHandle) {
-    imp::start_notification_listener(app);
+    imp::start_notification_listener(app.clone());
+    // 工作区跟随：mutter(Wayland) 下 STICKY 不可靠，改为监听工作区切换、移动岛窗口
+    start_workspace_follower(app);
 }
 
 // ═══════════════ 跨工作区可见（GNOME/mutter 兼容）═══════════════
-// tao 的 set_visible_on_all_workspaces 走 GTK window.stick()，在 XWayland/GNOME 下
-// 偶发不生效（窗口不出现 _NET_WM_STATE_STICKY）。这里用 X11 协议直接写
-// _NET_WM_STATE_STICKY，保证切换虚拟桌面/工作区时岛窗口始终可见。
+// 用户环境是 Wayland 会话（GNOME + XWayland，应用强制 GDK_BACKEND=x11）：
+// mutter 对 XWayland 窗口的 _NET_WM_STATE_STICKY（0xFFFFFFFF）支持不可靠——
+// 实测设置了 STICKY 属性后切工作区窗口仍不显示。
+// 可靠方案：监听 _NET_CURRENT_DESKTOP 变化，把岛窗口 move_to_desktop(当前工作区)，
+// 窗口始终跟随当前工作区显示（等效于"每个工作区都常驻"）。
+
+/// 读取当前工作区号（_NET_CURRENT_DESKTOP，root window 属性）
+#[cfg(target_os = "linux")]
+fn current_desktop() -> Option<u32> {
+    use x11_dl::xlib::{Xlib, XA_CARDINAL};
+    let xlib = Xlib::open().ok()?;
+    unsafe {
+        let display = (xlib.XOpenDisplay)(std::ptr::null());
+        if display.is_null() {
+            return None;
+        }
+        let root = (xlib.XDefaultRootWindow)(display);
+        let atom = (xlib.XInternAtom)(display, c"_NET_CURRENT_DESKTOP".as_ptr(), 0);
+        let mut actual_type: std::os::raw::c_ulong = 0;
+        let mut actual_format: std::os::raw::c_int = 0;
+        let mut nitems: std::os::raw::c_ulong = 0;
+        let mut bytes_after: std::os::raw::c_ulong = 0;
+        let mut data: *mut u8 = std::ptr::null_mut();
+        let status = (xlib.XGetWindowProperty)(
+            display,
+            root,
+            atom,
+            0,
+            1,
+            0,
+            XA_CARDINAL,
+            &mut actual_type,
+            &mut actual_format,
+            &mut nitems,
+            &mut bytes_after,
+            &mut data,
+        );
+        let result = if status == 0 && !data.is_null() && nitems >= 1 {
+            Some(*(data as *const std::os::raw::c_ulong) as u32)
+        } else {
+            None
+        };
+        if !data.is_null() {
+            (xlib.XFree)(data as *mut std::ffi::c_void);
+        }
+        (xlib.XCloseDisplay)(display);
+        result
+    }
+}
+
+/// 把所有岛窗口移动到指定工作区（走 GDK 自身连接，安全）
+#[cfg(target_os = "linux")]
+fn move_island_to_desktop(app: &tauri::AppHandle, desktop: u32) {
+    use tauri::Manager; // webview_windows()
+    let app = app.clone();
+    let _ = app.clone().run_on_main_thread(move || {
+        for (label, win) in app.webview_windows() {
+            if label.starts_with("island") {
+                use gdkx11::X11Window;
+                use gtk::prelude::*;
+                if let Ok(gtk_win) = win.gtk_window() {
+                    if let Some(gdk_win) = gtk_win.window() {
+                        if let Some(x11_win) = gdk_win.downcast_ref::<X11Window>() {
+                            x11_win.move_to_desktop(desktop);
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+/// 后台线程：监听工作区切换，岛窗口跟随到当前工作区
+#[cfg(target_os = "linux")]
+pub fn start_workspace_follower(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let mut last: Option<u32> = None;
+        loop {
+            let cur = current_desktop();
+            if cur != last {
+                last = cur;
+                if let Some(d) = cur {
+                    move_island_to_desktop(&app, d);
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn start_workspace_follower(_app: tauri::AppHandle) {
+    // 非 Linux：无需跟随
+}
+
 #[cfg(target_os = "linux")]
 fn set_sticky_x11(window: &tauri::Window) -> Result<(), String> {
     use gdkx11::X11Window;
@@ -276,10 +370,11 @@ fn set_sticky_x11(window: &tauri::Window) -> Result<(), String> {
         .downcast_ref::<X11Window>()
         .ok_or("not an X11 window")?;
 
-    // 2) EWMH：_NET_WM_DESKTOP = 0xFFFFFFFF 表示 sticky（所有桌面/工作区可见）。
-    //    走 GDK 自身连接（gdk_x11_window_move_to_desktop），不新开 X 连接，
-    //    避免与 GTK error trap 冲突导致应用崩溃。
-    x11_win.move_to_desktop(u32::MAX);
+    // 2) Wayland 会话下 STICKY(0xFFFFFFFF) 无效：改为钉到当前工作区，
+    //    窗口跟随当前工作区显示；后续由 start_workspace_follower 持续跟随。
+    if let Some(desktop) = current_desktop() {
+        x11_win.move_to_desktop(desktop);
+    }
     Ok(())
 }
 
