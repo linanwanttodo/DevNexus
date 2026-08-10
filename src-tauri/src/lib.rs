@@ -61,9 +61,26 @@ pub fn run() {
             // 启动灵动岛数据桥：系统通知监听（微信/QQ 等 → island-notify 事件）
             commands::island_bridge::init(app.handle().clone());
 
-            let show = MenuItemBuilder::with_id("show", "Show DevNexus").build(app)?;
-            let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
-            let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
+            // 静默启动：开启时主窗口不显示，后台常驻托盘 + 灵动岛
+            if commands::autostart::get_silent_start() {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+            }
+
+            let lang = commands::tray::saved_lang();
+            let (show_label, island_label, check_update_label, quit_label) =
+                commands::tray::tray_texts(&lang);
+            let balance_label = commands::tray::balance_placeholder(&lang);
+            let show = MenuItemBuilder::with_id("show", show_label).build(app)?;
+            let island = MenuItemBuilder::with_id("island", island_label).build(app)?;
+            let check_update =
+                MenuItemBuilder::with_id("check-update", check_update_label).build(app)?;
+            let balance = MenuItemBuilder::with_id("balance", balance_label).build(app)?;
+            let quit = MenuItemBuilder::with_id("quit", quit_label).build(app)?;
+            let menu = MenuBuilder::new(app)
+                .items(&[&show, &island, &check_update, &balance, &quit])
+                .build()?;
             // Linux(libappindicator/dbusmenu) 下菜单对象必须在 setup 返回后保持存活：
             // 否则 Rust 侧 Menu drop 会释放 D-Bus 菜单 registrar，导致托盘菜单项
             // 只剩空白框、文字不渲染（tauri#7648 / tray-icon#89）。
@@ -94,6 +111,46 @@ pub fn run() {
                             let _ = w.set_focus();
                         }
                     }
+                    "island" => {
+                        // 打开主窗口并导航到灵动岛设置页
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.unminimize();
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                        use tauri::Emitter;
+                        let _ = app.emit("tray-nav", "/island");
+                    }
+                    "check-update" => {
+                        // 打开主窗口并导航到设置页触发检查更新
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.unminimize();
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                        use tauri::Emitter;
+                        let _ = app.emit("tray-nav", "/settings");
+                    }
+                    "balance" => {
+                        // 点击余额菜单项：查询 DeepSeek 余额并更新菜单文字
+                        let app_handle = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let text = match crate::commands::island_bridge::deepseek_get_balance()
+                                .await
+                            {
+                                Ok(b) => crate::commands::tray::format_balance(&b),
+                                Err(e) => {
+                                    let lang = crate::commands::tray::saved_lang();
+                                    match lang.as_str() {
+                                        "zh" => format!("DeepSeek 余额: 查询失败 ({e})"),
+                                        "ru" => format!("Баланс DeepSeek: ошибка ({e})"),
+                                        _ => format!("DeepSeek Balance: error ({e})"),
+                                    }
+                                }
+                            };
+                            crate::commands::tray::set_menu_item_text(&app_handle, "balance", text);
+                        });
+                    }
                     "quit" => {
                         app.exit(0);
                     }
@@ -118,6 +175,11 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            commands::autostart::get_autostart,
+            commands::autostart::set_autostart,
+            commands::autostart::get_silent_start,
+            commands::autostart::set_silent_start,
+            commands::tray::update_tray_menu,
             commands::system::get_system_info,
             commands::system::get_resource_usage,
             commands::system::get_hardware_status,

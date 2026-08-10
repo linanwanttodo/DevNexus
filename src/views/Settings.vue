@@ -33,6 +33,8 @@ const proxyEnabled = ref(false);
 const proxyAddress = ref("");
 const proxyPort = ref("");
 const appVersion = ref("");
+const autostartEnabled = ref(false);
+const silentStart = ref(false);
 
 const updateState = ref("idle");
 const updateInfo = ref(null);
@@ -144,7 +146,32 @@ onMounted(() => {
   invoke("get_app_version")
     .then((v) => (appVersion.value = v))
     .catch(() => (appVersion.value = "1.1.1"));
+  // 读取开机自启与静默启动状态
+  invoke("get_autostart")
+    .then((v) => (autostartEnabled.value = !!v))
+    .catch(() => {});
+  invoke("get_silent_start")
+    .then((v) => (silentStart.value = !!v))
+    .catch(() => {});
 });
+
+async function onToggleAutostart(value) {
+  autostartEnabled.value = value;
+  try {
+    await invoke("set_autostart", { enabled: value });
+  } catch {
+    autostartEnabled.value = !value;
+  }
+}
+
+async function onToggleSilentStart(value) {
+  silentStart.value = value;
+  try {
+    await invoke("set_silent_start", { enabled: value });
+  } catch {
+    silentStart.value = !value;
+  }
+}
 </script>
 
 <template>
@@ -233,6 +260,34 @@ onMounted(() => {
             </div>
             <Switch v-model="securityNotices" />
           </div>
+        </CardContent>
+      </Card>
+
+      <!-- Startup & Autostart -->
+      <Card class="section-card shadow-sm">
+        <CardHeader>
+          <CardTitle class="text-base font-medium">{{ t("settings.autostart") }}</CardTitle>
+        </CardHeader>
+        <CardContent class="space-y-3">
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">{{ t("settings.autostart") }}</div>
+              <div class="setting-desc">{{ t("settings.autostart_desc") }}</div>
+            </div>
+            <Switch :model-value="autostartEnabled" @update:model-value="onToggleAutostart" />
+          </div>
+
+          <!-- 静默启动子选项：仅当开机自启开启时显示 -->
+          <template v-if="autostartEnabled">
+            <Separator />
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">{{ t("settings.silent_start") }}</div>
+                <div class="setting-desc">{{ t("settings.silent_start_desc") }}</div>
+              </div>
+              <Switch :model-value="silentStart" @update:model-value="onToggleSilentStart" />
+            </div>
+          </template>
         </CardContent>
       </Card>
 
