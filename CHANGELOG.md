@@ -14,6 +14,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.6] - 2026-08-10
+
+### Added (English)
+- Autostart at login toggle in Settings (Linux XDG / macOS LaunchAgent / Windows registry)
+- Silent start option: launch to tray + island without showing the main window
+- Tray menu now follows the app language (Show DevNexus / Dynamic Island Settings / Check for Updates / Quit)
+- DeepSeek balance shown in the tray menu (click to refresh)
+- Tray menu navigation: Dynamic Island Settings and Check for Updates open the matching page
+- Cross-workspace visibility hardened with delayed retry (fixes packaged builds where the island was only on one workspace)
+
+### Fixed (English)
+- Dynamic Island not visible on all workspaces in packaged builds (GTK window not realized yet when sticky was applied — retry until ready)
+- Tray menu always in English regardless of app language
+
+### 新增（中文）
+- 设置页新增"开机自启"开关（Linux XDG / macOS LaunchAgent / Windows 注册表）
+- 新增"静默启动"子选项：开机自启时不显示主窗口，后台常驻托盘与灵动岛
+- 系统托盘菜单跟随应用语言（显示 DevNexus / 灵动岛设置 / 检查更新 / 退出）
+- 托盘菜单显示 DeepSeek 余额（点击刷新）
+- 托盘菜单支持直接跳转"灵动岛设置"与"检查更新"页面
+- 跨工作区常驻增强：延迟重试，修复打包版灵动岛只在单个工作区显示的问题
+
+### 修复（中文）
+- 修复打包版灵动岛跨工作区不可见（窗口未就绪时已应用 sticky，改为重试直至生效）
+- 修复托盘菜单不跟随语言、始终英文
+
+---
+
 ## [1.3.5] - 2026-08-10
 
 ### Added (English)

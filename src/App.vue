@@ -7,13 +7,33 @@ import ConfirmDialog from "./components/ConfirmDialog.vue";
 import Sonner from "./components/ui/sonner/Sonner.vue";
 import { getTheme } from "./lib/stores.js";
 import { applyIslandState } from "./lib/island.js";
+import { router } from "./router.js";
 
 const theme = getTheme();
 
 // 启动时按持久化状态恢复灵动岛悬浮窗（独立透明置顶窗口）
 onMounted(() => {
   applyIslandState();
+  // 托盘菜单导航：点击"灵动岛设置/检查更新"时跳转对应页面
+  try {
+    const { listen } = window.__TAURI_INTERNALS__
+      ? require_tauri_listen()
+      : { listen: async () => () => {} };
+    listen("tray-nav", (ev) => {
+      const path = ev?.payload;
+      if (typeof path === "string" && path.startsWith("/")) {
+        router.push(path);
+      }
+    });
+  } catch {
+    // 非 Tauri 环境忽略
+  }
 });
+
+function require_tauri_listen() {
+  // 动态导入以保持 SSR/浏览器降级友好
+  return { listen: (evt, cb) => import("@tauri-apps/api/event").then((m) => m.listen(evt, cb)) };
+}
 </script>
 
 <template>
