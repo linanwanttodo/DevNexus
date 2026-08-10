@@ -73,6 +73,10 @@ export function setIslandEnabled(value) {
   islandEnabled.value = value;
   if (typeof window !== "undefined") {
     localStorage.setItem("devnexus-island-enabled", value ? "1" : "0");
+    // 同步到 Rust 侧持久化状态，保证托盘菜单 check 项与前端开关一致
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke("island_set_enabled", { enabled: value }))
+      .catch(() => {});
   }
 }
 

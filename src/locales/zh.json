@@ -28,7 +28,9 @@
     "containers": "容器管理",
     "api_hub": "API 聚合",
     "migration": "环境迁移",
-    "island": "灵动岛"
+    "island": "灵动岛",
+    "island_on": "灵动岛：开",
+    "island_off": "灵动岛：关"
   },
   "settings": {
     "title": "设置",
