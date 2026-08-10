@@ -14,6 +14,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.8] - 2026-08-10
+
+### Added (English)
+- Tray menu DeepSeek balance auto-refresh: queries on startup and every 5 minutes (no click needed)
+- Sidebar island toggle icon: click to turn the Dynamic Island on/off (highlighted when on)
+- Tray menu island item is now a checkbox toggle (check = on, uncheck = off)
+
+### Fixed (English)
+- Tray balance item showed a placeholder dash until clicked; now auto-fills
+
+### 新增（中文）
+- 托盘菜单 DeepSeek 余额自动刷新：启动即查询、每 5 分钟更新（无需点击）
+- 侧边栏新增灵动岛开关图标：点击直接开启/关闭灵动岛（开启时高亮）
+- 托盘菜单"灵动岛"改为勾选开关（勾选=开，取消=关）
+
+### 修复（中文）
+- 修复托盘余额项需点击才显示（现在自动查询填充）
+
+---
+
 ## [1.3.7] - 2026-08-10
 
 ### Added (English)

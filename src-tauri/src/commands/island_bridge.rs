@@ -389,6 +389,45 @@ pub fn island_set_sticky(window: tauri::Window) -> Result<(), String> {
     set_sticky_x11(&window)
 }
 
+// ═══════════════ 灵动岛开关状态（托盘 check 项 / 前端共享）═══════════════
+// 持久化到 data_dir/island_enabled（"1"/"0"），前端 stores.js 与托盘 check 项
+// 都读写此状态，保证两边一致；默认开启（与前端行为一致）。
+
+fn island_enabled_path() -> std::path::PathBuf {
+    crate::utils::data_dir().join("island_enabled")
+}
+
+/// 读取灵动岛开关状态（默认开启）
+#[tauri::command]
+pub fn island_get_enabled() -> bool {
+    std::fs::read_to_string(island_enabled_path())
+        .map(|s| s.trim() == "1")
+        .unwrap_or(true)
+}
+
+/// 设置灵动岛开关状态并同步所有岛窗口显示/隐藏
+#[tauri::command]
+pub fn island_set_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), String> {
+    if let Err(e) = std::fs::create_dir_all(crate::utils::data_dir()) {
+        eprintln!("[DevNexus] cannot create data dir for island_enabled: {e}");
+    }
+    let _ = std::fs::write(island_enabled_path(), if enabled { "1" } else { "0" });
+    // 同步所有岛窗口显示状态（托盘点击时主窗口可能未打开，这里直接控制窗口）
+    use tauri::Manager;
+    for (label, win) in app.webview_windows() {
+        if label.starts_with("island") {
+            if enabled {
+                let _ = win.show();
+                let _ = win.set_always_on_top(true);
+                let _ = win.set_visible_on_all_workspaces(true);
+            } else {
+                let _ = win.hide();
+            }
+        }
+    }
+    Ok(())
+}
+
 // ═══════════════ DeepSeek 余额查询 ═══════════════
 // 官方接口：GET https://api.deepseek.com/user/balance（Bearer API Key）
 // 返回 is_available + balance_infos[]（currency / total_balance / granted_balance / topped_up_balance）
