@@ -28,7 +28,9 @@
     "containers": "Containers",
     "api_hub": "API Hub",
     "migration": "Migration",
-    "island": "Dynamic Island"
+    "island": "Dynamic Island",
+    "island_on": "Island: On",
+    "island_off": "Island: Off"
   },
   "settings": {
     "title": "Settings",

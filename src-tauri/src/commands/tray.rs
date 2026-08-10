@@ -18,19 +18,19 @@ pub fn tray_texts(lang: &str) -> (String, String, String, String) {
     match lang {
         "zh" => (
             "显示 DevNexus".into(),
-            "灵动岛设置".into(),
+            "灵动岛".into(),
             "检查更新".into(),
             "退出".into(),
         ),
         "ru" => (
             "Показать DevNexus".into(),
-            "Настройки острова".into(),
+            "Остров".into(),
             "Проверить обновления".into(),
             "Выход".into(),
         ),
         _ => (
             "Show DevNexus".into(),
-            "Dynamic Island Settings".into(),
+            "Dynamic Island".into(),
             "Check for Updates".into(),
             "Quit".into(),
         ),
@@ -69,6 +69,21 @@ pub fn set_menu_item_text(app: &tauri::AppHandle, id: &str, text: String) {
     }
 }
 
+/// 启动 DeepSeek 余额自动刷新：启动后立即查询一次，之后每 5 分钟刷新，
+/// 结果直接更新托盘菜单的 balance 项文字（无需用户点击）。
+pub fn start_balance_refresh(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let text = match crate::commands::island_bridge::deepseek_get_balance().await {
+                Ok(b) => format_balance(&b),
+                Err(_) => balance_placeholder(&saved_lang()),
+            };
+            set_menu_item_text(&app, "balance", text);
+            tokio::time::sleep(std::time::Duration::from_secs(300)).await; // 5 分钟
+        }
+    });
+}
+
 /// 更新托盘菜单文案（前端切换语言时调用）
 #[tauri::command]
 pub fn update_tray_menu(app: tauri::AppHandle, lang: String) -> Result<(), String> {
@@ -83,6 +98,15 @@ pub fn update_tray_menu(app: tauri::AppHandle, lang: String) -> Result<(), Strin
         ("quit", quit_text),
     ] {
         if let Some(item) = app.state::<tauri::menu::Menu<tauri::Wry>>().inner().get(id) {
+            // island 是 CheckMenuItem（开关），用 as_check_menuitem 更新文字并同步勾选状态
+            if id == "island" {
+                if let Some(ci) = item.as_check_menuitem() {
+                    let _ = ci.set_text(text);
+                    let enabled = crate::commands::island_bridge::island_get_enabled();
+                    let _ = ci.set_checked(enabled);
+                }
+                continue;
+            }
             if let Some(mi) = item.as_menuitem() {
                 let _ = mi.set_text(text);
             }

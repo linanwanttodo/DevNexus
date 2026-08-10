@@ -6,7 +6,7 @@ mod utils;
 use std::sync::Arc;
 use tauri::{
     image::Image,
-    menu::{MenuBuilder, MenuItemBuilder},
+    menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
     Manager,
 };
@@ -73,7 +73,11 @@ pub fn run() {
                 commands::tray::tray_texts(&lang);
             let balance_label = commands::tray::balance_placeholder(&lang);
             let show = MenuItemBuilder::with_id("show", show_label).build(app)?;
-            let island = MenuItemBuilder::with_id("island", island_label).build(app)?;
+            // 灵动岛：check 开关项（勾选=开，取消勾选=关），点击直接切换
+            let island_checked = commands::island_bridge::island_get_enabled();
+            let island = CheckMenuItemBuilder::with_id("island", island_label)
+                .checked(island_checked)
+                .build(app)?;
             let check_update =
                 MenuItemBuilder::with_id("check-update", check_update_label).build(app)?;
             let balance = MenuItemBuilder::with_id("balance", balance_label).build(app)?;
@@ -112,14 +116,21 @@ pub fn run() {
                         }
                     }
                     "island" => {
-                        // 打开主窗口并导航到灵动岛设置页
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.unminimize();
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
-                        use tauri::Emitter;
-                        let _ = app.emit("tray-nav", "/island");
+                        // 灵动岛开关：翻转 check 状态并同步显示/隐藏
+                        let menu = app.state::<tauri::menu::Menu<tauri::Wry>>();
+                        let next = if let Some(item) = menu.get("island") {
+                            if let Some(ci) = item.as_check_menuitem() {
+                                let cur = ci.is_checked().unwrap_or(false);
+                                let _ = ci.set_checked(!cur);
+                                !cur
+                            } else {
+                                !crate::commands::island_bridge::island_get_enabled()
+                            }
+                        } else {
+                            !crate::commands::island_bridge::island_get_enabled()
+                        };
+                        let _ =
+                            crate::commands::island_bridge::island_set_enabled(next, app.clone());
                     }
                     "check-update" => {
                         // 打开主窗口并导航到设置页触发检查更新
@@ -157,6 +168,9 @@ pub fn run() {
                     _ => {}
                 })
                 .build(&app_handle)?;
+
+            // 托盘 DeepSeek 余额自动刷新：启动后立即查询并周期性更新菜单文字
+            commands::tray::start_balance_refresh(app_handle.clone());
 
             Ok(())
         })
@@ -256,6 +270,8 @@ pub fn run() {
             commands::island_bridge::island_media_status,
             commands::island_bridge::island_media_control,
             commands::island_bridge::island_set_sticky,
+            commands::island_bridge::island_get_enabled,
+            commands::island_bridge::island_set_enabled,
             commands::island_bridge::deepseek_get_balance,
             commands::island_bridge::deepseek_set_key,
             commands::island_bridge::deepseek_get_key,

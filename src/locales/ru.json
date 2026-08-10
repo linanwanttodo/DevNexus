@@ -28,7 +28,9 @@
     "containers": "Контейнеры",
     "api_hub": "API Hub",
     "migration": "Миграция",
-    "island": "Dynamic Island"
+    "island": "Dynamic Island",
+    "island_on": "Остров: вкл",
+    "island_off": "Остров: выкл"
   },
   "settings": {
     "title": "Настройки",
