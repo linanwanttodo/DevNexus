@@ -20,6 +20,13 @@ export async function initI18n(l) {
         lang.value = cand;
         version.value++;
         localStorage.setItem("devnexus-lang", lang.value);
+        // 同步系统托盘菜单文案（Rust 侧持久化语言并更新菜单文字）
+        try {
+          const { invoke } = await import("@tauri-apps/api/core");
+          await invoke("update_tray_menu", { lang: cand });
+        } catch {
+          // 非 Tauri 环境忽略
+        }
         return;
       }
     } catch (e) {

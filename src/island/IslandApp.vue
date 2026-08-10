@@ -363,6 +363,24 @@ async function onPointerMove(e) {
   }
 }
 
+// ═══════════════ 跨工作区可见（延迟重试）═══════════════
+// 发布版 webview 加载快，首次执行时 GTK 窗口可能尚未 realize，
+// tao 的 setVisibleOnAllWorkspaces / Rust 侧 island_set_sticky 会静默失败。
+// 这里做多次延迟重试，确保窗口跨工作区常驻。
+async function ensureSticky() {
+  const attempts = [300, 800, 1500, 3000, 5000];
+  for (const delay of attempts) {
+    await new Promise((r) => setTimeout(r, delay));
+    try {
+      await win.setVisibleOnAllWorkspaces(true);
+      await invoke("island_set_sticky");
+      return; // 成功即停
+    } catch {
+      // 窗口未就绪，继续下一轮重试
+    }
+  }
+}
+
 /** 位置持久化 key：按窗口 label 隔离（多显示器下每个岛实例各自保存位置，互不覆盖）。
  *  主实例 label="island" 沿用旧 key 兼容历史数据；其他实例 key 带 label 后缀。 */
 function posKey(axis) {
@@ -468,20 +486,10 @@ onMounted(async () => {
   }
   try {
     await win.setAlwaysOnTop(true);
-    // 所有工作区可见：灵动岛是全局悬浮窗，切到任意虚拟桌面/工作区都应保持显示
-    // （X11/GNOME 下不设置的话窗口只绑定在创建时的工作区，切换后消失）。
-    try {
-      await win.setVisibleOnAllWorkspaces(true);
-    } catch {
-      // 某些平台不支持，忽略
-    }
-    // 兜底：tao 的 setVisibleOnAllWorkspaces 走 GTK stick()，在 XWayland/GNOME 下
-    // 偶发不生效，Rust 侧用 X11 协议直接写 _NET_WM_STATE_STICKY 更可靠。
-    try {
-      await invoke("island_set_sticky");
-    } catch {
-      // 非 Tauri 环境忽略
-    }
+    // 所有工作区可见：灵动岛是全局悬浮窗，切到任意虚拟桌面/工作区都应保持显示。
+    // 发布版 webview 加载快，onMounted 首次执行时 GTK 窗口可能尚未 realize，
+    // setVisibleOnAllWorkspaces / island_set_sticky 会静默失败 → 用延迟重试兜底。
+    ensureSticky();
     // 恢复上次位置；无记录时置于当前窗口所在显示器顶部居中
     // 注意：localStorage 存的是 outerPosition() 的物理像素，恢复必须用 PhysicalPosition
     const x = localStorage.getItem(posKey("x"));
