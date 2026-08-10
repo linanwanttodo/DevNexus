@@ -14,6 +14,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.5] - 2026-08-10
+
+### Added (English)
+- Dynamic Island two-state design: collapsed capsule / expanded capsule with spring animation (hover or click to expand)
+- Dynamic Island now visible on all virtual desktops/workspaces (X11 `_NET_WM_DESKTOP=0xFFFFFFFF` via GDK)
+- Per-monitor Dynamic Island instances on multi-display setups, each positioned and persisted independently
+- Media control buttons (previous / play-pause / next) in the media module
+- System notifications now expand the Dynamic Island inline like the native iPhone/Mac behavior, then auto-collapse
+
+### Fixed (English)
+- Dynamic Island toggle always showed "off" (Switch bound to `checked` instead of `modelValue`)
+- Media player never detected (MPRIS `ListNames` reply parsed as tuple instead of array)
+- UI froze during media polling (sync command with blocking D-Bus calls ran on the main thread)
+- Island window disappeared when switching workspaces; disappeared on non-primary monitors
+- Island lost drag/click responsiveness and stuck state when default-open
+- Expand animation pivoted from the top-left instead of symmetric horizontal spread from center
+- Collapse animation clipped the capsule into a rectangle (window resized before CSS transition finished)
+
+### 新增（中文）
+- 灵动岛两态设计：收起小胶囊 / 展开大胶囊，spring 弹性动画（悬停或点击展开）
+- 灵动岛在所有虚拟桌面/工作区可见（GDK 写入 X11 `_NET_WM_DESKTOP=0xFFFFFFFF`）
+- 多显示器每屏一个灵动岛实例，位置独立持久化
+- 媒体模块补上控制按钮（上一首 / 播放暂停 / 下一首）
+- 系统通知融入灵动岛：胶囊膨胀内联展示通知，结束后自动收起（iPhone/Mac 原生风格）
+
+### 修复（中文）
+- 修复灵动岛开关永远显示"关闭"（Switch 误绑 `checked` 而非 `modelValue`）
+- 修复播放器永远识别不到（MPRIS `ListNames` 返回值按元组解析而非数组）
+- 修复媒体轮询卡死界面（同步命令 + 阻塞 D-Bus 调用跑在主线程）
+- 修复切换工作区、多显示器时岛窗口消失
+- 修复岛窗口失去拖拽/点击响应、默认开启状态不一致
+- 修复展开动画以左上角为基准偏移（改为从中心左右对称展开）
+- 修复收起动画胶囊被裁剪成矩形（窗口在 CSS 过渡完成前就缩小）
+
+---
+
 ## [1.3.1] - 2026-08-01
 
 ### Fixed
