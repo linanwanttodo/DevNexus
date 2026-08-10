@@ -80,8 +80,8 @@ function startClock() {
 
 // ═══════════════ 媒体控制（MPRIS）═══════════════
 const media = ref(null); // { player, title, artist, status, lengthMs }
-// 事件优先：检测到媒体开始播放时，自动把当前模块切到媒体控制
-let lastMediaPlaying = false;
+// 媒体状态仅轮询刷新，不再自动切换模块：默认保持时间模块，
+// 用户滚轮可随时切到媒体模块查看播放信息。
 
 async function pollMedia() {
   try {
@@ -89,12 +89,6 @@ async function pollMedia() {
   } catch {
     media.value = null;
   }
-  // 有声音播放 → 优先显示媒体界面（用户滚轮可随时切走）
-  const playing = !!(media.value && media.value.status === "Playing");
-  if (playing && !lastMediaPlaying) {
-    switchModule(3); // 媒体模块
-  }
-  lastMediaPlaying = playing;
 }
 
 async function mediaAction(action) {
