@@ -159,7 +159,7 @@ async function checkBalance() {
               <div class="setting-label">{{ t("island.enable") }}</div>
               <div class="setting-desc">{{ t("island.enable_desc") }}</div>
             </div>
-            <Switch :checked="islandEnabled" @update:model-value="onToggle" />
+            <Switch :model-value="islandEnabled" @update:model-value="onToggle" />
           </div>
 
           <!-- 状态反馈：由启用开关统一控制显示/隐藏（不再提供单独按钮） -->
@@ -326,9 +326,7 @@ async function checkBalance() {
   height: 34px;
   border-radius: 17px;
   background: #000;
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.4),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   transition:
     width 0.38s ease,
     height 0.38s ease,

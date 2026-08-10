@@ -33,20 +33,36 @@ body {
   color: #fff;
 }
 
-/* ── 胶囊几何（紧凑药丸，固定尺寸）── */
+/* ── 胶囊几何（两态：收起 / 展开，spring 动画过渡）──
+ * 窗口尺寸恒定（400×116），胶囊在窗口内水平居中、顶部对齐。
+ * 用 left:0;right:0;margin:auto 居中：宽度过渡时水平中心始终不动，
+ * 避免 left:50%+translateX(-50%) 因 transform 未过渡导致"以左上角为基准向右展开"。 */
 .capsule {
   position: absolute;
-  top: 4px; /* 窗口高度 48，胶囊 40，上下各留 4px */
-  left: 50%;
-  transform: translateX(-50%);
+  top: 4px; /* 胶囊顶部距窗口顶部 4px，收起态上下各留 4px */
+  left: 0;
+  right: 0;
+  margin: 0 auto; /* 水平居中，宽度变化时中心不变 */
   width: 240px;
   height: 40px;
   border-radius: 20px; /* height / 2 */
   background: #000;
-  /* 只保留内高光，去掉外部 box-shadow：透明窗口内外部阴影
-     会渲染出灰色渐变边缘，看起来背景不透明 */
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  /* 字面纯黑：不加任何 inset 高光/描边——白边会让黑色胶囊在暗背景下发灰 */
   overflow: hidden;
+  /* spring 弹性过渡（参考 iPhone 灵动岛：stiffness≈400 / damping≈30，
+     cubic-bezier 带轻微过冲，让展开/收起有"生物弹性"） */
+  transition:
+    width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+    height 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-radius 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: width, height, border-radius;
+}
+
+/* 展开态：更大胶囊容纳媒体详情（参考 iPhone expanded 408×84–160 取中间档） */
+.capsule.expanded {
+  width: 384px;
+  height: 108px;
+  border-radius: 24px; /* 大胶囊圆角，保持药丸感 */
 }
 
 /* ── 模块内容区（占满胶囊，一次一个模块）── */
@@ -56,6 +72,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* 收起/展开时内容轻微淡入，避免文字在尺寸动画中跳变 */
+  transition: opacity 0.18s ease;
+}
+
+/* 展开动画前段内容仍可见，收尾时淡入；收起时尽快淡出避免闪烁 */
+.capsule:not(.expanded) .exp-body {
+  opacity: 1;
 }
 
 .module {
@@ -191,7 +214,43 @@ body {
 
 /* 模块3：媒体控制 */
 .module-media {
+  gap: 6px;
+}
+
+/* 展开态：上下结构（上行标题、下行按钮 + 播放器名） */
+.module-media.expanded {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.media-expanded {
+  width: 100%;
+  padding: 12px 18px 0;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+  min-width: 0;
+}
+
+/* 展开态标题：更大字号，占上行，单行省略不换行 */
+.module-media.expanded .med-title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.media-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 展开态播放器名：跟在按钮后面，多余省略 */
+.media-controls .med-artist {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
 }
 
 .med-info {
@@ -203,7 +262,7 @@ body {
 }
 
 .med-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -241,8 +300,8 @@ body {
 }
 
 .med-btn {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
 }
 
@@ -257,37 +316,17 @@ body {
   transform: scale(0.94);
 }
 
-/* ── 通知横幅：覆盖在胶囊上方，iPhone/Mac 灵动岛风格 ── */
+/* ── 通知横幅：嵌入胶囊内部（iPhone/Mac 灵动岛风格）──
+ * banner 是胶囊的展开态内容：不再独立浮层，直接占满胶囊，
+ * 背景/圆角/弹性动画都由胶囊统一提供（spring 过渡由 .capsule 完成）。 */
 .banner {
   position: absolute;
-  top: 4px; /* 窗口高度 116（横幅态），横幅上边距 4px */
-  left: 50%;
-  transform: translateX(-50%);
-  width: 240px;
-  min-height: 108px;
+  inset: 0; /* 占满胶囊 */
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
-  background: rgba(0, 0, 0, 0.92);
-  border-radius: 26px;
-  box-shadow:
-    0 16px 48px rgba(0, 0, 0, 0.55),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  gap: 12px;
+  padding: 12px 16px;
   cursor: pointer;
-  z-index: 10;
-  animation: banner-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-@keyframes banner-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -12px) scale(0.94);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1);
-  }
 }
 
 .banner-icon {

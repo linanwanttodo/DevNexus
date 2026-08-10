@@ -874,7 +874,7 @@ dependencies = [
 
 [[package]]
 name = "devnexus"
-version = "1.3.4"
+version = "1.3.5"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -888,6 +888,8 @@ dependencies = [
  "dbus",
  "dirs 5.0.1",
  "futures-util",
+ "gdkx11",
+ "gtk",
  "keyring",
  "pbkdf2 0.12.2",
  "rand 0.8.7",
@@ -914,6 +916,7 @@ dependencies = [
  "which",
  "windows 0.58.0",
  "winreg 0.52.0",
+ "x11-dl",
  "zip 0.6.6",
 ]
 
