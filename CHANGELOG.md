@@ -14,6 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.7] - 2026-08-10
+
+### Added (English)
+- Dynamic Island stays visible on every workspace by following the current workspace (mutter/Wayland does not honor STICKY for XWayland windows)
+
+### Fixed (English)
+- Dynamic Island auto-switched to the media player module when audio started; now keeps showing the clock by default (scroll to media module manually)
+- Workspace following: island window moved to the current desktop on workspace switch (reliable on GNOME Wayland + XWayland)
+
+### 新增（中文）
+- 灵动岛跨工作区常驻：改为跟随当前工作区（mutter/Wayland 下 XWayland 窗口不认 STICKY）
+
+### 修复（中文）
+- 修复媒体播放时灵动岛自动切到播放器模块；现在默认保持时间显示（可滚轮手动切到媒体）
+- 修复切换工作区后岛窗口不跟随（工作区切换时把岛窗口移动到当前桌面）
+
+---
+
 ## [1.3.6] - 2026-08-10
 
 ### Added (English)
