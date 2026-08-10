@@ -26,12 +26,12 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "macros", 
 async-stream = "0.3"
 bytes = "1"
 reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
-thiserror = "1"
+thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
-aes-gcm = "0.10"
-base64 = "0.21"
-rand = "0.8"
-pbkdf2 = { version = "0.12", features = ["simple"] }
+aes-gcm = "0.11"
+base64 = "0.23"
+rand = "0.10"
+pbkdf2 = { version = "0.13", features = ["simple"] }
 sha2 = "0.10"
 sha1 = "0.10"
 aes = "0.8"
