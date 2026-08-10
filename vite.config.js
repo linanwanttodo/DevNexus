@@ -16,6 +16,11 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
+      // 多入口：主应用 + 灵动岛悬浮窗（透明窗口加载 island.html）
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        island: fileURLToPath(new URL("./island.html", import.meta.url)),
+      },
       output: {
         // Vite 8 使用 rolldown，不支持 object 式 manualChunks（会报
         // "manualChunks is not a function"），须用函数式按模块 id 分组。

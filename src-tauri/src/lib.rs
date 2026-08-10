@@ -13,6 +13,17 @@ use tauri::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // GNOME Wayland 不支持透明窗口与 always-on-top（Tauri/WebKitGTK 已知限制，
+    // 灵动岛窗口依赖两者）。在 GTK 初始化前强制走 XWayland（X11 后端）：
+    // X11 协议原生支持 ARGB 透明 + _NET_WM_STATE_ABOVE 置顶，mutter 会正常合成。
+    // Wayland 原生协议不提供窗口级 alpha 与置顶层，因此无条件覆盖
+    // GDK_BACKEND=wayland（含用户显式设置）；纯 Wayland 环境若有 XWayland 同样适用。
+    #[cfg(target_os = "linux")]
+    {
+        std::env::set_var("GDK_BACKEND", "x11");
+        eprintln!("[DevNexus] GDK_BACKEND forced to x11 (XWayland) for transparent + always-on-top support");
+    }
+
     let password_manager = commands::password_manager::PasswordManager::new();
     let version_cache = commands::version_manager::VersionCache::new();
 
@@ -28,10 +39,11 @@ pub fn run() {
         .manage(version_cache)
         .manage(api_hub_state)
         .setup(move |app| {
-            // 开发模式下强制禁用 WebView 缓存，并在窗口加载后硬刷新一次，确保显示最新代码
+            // 开发模式下硬刷新一次主窗口，确保显示最新前端代码。
+            // 注意：不能调用 clear_all_browsing_data()——它会清空 localStorage，
+            // 导致用户偏好（主题/灵动岛开关/DeepSeek Key 等）每次 dev 启动都丢失。
             #[cfg(debug_assertions)]
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.clear_all_browsing_data();
                 let w = window.clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
@@ -45,6 +57,9 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 api_hub::start(hub).await;
             });
+
+            // 启动灵动岛数据桥：系统通知监听（微信/QQ 等 → island-notify 事件）
+            commands::island_bridge::init(app.handle().clone());
 
             let show = MenuItemBuilder::with_id("show", "Show DevNexus").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
@@ -91,7 +106,15 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.hide();
+                if window.label() == "island" {
+                    // 灵动岛：关闭即隐藏（设置页可重新显示）
+                    let _ = window.hide();
+                } else {
+                    // 主窗口：最小化而非隐藏。GNOME 桌面默认无托盘扩展，
+                    // 隐藏后没有任何入口能找回窗口（用户会以为应用卡死）。
+                    // 最小化保留任务栏入口，随时可恢复。
+                    let _ = window.minimize();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -168,6 +191,11 @@ pub fn run() {
             api_hub::commands::api_hub_get_usage_stats,
             api_hub::commands::api_hub_status,
             api_hub::commands::api_hub_fetch_models,
+            commands::island_bridge::island_media_status,
+            commands::island_bridge::island_media_control,
+            commands::island_bridge::deepseek_get_balance,
+            commands::island_bridge::deepseek_set_key,
+            commands::island_bridge::deepseek_get_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevNexus");
