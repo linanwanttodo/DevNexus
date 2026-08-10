@@ -51,7 +51,9 @@ mod imp {
                 TIMEOUT,
             )
             .ok()?;
-        let (names,): (Vec<String>,) = reply.read1().ok()?;
+        // ListNames 返回签名是 `as`（字符串数组），不是 `(as)` 元组——
+        // 之前用 `(Vec<String>,)` 解析永远 TypeMismatch，导致播放器识别不到。
+        let names: Vec<String> = reply.read1().ok()?;
         Some(
             names
                 .into_iter()
@@ -233,20 +235,63 @@ mod imp {
 }
 
 /// 查询当前媒体播放状态（前端轮询调用）
+/// 必须 async：D-Bus 调用是阻塞式（2s 超时），同步命令会跑在主线程，
+/// 每 3 秒一次的轮询会把整个 UI 主线程卡死（窗口拖不动、点击无响应）。
+/// spawn_blocking 把阻塞调用挪到线程池，主线程始终空闲。
 #[tauri::command]
-pub fn island_media_status() -> Option<MediaStatus> {
-    imp::media_status()
+pub async fn island_media_status() -> Option<MediaStatus> {
+    tauri::async_runtime::spawn_blocking(imp::media_status)
+        .await
+        .ok()
+        .flatten()
 }
 
 /// 媒体控制：play_pause / next / previous / stop
+/// 同样 async + spawn_blocking，避免阻塞主线程。
 #[tauri::command]
-pub fn island_media_control(action: String) -> Result<(), String> {
-    imp::media_control(&action)
+pub async fn island_media_control(action: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || imp::media_control(&action))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// 启动系统通知监听（在 setup 中调用一次）
 pub fn init(app: tauri::AppHandle) {
     imp::start_notification_listener(app);
+}
+
+// ═══════════════ 跨工作区可见（GNOME/mutter 兼容）═══════════════
+// tao 的 set_visible_on_all_workspaces 走 GTK window.stick()，在 XWayland/GNOME 下
+// 偶发不生效（窗口不出现 _NET_WM_STATE_STICKY）。这里用 X11 协议直接写
+// _NET_WM_STATE_STICKY，保证切换虚拟桌面/工作区时岛窗口始终可见。
+#[cfg(target_os = "linux")]
+fn set_sticky_x11(window: &tauri::Window) -> Result<(), String> {
+    use gdkx11::X11Window;
+    use gtk::prelude::*; // GtkWindowExt::window() + Cast::downcast_ref
+
+    // 1) 通过 GTK 拿到窗口 XID
+    let gtk_win = window.gtk_window().map_err(|e| e.to_string())?;
+    let gdk_win = gtk_win.window().ok_or("no gdk window")?;
+    let x11_win = gdk_win
+        .downcast_ref::<X11Window>()
+        .ok_or("not an X11 window")?;
+
+    // 2) EWMH：_NET_WM_DESKTOP = 0xFFFFFFFF 表示 sticky（所有桌面/工作区可见）。
+    //    走 GDK 自身连接（gdk_x11_window_move_to_desktop），不新开 X 连接，
+    //    避免与 GTK error trap 冲突导致应用崩溃。
+    x11_win.move_to_desktop(u32::MAX);
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn set_sticky_x11(_window: &tauri::Window) -> Result<(), String> {
+    Ok(())
+}
+
+/// 让指定岛窗口在所有工作区可见（X11 直接写 STICKY，不依赖 GTK stick）
+#[tauri::command]
+pub fn island_set_sticky(window: tauri::Window) -> Result<(), String> {
+    set_sticky_x11(&window)
 }
 
 // ═══════════════ DeepSeek 余额查询 ═══════════════
