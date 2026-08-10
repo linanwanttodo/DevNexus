@@ -193,6 +193,7 @@ pub fn run() {
             api_hub::commands::api_hub_fetch_models,
             commands::island_bridge::island_media_status,
             commands::island_bridge::island_media_control,
+            commands::island_bridge::island_set_sticky,
             commands::island_bridge::deepseek_get_balance,
             commands::island_bridge::deepseek_set_key,
             commands::island_bridge::deepseek_get_key,
