@@ -635,18 +635,24 @@ fn map_firefox_cookie_row(row: &rusqlite::Row) -> rusqlite::Result<CookieEntry> 
     })
 }
 
-/// 生成带随机后缀的 Cookie 临时文件路径（pid + 纳秒时间戳），
-/// 避免固定文件名（如 cookies_{pid}.sqlite）被同机其他用户预测路径后读取
+/// 生成带随机后缀的 Cookie 临时文件路径（pid + 纳秒时间戳 + 原子计数器），
+/// 避免固定文件名（如 cookies_{pid}.sqlite）被同机其他用户预测路径后读取。
+/// 计数器保证同一进程内多次调用（含并行测试/并发请求）路径绝对不重复——
+/// 某些平台 SystemTime 分辨率较粗，仅靠时间戳会在同 tick 内生成相同路径，
+/// 导致并行测试互相删除对方的临时文件（CI 上偶发失败）。
 fn make_cookie_tmp_path() -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let tmp_dir = std::env::temp_dir().join("devnexus_cookies");
     let _ = std::fs::create_dir_all(&tmp_dir);
     tmp_dir.join(format!(
-        "cookies_{}_{}.sqlite",
+        "cookies_{}_{}_{}.sqlite",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
-            .unwrap_or(0)
+            .unwrap_or(0),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
     ))
 }
 

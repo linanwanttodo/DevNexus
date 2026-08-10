@@ -31,6 +31,12 @@ const win = getCurrentWindow();
 const now = ref(new Date());
 const dragging = ref(false);
 
+// 两态：收起（小胶囊，只放时间/状态）/ 展开（大胶囊，显示媒体详情 + 控制）
+// 触发：鼠标悬停展开、移出收起；点击切换；拖拽移动不受影响。
+const expanded = ref(false);
+let hoverTimer = null; // 悬停防抖：避免鼠标快速划过时误展开
+let clickSuppressed = false; // 拖拽结束后抑制紧随其后的 click（防止拖动也算点击）
+
 // 语言跟随主应用偏好（主应用切换语言后本窗口下次显示时生效）
 const lang = localStorage.getItem("devnexus-lang") || "en";
 const loc = lang === "zh" ? "zh-CN" : lang === "ru" ? "ru-RU" : "en-US";
@@ -232,6 +238,20 @@ const balanceText = computed(() => {
   return { currency: info.currency, total: info.totalBalance };
 });
 
+/** 展示用标题：过长主动截断，避免长标题把胶囊撑满 */
+const displayMediaTitle = computed(() => {
+  const t = (media.value && media.value.title) || "";
+  return t.length > 14 ? `${t.slice(0, 14)}…` : t;
+});
+
+/** 展示用播放器名：同样截断 */
+const displayMediaArtist = computed(() => {
+  const t =
+    (media.value && (media.value.artist || media.value.player.replace("org.mpris.MediaPlayer2.", ""))) ||
+    "";
+  return t.length > 18 ? `${t.slice(0, 18)}…` : t;
+});
+
 // ═══════════════ 模块切换（滚轮循环）═══════════════
 // 0 = 时间, 1 = DeepSeek 余额, 2 = 倒计时, 3 = 媒体控制；一次只显示一个
 const activeModule = ref(0);
@@ -272,12 +292,13 @@ function showBanner(app, title, body, kind = "system") {
   bannerSeq += 1;
   const seq = bannerSeq;
   banner.value = { app, title, body, kind };
-  resizeWindow(); // 横幅出现时窗口加大以容纳
+  // 通知嵌入胶囊：强制展开（窗口恒定，动画由胶囊 CSS spring 完成）
+  expanded.value = true;
   if (bannerTimer) clearTimeout(bannerTimer);
   bannerTimer = setTimeout(() => {
     if (bannerSeq === seq) {
       banner.value = null;
-      resizeWindow(); // 横幅消失后窗口恢复
+      expanded.value = false; // 通知结束自动收起回小胶囊
     }
   }, 5000);
 }
@@ -342,13 +363,23 @@ async function onPointerMove(e) {
   }
 }
 
+/** 位置持久化 key：按窗口 label 隔离（多显示器下每个岛实例各自保存位置，互不覆盖）。
+ *  主实例 label="island" 沿用旧 key 兼容历史数据；其他实例 key 带 label 后缀。 */
+function posKey(axis) {
+  const label = win.label;
+  return label === "island"
+    ? `devnexus-island-${axis}-v2`
+    : `devnexus-island-${axis}-v2-${label}`;
+}
+
 async function onPointerUp() {
   if (dragStart) {
     // 拖动结束 → 持久化位置；未达阈值 → 视为点击（无展开/收起切换）
     if (dragging.value) {
       const p = await win.outerPosition(); // 物理像素，恢复时也用 PhysicalPosition
-      localStorage.setItem("devnexus-island-x", String(p.x));
-      localStorage.setItem("devnexus-island-y", String(p.y));
+      localStorage.setItem(posKey("x"), String(p.x));
+      localStorage.setItem(posKey("y"), String(p.y));
+      clickSuppressed = true; // 拖拽结束后抑制紧随其后的 click，防止"拖动也算点击"
     }
   }
   dragStart = null;
@@ -381,11 +412,41 @@ async function hideIsland() {
   }
 }
 
-/** 点击横幅：打开主窗口并关闭横幅 */
+// ═══════════════ 两态交互（悬停展开 / 移出收起 / 点击切换）═══════════════
+// 悬停：鼠标进入胶囊短暂延迟后展开（防误触），移出后收起。
+// 点击：切换展开/收起（拖拽结束后 clickSuppressed 会抑制本次 click）。
+// 窗口尺寸恒定，展开/收起完全由胶囊 CSS spring 动画过渡，无窗口 resize 抖动。
+async function setExpanded(val) {
+  if (expanded.value === val) return;
+  expanded.value = val;
+}
+
+function onMouseEnter() {
+  if (banner.value) return; // 横幅显示期间不响应悬停展开（通知已强制展开）
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => setExpanded(true), 120);
+}
+
+function onMouseLeave() {
+  clearTimeout(hoverTimer);
+  if (banner.value) return; // 横幅显示期间不收起：通知由自身计时器统一收起
+  setExpanded(false);
+}
+
+async function onCapsuleClick() {
+  if (clickSuppressed) {
+    clickSuppressed = false;
+    return;
+  }
+  if (banner.value) return;
+  await setExpanded(!expanded.value);
+}
+
+/** 点击横幅：打开主窗口并关闭横幅（收起回小胶囊） */
 async function onBannerClick() {
   banner.value = null;
   if (bannerTimer) clearTimeout(bannerTimer);
-  resizeWindow(); // 横幅关闭后窗口恢复
+  expanded.value = false; // 窗口恒定，收起由胶囊 CSS 动画完成
   await openMainWindow();
 }
 
@@ -395,7 +456,7 @@ onMounted(async () => {
   startClock();
   startMediaPoll();
   startKeyPoll(); // 读取设置页保存的 DeepSeek Key 查询余额，并轮询 key 变化
-  resizeWindow(); // 确保窗口尺寸贴合胶囊（收起态 248×60）
+  await resizeWindow(); // 先定尺寸再定位：避免与下方位置恢复竞态，保证默认落在顶部居中
   try {
     // 系统通知监听（Rust 侧 BecomeMonitor 转发）
     unlistenNotify = await listen("island-notify", (ev) => {
@@ -407,16 +468,31 @@ onMounted(async () => {
   }
   try {
     await win.setAlwaysOnTop(true);
-    // 恢复上次位置；无记录时置于主显示器顶部居中
+    // 所有工作区可见：灵动岛是全局悬浮窗，切到任意虚拟桌面/工作区都应保持显示
+    // （X11/GNOME 下不设置的话窗口只绑定在创建时的工作区，切换后消失）。
+    try {
+      await win.setVisibleOnAllWorkspaces(true);
+    } catch {
+      // 某些平台不支持，忽略
+    }
+    // 兜底：tao 的 setVisibleOnAllWorkspaces 走 GTK stick()，在 XWayland/GNOME 下
+    // 偶发不生效，Rust 侧用 X11 协议直接写 _NET_WM_STATE_STICKY 更可靠。
+    try {
+      await invoke("island_set_sticky");
+    } catch {
+      // 非 Tauri 环境忽略
+    }
+    // 恢复上次位置；无记录时置于当前窗口所在显示器顶部居中
     // 注意：localStorage 存的是 outerPosition() 的物理像素，恢复必须用 PhysicalPosition
-    const x = localStorage.getItem("devnexus-island-x");
-    const y = localStorage.getItem("devnexus-island-y");
+    const x = localStorage.getItem(posKey("x"));
+    const y = localStorage.getItem(posKey("y"));
     if (x !== null && y !== null) {
       await win.setPosition(new PhysicalPosition(Number(x), Number(y)));
     } else {
-      // 默认放主显示器（primaryMonitor）顶部居中，而非鼠标所在屏
-      const { primaryMonitor } = await import("@tauri-apps/api/window");
-      const monitor = await primaryMonitor();
+      // 默认放当前窗口所在显示器（currentMonitor）顶部居中，而非主屏——
+      // 多显示器下每个岛窗口实例各自定位到自己的显示器。
+      const { currentMonitor } = await import("@tauri-apps/api/window");
+      const monitor = await currentMonitor();
       if (monitor) {
         const size = await win.outerSize();
         await win.setPosition(
@@ -456,17 +532,17 @@ function selfReport() {
 }
 
 // ═══════════════ 窗口尺寸 ═══════════════
-// 固定同一尺寸（不随点击展开/收起）：胶囊 404×68，四周留 8px → 窗口 420×76；
-// 通知横幅出现时加大到 420×116 以容纳消息内容。
-const WIN_BASE = { w: 256, h: 48 };
-const WIN_BANNER = { w: 256, h: 116 };
+// 窗口尺寸恒定（400×116）：收起/展开完全由胶囊 CSS 动画完成，
+// 窗口不再随状态 resize——否则收起瞬间窗口缩小会把 384px 宽的大胶囊
+// 裁剪成"长方形"，且 resize 与 CSS 动画竞争导致卡顿。
+const WIN_ISLAND = { w: 400, h: 116 };
 
+/** 设置窗口尺寸并保持顶部 y 不变、水平中心不变（仅创建/恢复时调用一次） */
 async function resizeWindow() {
-  const target = banner.value ? WIN_BANNER : WIN_BASE;
   try {
     const pos = await win.outerPosition();
     const size = await win.outerSize();
-    await win.setSize(new LogicalSize(target.w, target.h));
+    await win.setSize(new LogicalSize(WIN_ISLAND.w, WIN_ISLAND.h));
     // resize 后保持顶部 y 不变、水平中心不变（窗口左右各扩/缩一半）
     const newSize = await win.outerSize();
     const centerX = pos.x + size.width / 2;
@@ -487,11 +563,32 @@ watch(activeModule, () => {
 </script>
 
 <template>
-  <div class="island" @pointerdown="onPointerDown" @wheel="onWheel">
-    <!-- 胶囊层：紧凑药丸，内容随模块切换（滚轮切换），无多余按钮 -->
-    <div class="capsule">
+  <div
+    class="island"
+    @pointerdown="onPointerDown"
+    @wheel="onWheel"
+    @mouseenter="onMouseEnter"
+    @mouseleave="onMouseLeave"
+    @click="onCapsuleClick"
+  >
+    <!-- 胶囊层：紧凑药丸（收起态）或大胶囊（展开态），内容随模块切换 -->
+    <div class="capsule" :class="{ expanded }">
+      <!-- 通知横幅：嵌入胶囊内部（通知到来时胶囊膨胀展示，结束收起） -->
+      <div v-if="banner" class="banner" @click.stop="onBannerClick">
+        <div class="banner-icon">
+          <Music2 v-if="banner.kind === 'system'" :size="18" />
+          <Timer v-else :size="18" />
+        </div>
+        <div class="banner-text">
+          <div class="banner-title">{{ banner.title }}</div>
+          <div v-if="banner.body" class="banner-body">{{ banner.body }}</div>
+        </div>
+        <button class="banner-close" @click.stop="banner = null; if (bannerTimer) clearTimeout(bannerTimer); expanded = false">
+          <X :size="14" />
+        </button>
+      </div>
       <!-- 模块内容（一次只显示一个；滚轮循环切换；事件发生时优先显示） -->
-      <div class="exp-body">
+      <div v-else class="exp-body">
         <!-- 模块0：时间 -->
         <div v-if="activeModule === 0" class="module module-clock">
           <span class="clock-hm">{{ timeHM }}</span>
@@ -542,14 +639,51 @@ watch(activeModule, () => {
           </button>
         </div>
 
-        <!-- 模块3：媒体控制（仅显示曲目信息，无控制按钮） -->
-        <div v-else class="module module-media">
+        <!-- 模块3：媒体控制（收起态横向一行；展开态上行标题、下行按钮+播放器名） -->
+        <div v-else class="module module-media" :class="{ expanded }">
           <template v-if="media && (media.title || media.status)">
-            <Music2 :size="16" class="timer-icon" />
-            <div class="med-info">
-              <div class="med-title">{{ media.title || "—" }}</div>
-              <div class="med-artist">{{ media.artist || media.player.replace("org.mpris.MediaPlayer2.", "") }}</div>
+            <!-- 展开态：上下结构（上行标题、下行控制按钮 + 播放器名） -->
+            <div v-if="expanded" class="media-expanded">
+              <div class="med-title" :title="media.title">{{ displayMediaTitle }}</div>
+              <div class="media-controls">
+                <button class="med-btn" title="Previous" @click.stop="mediaAction('previous')">
+                  <SkipBack :size="14" />
+                </button>
+                <button
+                  class="med-btn"
+                  :title="media.status === 'Playing' ? 'Pause' : 'Play'"
+                  @click.stop="mediaAction('play_pause')"
+                >
+                  <Pause v-if="media.status === 'Playing'" :size="14" />
+                  <Play v-else :size="14" />
+                </button>
+                <button class="med-btn" title="Next" @click.stop="mediaAction('next')">
+                  <SkipForward :size="14" />
+                </button>
+                <span class="med-artist">{{ displayMediaArtist }}</span>
+              </div>
             </div>
+            <!-- 收起态：横向一行 -->
+            <template v-else>
+              <button class="med-btn" title="Previous" @click.stop="mediaAction('previous')">
+                <SkipBack :size="14" />
+              </button>
+              <button
+                class="med-btn"
+                :title="media.status === 'Playing' ? 'Pause' : 'Play'"
+                @click.stop="mediaAction('play_pause')"
+              >
+                <Pause v-if="media.status === 'Playing'" :size="14" />
+                <Play v-else :size="14" />
+              </button>
+              <button class="med-btn" title="Next" @click.stop="mediaAction('next')">
+                <SkipForward :size="14" />
+              </button>
+              <div class="med-info">
+                <div class="med-title" :title="media.title">{{ displayMediaTitle }}</div>
+                <div class="med-artist">{{ displayMediaArtist }}</div>
+              </div>
+            </template>
           </template>
           <div v-else class="med-empty">
             <Music2 :size="16" />
@@ -557,21 +691,6 @@ watch(activeModule, () => {
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- 通知横幅：覆盖在胶囊位置，iPhone/Mac 灵动岛风格 -->
-    <div v-if="banner" class="banner" @click.stop="onBannerClick">
-      <div class="banner-icon">
-        <Music2 v-if="banner.kind === 'system'" :size="18" />
-        <Timer v-else :size="18" />
-      </div>
-      <div class="banner-text">
-        <div class="banner-title">{{ banner.title }}</div>
-        <div v-if="banner.body" class="banner-body">{{ banner.body }}</div>
-      </div>
-      <button class="banner-close" @click.stop="banner = null; if (bannerTimer) clearTimeout(bannerTimer); resizeWindow()">
-        <X :size="14" />
-      </button>
     </div>
   </div>
 </template>
