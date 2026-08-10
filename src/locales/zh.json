@@ -27,7 +27,8 @@
     "processes": "进程/端口",
     "containers": "容器管理",
     "api_hub": "API 聚合",
-    "migration": "环境迁移"
+    "migration": "环境迁移",
+    "island": "灵动岛"
   },
   "settings": {
     "title": "设置",
@@ -68,7 +69,9 @@
   "titleBar": {
     "minimize": "最小化",
     "maximize": "最大化",
-    "close": "关闭"
+    "close": "关闭",
+    "pin": "窗口置顶",
+    "unpin": "取消置顶"
   },
   "dashboard": {
     "title": "概览",
@@ -656,5 +659,40 @@
       "streaming": "流式请求",
       "empty": "暂无请求日志"
     }
+  },
+  "island": {
+    "title": "灵动岛",
+    "enable": "启用灵动岛",
+    "enable_desc": "在屏幕顶部显示置顶胶囊悬浮窗，实时显示时间。点击展开显示详细内容，按住拖动可移动位置。",
+    "preview": "效果预览",
+    "preview_off": "已停用",
+    "behaviors": "交互方式",
+    "behavior_click": "点击展开",
+    "behavior_click_desc": "点击胶囊变长展开，显示时间、日期与快捷操作；再次点击收起。",
+    "behavior_drag": "自由拖动",
+    "behavior_drag_desc": "按住拖动可移动悬浮窗，位置自动保存。",
+    "show_now": "立即显示",
+    "hide_now": "立即隐藏",
+    "enabled_state_on": "已启用",
+    "enabled_state_off": "已停用",
+    "visible_on": "当前显示中",
+    "visible_off": "当前已隐藏",
+    "state_desc": "由上方启用开关统一控制灵动岛的显示/隐藏。",
+    "ds_title": "DeepSeek 余额",
+    "ds_key_label": "API Key",
+    "ds_key_desc": "填入 DeepSeek API Key，即可在灵动岛上显示账户余额。仅本地保存。",
+    "ds_key_placeholder": "sk-...",
+    "ds_check": "查询余额",
+    "ds_available": "余额可用",
+    "ds_unavailable": "余额不足",
+    "ds_granted": "赠送",
+    "ds_topped": "充值",
+    "ds_key_empty": "请先填写 DeepSeek API Key。",
+    "ds_hint": "填入 Key 后点击查询，余额会同步显示在灵动岛上。",
+    "ds_saved": "Key 已保存，将自动用于灵动岛余额显示。",
+    "ds_show_key": "显示 API Key",
+    "ds_hide_key": "隐藏 API Key",
+    "not_tauri": "灵动岛仅在桌面应用中可用",
+    "not_tauri_desc": "当前为网页预览模式，请使用 Tauri 桌面构建体验完整功能。"
   }
 }

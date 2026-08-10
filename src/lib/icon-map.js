@@ -38,6 +38,7 @@ export const iconMap = {
   upload: "Upload",
   save: "Save",
   eye: "Eye",
+  "eye-off": "EyeOff",
   "folder-open": "FolderOpen",
   pause: "Pause",
   "play-arrow": "Play",
@@ -65,6 +66,7 @@ export const iconMap = {
   branch: "GitBranch",
   "code-block": "CodeXml",
   archive: "Archive",
+  island: "Pill",
 };
 
 export const FALLBACK_ICON = "CircleAlert";
