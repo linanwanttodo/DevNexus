@@ -1,3 +1,4 @@
+pub mod autostart;
 pub mod container;
 pub mod cookie_extractor;
 pub mod environment;
@@ -8,5 +9,6 @@ pub mod password_manager;
 pub mod process_ports;
 pub mod software;
 pub mod system;
+pub mod tray;
 pub mod updater;
 pub mod version_manager;

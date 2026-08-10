@@ -64,7 +64,11 @@
     "restart_now": "Restart Now",
     "download_opened": "Download page opened in browser",
     "language": "Language",
-    "language_desc": "Select interface language"
+    "language_desc": "Select interface language",
+    "autostart": "Launch at Startup",
+    "autostart_desc": "Automatically start DevNexus when you log in",
+    "silent_start": "Silent Start",
+    "silent_start_desc": "Don't show the main window on autostart; keep running in tray and island"
   },
   "titleBar": {
     "minimize": "Minimize",

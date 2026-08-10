@@ -64,7 +64,11 @@
     "restart_now": "立即重启",
     "download_opened": "下载页面已在浏览器中打开",
     "language": "语言",
-    "language_desc": "选择界面语言"
+    "language_desc": "选择界面语言",
+    "autostart": "开机自启",
+    "autostart_desc": "登录系统时自动启动 DevNexus",
+    "silent_start": "静默启动",
+    "silent_start_desc": "开机自启时不显示主窗口，后台常驻托盘和灵动岛"
   },
   "titleBar": {
     "minimize": "最小化",
