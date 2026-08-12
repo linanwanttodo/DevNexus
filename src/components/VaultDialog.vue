@@ -18,10 +18,23 @@ import { Textarea } from "@/components/ui/textarea";
 // mode "view": 渲染密码查看详情
 // groups: 字段分组（每组为一行；单字段组整行，多字段组 2 列网格）
 // 每组字段: { id, labelKey, required, type, placeholder, textarea, value, onInput }
+/**
+ * @typedef {Object} VaultField
+ * @property {string} id
+ * @property {string} labelKey
+ * @property {boolean} [required]
+ * @property {string} [type]
+ * @property {string} [placeholder]
+ * @property {boolean} [textarea]
+ * @property {*} [value]
+ * @property {(v: *) => void} [onInput]
+ */
+
 const props = defineProps({
   title: { type: String, default: "" },
   mode: { type: String, default: "form" }, // form | view
-  groups: { type: Array, default: () => [] },
+  /** @type {import('vue').PropType<VaultField[][]>} */
+  groups: Array,
   submitLabel: { type: String, default: "" },
   password: { type: String, default: "" },
 });

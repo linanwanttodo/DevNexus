@@ -561,7 +561,8 @@
       "desc": "Single entry point routes by model name and converts between OpenAI / Anthropic protocols",
       "copyTooltip": "Click to copy endpoint",
       "copied": "Gateway endpoint copied",
-      "copyFailed": "Copy failed"
+      "copyFailed": "Copy failed",
+      "authEnabled": "Auth Token Enabled"
     },
     "addProvider": "Add Provider",
     "addFirstProvider": "Add your first Provider",

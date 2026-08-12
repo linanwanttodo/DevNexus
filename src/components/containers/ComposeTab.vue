@@ -20,12 +20,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+/**
+ * @typedef {Object} ComposeContainerInfo
+ * @property {string} name
+ * @property {string} image
+ * @property {string} status
+ * @property {Array<{publicPort?: number, privatePort?: number, type?: string}>} [ports]
+ */
+
 const props = defineProps({
   file: { type: String, default: "" },
   project: { type: String, default: "" },
   loading: { type: Boolean, default: false },
   error: { type: String, default: null },
-  containers: { type: Array, default: () => [] },
+  /** @type {import('vue').PropType<ComposeContainerInfo[]>} */
+  containers: Array,
   logs: { type: String, default: "" },
 });
 

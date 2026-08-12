@@ -25,8 +25,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+/**
+ * @typedef {Object} NetworkInfo
+ * @property {string} name
+ * @property {string} [driver]
+ * @property {string} [scope]
+ */
+
 const props = defineProps({
-  items: { type: Array, default: () => [] },
+  /** @type {import('vue').PropType<NetworkInfo[]>} */
+  items: Array,
   loading: { type: Boolean, default: false },
   error: { type: String, default: null },
   actionLoading: { type: String, default: "" },

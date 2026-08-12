@@ -375,7 +375,7 @@ const logColumns = computed(() => [
               v-if="status?.running && status?.auth_token"
               class="bg-success/10 text-success dark:text-success"
             >
-              Auth Token 已启用
+              {{ t("apiHub.gateway.authEnabled") }}
             </Badge>
           </div>
           <p class="gateway-desc">{{ t("apiHub.gateway.desc") }}</p>

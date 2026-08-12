@@ -200,7 +200,14 @@ pub fn container_action(name: String, action: String) -> Result<String, String> 
         return Err(format!("Unsupported container action: {}", action));
     }
     validate_container_id(&name)?;
-    let (stdout, _) = run_docker(&[&action, &name])?;
+    // Removing a running container fails without --force; force-remove preserves
+    // the "delete" semantics users expect from the UI.
+    let args: Vec<&str> = if action == "rm" {
+        vec!["rm", "-f", &name]
+    } else {
+        vec![&action, &name]
+    };
+    let (stdout, _) = run_docker(&args)?;
     Ok(stdout.trim().to_string())
 }
 

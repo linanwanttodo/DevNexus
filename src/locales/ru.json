@@ -561,7 +561,8 @@
       "desc": "Единая точка входа — маршрутизация по имени модели и конвертация между протоколами OpenAI / Anthropic",
       "copyTooltip": "Нажмите, чтобы скопировать endpoint",
       "copied": "Endpoint шлюза скопирован",
-      "copyFailed": "Не удалось скопировать"
+      "copyFailed": "Не удалось скопировать",
+      "authEnabled": "Auth Token включён"
     },
     "addProvider": "Добавить провайдера",
     "addFirstProvider": "Добавить первого провайдера",
