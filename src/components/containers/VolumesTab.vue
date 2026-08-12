@@ -25,8 +25,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+/**
+ * @typedef {Object} VolumeInfo
+ * @property {string} name
+ * @property {string} [driver]
+ * @property {string} [mountpoint]
+ * @property {string} [created]
+ */
+
 const props = defineProps({
-  items: { type: Array, default: () => [] },
+  /** @type {import('vue').PropType<VolumeInfo[]>} */
+  items: Array,
   loading: { type: Boolean, default: false },
   error: { type: String, default: null },
   actionLoading: { type: String, default: "" },

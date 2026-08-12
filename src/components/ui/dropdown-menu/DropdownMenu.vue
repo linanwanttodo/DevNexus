@@ -9,7 +9,7 @@ const props = defineProps({
 });
 const emits = defineEmits(["update:open"]);
 
-const forwarded = useForwardPropsEmits(props, emits);
+const forwarded = useForwardPropsEmits(/** @type {any} */ (props), emits);
 </script>
 
 <template>

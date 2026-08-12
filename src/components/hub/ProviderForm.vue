@@ -16,12 +16,22 @@ import {
 } from "@/components/ui/select";
 import ModelList from "./ModelList.vue";
 
+/**
+ * @typedef {Object} ProviderOption
+ * @property {string} id
+ * @property {string} label
+ * @property {string} [defaultUrl]
+ * @property {string} [endpoint]
+ * @property {string} [desc]
+ */
+
 const props = defineProps({
   mode: { type: String, default: "add" }, // "add" | "edit"
   title: { type: String, default: "" },
   subtitle: { type: String, default: "" },
   initial: { type: Object, default: null },
-  protocolOptions: { type: Array, default: () => [] },
+  /** @type {import('vue').PropType<ProviderOption[]>} */
+  protocolOptions: Array,
   onSave: { type: Function, required: true },
   onCancel: { type: Function, required: true },
 });
@@ -162,7 +172,7 @@ const currentProtocol = computed(() =>
           {{ isEdit ? `${title} — ${subtitle}` : title }}
         </span>
       </div>
-      <Button variant="ghost" size="icon" class="h-7 w-7" @click="onCancel">
+      <Button variant="ghost" size="icon" class="h-7 w-7" @click="() => onCancel()">
         <AppIcon name="close" class="size-4" />
       </Button>
     </div>
@@ -316,7 +326,7 @@ const currentProtocol = computed(() =>
 
     <!-- Action buttons -->
     <div class="form-actions">
-      <Button variant="outline" @click="onCancel">{{ t("apiHub.cancel") }}</Button>
+      <Button variant="outline" @click="() => onCancel()">{{ t("apiHub.cancel") }}</Button>
       <Button v-if="isEdit" @click="submit">{{ t("apiHub.update") }}</Button>
       <Button
         v-else

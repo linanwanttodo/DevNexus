@@ -561,7 +561,8 @@
       "desc": "统一入口 · 按模型名路由并在 OpenAI / Anthropic 协议间转换",
       "copyTooltip": "点击复制端点",
       "copied": "已复制网关端点",
-      "copyFailed": "复制失败"
+      "copyFailed": "复制失败",
+      "authEnabled": "Auth Token 已启用"
     },
     "addProvider": "添加 Provider",
     "addFirstProvider": "添加第一个 Provider",
