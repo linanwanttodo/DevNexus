@@ -405,8 +405,11 @@ async function onPointerUp() {
 async function openMainWindow() {
   try {
     const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-    const mainWin = WebviewWindow.getByLabel("main");
+    const mainWin = await WebviewWindow.getByLabel("main");
     if (mainWin) {
+      // 恢复任务栏/Alt-Tab 显示（后台运行时不显示，主动打开后恢复）
+      await mainWin.setSkipTaskbar(false);
+      await mainWin.unminimize();
       await mainWin.show();
       await mainWin.setFocus();
     }
@@ -458,8 +461,17 @@ async function onCapsuleClick() {
 async function onBannerClick() {
   banner.value = null;
   if (bannerTimer) clearTimeout(bannerTimer);
+  bannerTimer = null;
   expanded.value = false; // 窗口恒定，收起由胶囊 CSS 动画完成
   await openMainWindow();
+}
+
+/** 关闭横幅（不打开主窗口） */
+function closeBanner() {
+  banner.value = null;
+  if (bannerTimer) clearTimeout(bannerTimer);
+  bannerTimer = null;
+  expanded.value = false;
 }
 
 let unlistenNotify = null;
@@ -585,7 +597,7 @@ watch(activeModule, () => {
           <div class="banner-title">{{ banner.title }}</div>
           <div v-if="banner.body" class="banner-body">{{ banner.body }}</div>
         </div>
-        <button class="banner-close" @click.stop="banner = null; if (bannerTimer) clearTimeout(bannerTimer); expanded = false">
+        <button class="banner-close" @click.stop="closeBanner">
           <X :size="14" />
         </button>
       </div>

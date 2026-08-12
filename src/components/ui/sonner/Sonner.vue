@@ -33,7 +33,7 @@ const props = defineProps({
   icons: { type: Object, required: false },
   containerAriaLabel: { type: String, required: false },
 });
-const delegatedProps = reactiveOmit(props, "toastOptions");
+const delegatedProps = /** @type {any} */ (reactiveOmit(props, "toastOptions"));
 </script>
 
 <template>

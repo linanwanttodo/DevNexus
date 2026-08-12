@@ -1,6 +1,7 @@
 // src/router.js — hash 模式路由（懒加载路由组件，优化首屏与分包）
 import { createRouter, createWebHashHistory } from "vue-router";
 
+/** @type {import('vue-router').RouteRecordRaw[]} */
 const routes = [
   { path: "/", redirect: "/dashboard" },
   {

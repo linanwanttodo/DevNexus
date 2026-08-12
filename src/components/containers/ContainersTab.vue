@@ -27,8 +27,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+/**
+ * @typedef {Object} ContainerInfo
+ * @property {string} id
+ * @property {string} name
+ * @property {string} image
+ * @property {string} status
+ * @property {string} [created]
+ * @property {Array<{publicPort?: number, privatePort?: number, type?: string}>} [ports]
+ */
+
 const props = defineProps({
-  items: { type: Array, default: () => [] },
+  /** @type {import('vue').PropType<ContainerInfo[]>} */
+  items: Array,
   loading: { type: Boolean, default: false },
   error: { type: String, default: null },
   search: { type: String, default: "" },

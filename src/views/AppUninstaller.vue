@@ -43,6 +43,12 @@ const selectedResidues = ref({});
 const cleaningResidues = ref(null);
 const scanErrors = ref({});
 
+/** 应用图标加载失败时隐藏占位（e.target 为 EventTarget，需收窄为元素） */
+function onIconError(e) {
+  const el = /** @type {HTMLImageElement} */ (e.currentTarget);
+  if (el) el.style.display = "none";
+}
+
 async function loadApps() {
   try {
     loading.value = true;
@@ -144,16 +150,16 @@ function getAllItems(scan) {
 
 function getCategoryIcon(cat) {
   const map = {
-    config: "icon-settings",
-    cache: "icon-history",
-    log: "icon-file",
-    temp: "icon-delete",
-    data: "icon-folder",
-    shortcut: "icon-shortcut",
-    service: "icon-tool",
-    registry: "icon-database",
+    config: "settings",
+    cache: "history",
+    log: "file",
+    temp: "delete",
+    data: "folder",
+    shortcut: "shortcut",
+    service: "tool",
+    registry: "database",
   };
-  return map[cat] || "icon-file";
+  return map[cat] || "file";
 }
 
 function getCategoryLabel(cat) {
@@ -372,7 +378,7 @@ onMounted(() => {
                 alt=""
                 class="size-7 shrink-0 rounded-md object-contain"
                 loading="lazy"
-                @error="(e) => (e.target.style.display = 'none')"
+                @error="onIconError"
               />
               <span v-else class="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                 <AppIcon name="apps" class="size-4" />

@@ -26,8 +26,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+/**
+ * @typedef {Object} ImageInfo
+ * @property {string} id
+ * @property {string} repository
+ * @property {string} tag
+ * @property {string} [created]
+ * @property {number} [size]
+ */
+
 const props = defineProps({
-  items: { type: Array, default: () => [] },
+  /** @type {import('vue').PropType<ImageInfo[]>} */
+  items: Array,
   loading: { type: Boolean, default: false },
   error: { type: String, default: null },
   search: { type: String, default: "" },

@@ -21,6 +21,11 @@ onErrorCaptured((err, _instance, info) => {
 });
 
 let removeHandlers = [];
+
+function reloadPage() {
+  window.location.reload();
+}
+
 onMounted(() => {
   // 全局未捕获错误
   const handleError = (event) => {
@@ -83,7 +88,7 @@ function handleClearError() {
       </details>
 
       <div class="flex gap-3">
-        <Button variant="outline" @click="() => window.location.reload()">
+        <Button variant="outline" @click="reloadPage">
           {{ t("error.reload") || "Reload page" }}
         </Button>
         <Button @click="handleClearError">

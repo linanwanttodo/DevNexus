@@ -13,7 +13,36 @@ pub fn saved_lang() -> String {
     std::fs::read_to_string(lang_file_path()).unwrap_or_else(|_| "en".into())
 }
 
+/// 根据启用状态生成灵动岛菜单文字（例如"灵动岛：开"/"灵动岛：关"）
+/// 让托盘菜单直接反映当前状态，用户一目了然，点击切换时文字同步变化。
+pub fn island_label_by_state(lang: &str, enabled: bool) -> String {
+    match lang {
+        "zh" => {
+            if enabled {
+                "灵动岛：开".into()
+            } else {
+                "灵动岛：关".into()
+            }
+        }
+        "ru" => {
+            if enabled {
+                "Остров: вкл".into()
+            } else {
+                "Остров: выкл".into()
+            }
+        }
+        _ => {
+            if enabled {
+                "Dynamic Island: On".into()
+            } else {
+                "Dynamic Island: Off".into()
+            }
+        }
+    }
+}
+
 /// 各语言的托盘菜单文案：show / island / check_update / quit
+/// island 为不带状态的基名（状态文字由 island_label_by_state 按启用状态生成）
 pub fn tray_texts(lang: &str) -> (String, String, String, String) {
     match lang {
         "zh" => (
@@ -34,6 +63,18 @@ pub fn tray_texts(lang: &str) -> (String, String, String, String) {
             "Check for Updates".into(),
             "Quit".into(),
         ),
+    }
+}
+
+/// 更新灵动岛菜单项文字为当前启用状态的显示（"开"/"关"）
+pub fn update_island_menu_text(app: &tauri::AppHandle, lang: &str, checked: bool) {
+    let menu = app.state::<tauri::menu::Menu<tauri::Wry>>().inner();
+    if let Some(item) = menu.get("island") {
+        if let Some(ci) = item.as_check_menuitem() {
+            let label = island_label_by_state(lang, checked);
+            let _ = ci.set_text(label);
+            let _ = ci.set_checked(checked);
+        }
     }
 }
 
@@ -88,21 +129,22 @@ pub fn start_balance_refresh(app: tauri::AppHandle) {
 #[tauri::command]
 pub fn update_tray_menu(app: tauri::AppHandle, lang: String) -> Result<(), String> {
     let _ = std::fs::write(lang_file_path(), &lang);
-    let (show_text, island_text, check_update_text, quit_text) = tray_texts(&lang);
+    let (show_text, _island_text, check_update_text, quit_text) = tray_texts(&lang);
     let balance_text = balance_placeholder(&lang);
     for (id, text) in [
         ("show", show_text),
-        ("island", island_text),
+        ("island", String::new()), // island 文字单独处理，见下方状态逻辑
         ("check-update", check_update_text),
         ("balance", balance_text),
         ("quit", quit_text),
     ] {
         if let Some(item) = app.state::<tauri::menu::Menu<tauri::Wry>>().inner().get(id) {
-            // island 是 CheckMenuItem（开关），用 as_check_menuitem 更新文字并同步勾选状态
+            // island 是 CheckMenuItem（开关），文字显示"灵动岛：开"/"灵动岛：关"状态
             if id == "island" {
+                let enabled = crate::commands::island_bridge::island_get_enabled();
+                let state_label = island_label_by_state(&lang, enabled);
                 if let Some(ci) = item.as_check_menuitem() {
-                    let _ = ci.set_text(text);
-                    let enabled = crate::commands::island_bridge::island_get_enabled();
+                    let _ = ci.set_text(state_label);
                     let _ = ci.set_checked(enabled);
                 }
                 continue;
