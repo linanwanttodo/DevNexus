@@ -56,6 +56,7 @@ export const iconMap = {
   menu: "Menu",
   "code-square": "SquareCode",
   "exclamation-circle-fill": "CircleAlert",
+  key: "KeyRound",
 
   // Sidebar 侧边栏动态图标
   dashboard: "LayoutDashboard",

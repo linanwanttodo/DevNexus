@@ -15,7 +15,7 @@ const props = defineProps({
 });
 const emits = defineEmits(["update:modelValue"]);
 
-const forwarded = useForwardPropsEmits(props, emits);
+const forwarded = useForwardPropsEmits(/** @type {any} */ (props), emits);
 </script>
 
 <template>

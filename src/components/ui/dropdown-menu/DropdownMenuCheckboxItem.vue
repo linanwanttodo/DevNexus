@@ -20,7 +20,7 @@ const emits = defineEmits(["select", "update:modelValue"]);
 
 const delegatedProps = reactiveOmit(props, "class");
 
-const forwarded = useForwardPropsEmits(delegatedProps, emits);
+const forwarded = useForwardPropsEmits(/** @type {any} */ (delegatedProps), emits);
 </script>
 
 <template>

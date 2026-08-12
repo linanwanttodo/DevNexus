@@ -21,7 +21,9 @@ const emits = defineEmits(["select"]);
 
 const delegatedProps = reactiveOmit(props, "class");
 
-const forwarded = useForwardPropsEmits(delegatedProps, emits);
+const forwarded = /** @type {any} */ (
+  useForwardPropsEmits(/** @type {any} */ (delegatedProps), emits)
+);
 </script>
 
 <template>

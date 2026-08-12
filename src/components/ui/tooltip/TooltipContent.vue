@@ -31,7 +31,7 @@ const emits = defineEmits(["escapeKeyDown", "pointerDownOutside"]);
 
 const delegatedProps = reactiveOmit(props, "class");
 
-const forwarded = useForwardPropsEmits(delegatedProps, emits);
+const forwarded = useForwardPropsEmits(/** @type {any} */ (delegatedProps), emits);
 </script>
 
 <template>

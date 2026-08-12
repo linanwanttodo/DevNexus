@@ -14,6 +14,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.9] - 2026-08-12
+
+### Changed (English)
+- AppIcon now imports lucide icons on demand: chunk size reduced from ~672 KB to ~50 KB
+- Uninstaller category icons migrated to the new icon system
+- Gateway "Auth Token enabled" badge now uses i18n
+- Fixed a large batch of frontend TypeScript errors (typed container / API Hub props, UI wrappers, router, event handlers)
+
+### Fixed (English)
+- Dynamic island banner close button now only closes the banner (no longer opens the main window)
+- Opening the main window from the island restores taskbar / Alt-Tab visibility
+- Fixed clippy / rustfmt warnings
+
+### 变更（中文）
+- AppIcon 按需导入 lucide 图标：打包体积从约 672KB 降至约 50KB
+- 卸载器分类图标迁移到新图标系统
+- 网关 "Auth Token 已启用" 徽标文案接入 i18n
+- 修复一批前端 TypeScript 类型错误（容器 / API Hub 组件 props 类型标注、UI 包装组件、路由、事件处理）
+
+### 修复（中文）
+- 灵动岛横幅关闭按钮只关闭横幅（不再顺带打开主窗口）
+- 从灵动岛打开主窗口时恢复任务栏 / Alt-Tab 显示
+- 修复 clippy / rustfmt 告警
+
+---
+
 ## [1.3.8] - 2026-08-10
 
 ### Added (English)

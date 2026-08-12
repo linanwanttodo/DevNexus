@@ -425,6 +425,9 @@ pub fn island_set_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), St
             }
         }
     }
+    // 同步托盘菜单文字：无论从设置页、侧边栏还是托盘切换，菜单都显示当前状态
+    let lang = crate::commands::tray::saved_lang();
+    crate::commands::tray::update_island_menu_text(&app, &lang, enabled);
     Ok(())
 }
 

@@ -13,7 +13,7 @@ const props = defineProps({
   class: { type: null, required: false },
 });
 
-const delegatedProps = reactiveOmit(props, "class");
+const delegatedProps = /** @type {any} */ (reactiveOmit(props, "class"));
 </script>
 
 <template>

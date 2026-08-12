@@ -61,21 +61,26 @@ pub fn run() {
             // 启动灵动岛数据桥：系统通知监听（微信/QQ 等 → island-notify 事件）
             commands::island_bridge::init(app.handle().clone());
 
-            // 静默启动：开启时主窗口不显示，后台常驻托盘 + 灵动岛
+            // 静默启动：开启时主窗口不显示，后台常驻托盘 + 灵动岛。
+            // 同时从 Alt-Tab / 任务视图中移除，避免按 Win 键看到不相关的窗口
+            // （与 macOS 灵动岛在后台时不显示应用列表的行为保持一致）。
             if commands::autostart::get_silent_start() {
                 if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.set_skip_taskbar(true);
                     let _ = w.hide();
                 }
             }
 
             let lang = commands::tray::saved_lang();
-            let (show_label, island_label, check_update_label, quit_label) =
+            let (show_label, _island_label, check_update_label, quit_label) =
                 commands::tray::tray_texts(&lang);
             let balance_label = commands::tray::balance_placeholder(&lang);
             let show = MenuItemBuilder::with_id("show", show_label).build(app)?;
-            // 灵动岛：check 开关项（勾选=开，取消勾选=关），点击直接切换
+            // 灵动岛：check 开关项，文字显示当前状态（"灵动岛：开"/"灵动岛：关"），
+            // 点击直接切换并同步更新文字
             let island_checked = commands::island_bridge::island_get_enabled();
-            let island = CheckMenuItemBuilder::with_id("island", island_label)
+            let island_state_label = commands::tray::island_label_by_state(&lang, island_checked);
+            let island = CheckMenuItemBuilder::with_id("island", island_state_label)
                 .checked(island_checked)
                 .build(app)?;
             let check_update =
@@ -110,6 +115,7 @@ pub fn run() {
                 .on_menu_event(move |app, event| match event.id().as_ref() {
                     "show" => {
                         if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.set_skip_taskbar(false);
                             let _ = w.unminimize();
                             let _ = w.show();
                             let _ = w.set_focus();
@@ -131,10 +137,14 @@ pub fn run() {
                         };
                         let _ =
                             crate::commands::island_bridge::island_set_enabled(next, app.clone());
+                        // 同步更新菜单文字：开 → "灵动岛：开" / 关 → "灵动岛：关"
+                        let lang = crate::commands::tray::saved_lang();
+                        crate::commands::tray::update_island_menu_text(app, &lang, next);
                     }
                     "check-update" => {
                         // 打开主窗口并导航到设置页触发检查更新
                         if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.set_skip_taskbar(false);
                             let _ = w.unminimize();
                             let _ = w.show();
                             let _ = w.set_focus();
@@ -185,6 +195,10 @@ pub fn run() {
                     // 隐藏后没有任何入口能找回窗口（用户会以为应用卡死）。
                     // 最小化保留任务栏入口，随时可恢复。
                     let _ = window.minimize();
+                    // 重要：将主窗口从 Alt-Tab / 任务视图 / Win+Tab 中移除，
+                    // 避免"灵动岛后台运行"时按 Win 键还能看到 DevNexus 主窗口。
+                    // 这是桌面软件后台常驻的标准行为（macOS 灵动岛 / 状态栏 App 同理）。
+                    let _ = window.set_skip_taskbar(true);
                 }
             }
         })

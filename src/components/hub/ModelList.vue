@@ -3,8 +3,16 @@ import { t } from "../../lib/i18n.js";
 import AppIcon from "../AppIcon.vue";
 import { Input } from "@/components/ui/input";
 
+/**
+ * @typedef {Object} ModelInfo
+ * @property {string} id
+ * @property {string} [name]
+ * @property {string} [owned_by]
+ */
+
 const props = defineProps({
-  models: { type: Array, default: () => [] },
+  /** @type {import('vue').PropType<ModelInfo[]>} */
+  models: Array,
   selected: { type: Object, default: () => ({}) },
   aliases: { type: Object, default: () => ({}) },
   contexts: { type: Object, default: () => ({}) },
