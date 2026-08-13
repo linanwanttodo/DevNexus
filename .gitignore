@@ -18,6 +18,7 @@ dist/
 .agents/
 .qoder/
 .agent-cache/
+.reasonix/
 
 # OS
 .DS_Store

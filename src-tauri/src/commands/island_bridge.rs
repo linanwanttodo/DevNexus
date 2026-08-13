@@ -421,6 +421,12 @@ pub fn island_set_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), St
                 let _ = win.set_always_on_top(true);
                 let _ = win.set_visible_on_all_workspaces(true);
             } else {
+                // 关键：Wayland 下被 set_visible_on_all_workspaces(true) 的窗口，
+                // 直接 hide() 在某些 compositor 上不生效（窗口仍残留可见）。
+                // 必须先取消 all-workspaces 置顶/跨桌面属性，再 hide 才能可靠隐藏。
+                // 否则托盘点了「灵动岛」也关不掉——正是用户反馈的现象。
+                let _ = win.set_visible_on_all_workspaces(false);
+                let _ = win.set_always_on_top(false);
                 let _ = win.hide();
             }
         }
@@ -428,6 +434,10 @@ pub fn island_set_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), St
     // 同步托盘菜单文字：无论从设置页、侧边栏还是托盘切换，菜单都显示当前状态
     let lang = crate::commands::tray::saved_lang();
     crate::commands::tray::update_island_menu_text(&app, &lang, enabled);
+    // 广播状态给主窗口：主应用侧边栏开关与 applyIslandState 以 localStorage 为准，
+    // 若不回写，托盘关掉窗口后下次 applyIslandState 会按默认 true 把岛重新 show 出来。
+    use tauri::Emitter;
+    let _ = app.emit_to("main", "island-state", enabled);
     Ok(())
 }
 
@@ -580,5 +590,105 @@ pub async fn deepseek_get_balance() -> Result<DeepSeekBalance, String> {
                 topped_up_balance: b.topped_up_balance,
             })
             .collect(),
+    })
+}
+
+// ═══════════════ HUD：音量 / 亮度（只读快照）═══════════════
+// 参考调研文档功能优先级「系统 HUD 替换（音量/亮度）」。
+// 只做静态读取，不执行任何系统修改，失败时返回 None（前端显示 "--"）。
+
+/// 系统 HUD 快照
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct IslandHud {
+    /// 音量百分比 0-100；读取失败为 None
+    pub volume_percent: Option<f32>,
+    /// 亮度百分比 0-100；读取失败为 None
+    pub brightness_percent: Option<f32>,
+}
+
+/// 读取当前音量百分比（Linux PulseAudio/WirePlumber，通过 pactl 查询）
+#[cfg(target_os = "linux")]
+fn read_volume_percent() -> Option<f32> {
+    let out = std::process::Command::new("pactl")
+        .args(["get-sink-volume", "@DEFAULT_SINK@"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    // 输出形如: Volume: front-left: 65536 / 100% / 0.00 dB, front-right: ...
+    let pct = text
+        .split('%')
+        .next()
+        .and_then(|s| s.split_whitespace().last())
+        .and_then(|v| v.parse::<f32>().ok())?;
+    Some(pct.clamp(0.0, 100.0))
+}
+
+/// 读取当前亮度百分比（Linux 通过 brightnessctl 或 sysfs）
+#[cfg(target_os = "linux")]
+fn read_brightness_percent() -> Option<f32> {
+    // 优先 brightnessctl（常见于笔记本）
+    if let Ok(out) = std::process::Command::new("brightnessctl")
+        .args(["info"])
+        .output()
+    {
+        if out.status.success() {
+            let text = String::from_utf8_lossy(&out.stdout);
+            // 输出形如: Current brightness: 400 (30%)
+            if let Some(pct) = text
+                .lines()
+                .find(|l| l.contains('(') && l.contains('%'))
+                .and_then(|l| l.split('(').nth(1))
+                .and_then(|s| s.split('%').next())
+                .and_then(|s| s.trim().parse::<f32>().ok())
+            {
+                return Some(pct.clamp(0.0, 100.0));
+            }
+        }
+    }
+    // 兜底 sysfs：/sys/class/backlight/*/brightness 与 max_brightness
+    let dirs = std::fs::read_dir("/sys/class/backlight").ok()?;
+    for entry in dirs.flatten() {
+        let base = entry.path();
+        let cur = std::fs::read_to_string(base.join("brightness"))
+            .ok()?
+            .trim()
+            .parse::<f32>()
+            .ok()?;
+        let max = std::fs::read_to_string(base.join("max_brightness"))
+            .ok()?
+            .trim()
+            .parse::<f32>()
+            .ok()?;
+        if max > 0.0 {
+            return Some((cur / max * 100.0).clamp(0.0, 100.0));
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+fn read_volume_percent() -> Option<f32> {
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+fn read_brightness_percent() -> Option<f32> {
+    None
+}
+
+/// 查询系统 HUD（音量/亮度）快照
+#[tauri::command]
+pub async fn island_get_hud() -> IslandHud {
+    tauri::async_runtime::spawn_blocking(|| IslandHud {
+        volume_percent: read_volume_percent(),
+        brightness_percent: read_brightness_percent(),
+    })
+    .await
+    .unwrap_or(IslandHud {
+        volume_percent: None,
+        brightness_percent: None,
     })
 }

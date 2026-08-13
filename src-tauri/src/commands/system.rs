@@ -1,6 +1,6 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use sysinfo::System;
 
 /// 平台相关的系统硬件信息（温度 / GPU / 电池）
@@ -171,7 +171,7 @@ mod tests {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SystemInfo {
     os_name: String,
     os_version: String,
@@ -180,6 +180,62 @@ pub struct SystemInfo {
     cpu_cores: usize,
     total_memory_gb: f64,
     total_disk_gb: f64,
+}
+
+// ── 静态系统信息本地缓存 ──
+// 这些信息（OS/CPU/内存总量/磁盘总量）在运行期几乎不变，却每次调用都要
+// 枚举磁盘 + 读系统文件。写入 data_dir 缓存后，24 小时内启动直接读文件，
+// 不再重复执行采集命令，显著加快应用启动与概览页加载。
+const SYSTEM_INFO_CACHE_TTL_SECS: u64 = 24 * 3600;
+const SYSTEM_INFO_CACHE_FILE: &str = "system_info_cache.json";
+
+#[derive(Serialize, Deserialize)]
+struct SystemInfoCache {
+    fetched_at_secs: u64,
+    info: SystemInfo,
+}
+
+fn system_info_cache_path() -> std::path::PathBuf {
+    crate::utils::data_dir().join(SYSTEM_INFO_CACHE_FILE)
+}
+
+fn now_unix_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// 读取未过期的缓存；不存在 / 过期 / 损坏时返回 None（调用方重新采集）
+fn load_cached_system_info() -> Option<SystemInfo> {
+    let text = std::fs::read_to_string(system_info_cache_path()).ok()?;
+    let cache: SystemInfoCache = serde_json::from_str(&text).ok()?;
+    if now_unix_secs().saturating_sub(cache.fetched_at_secs) > SYSTEM_INFO_CACHE_TTL_SECS {
+        return None;
+    }
+    Some(cache.info)
+}
+
+fn save_system_info_cache(info: &SystemInfo) {
+    let cache = SystemInfoCache {
+        fetched_at_secs: now_unix_secs(),
+        info: info.clone(),
+    };
+    if let Ok(json) = serde_json::to_string(&cache) {
+        let _ = std::fs::write(system_info_cache_path(), json);
+    }
+}
+
+/// 安全获取系统单例锁：即使锁因某线程 panic 而中毒，也恢复继续使用，
+/// 而不是返回 "internal lock poisoned" 让概览页报错。
+fn lock_system() -> Result<MutexGuard<'static, System>, String> {
+    match system().lock() {
+        Ok(guard) => Ok(guard),
+        Err(poisoned) => {
+            eprintln!("[DevNexus] system info mutex was poisoned; recovering");
+            Ok(poisoned.into_inner())
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -196,16 +252,32 @@ pub struct ResourceUsage {
 
 #[tauri::command]
 pub fn get_system_info() -> Result<SystemInfo, String> {
+    eprintln!("[DevNexus] get_system_info: called");
+    // 静态信息缓存命中则直接返回，避免每次启动都枚举磁盘/读系统文件
+    if let Some(cached) = load_cached_system_info() {
+        eprintln!("[DevNexus] get_system_info: cache hit");
+        return Ok(cached);
+    }
+    eprintln!("[DevNexus] get_system_info: cache miss, collecting...");
+    let result = collect_system_info();
+    match &result {
+        Ok(info) => {
+            save_system_info_cache(info);
+            eprintln!("[DevNexus] get_system_info: ok, cache saved");
+        }
+        Err(e) => eprintln!("[DevNexus] get_system_info: ERROR: {e}"),
+    }
+    result
+}
+
+fn collect_system_info() -> Result<SystemInfo, String> {
     // 磁盘枚举在锁外完成，避免 I/O 占用全局锁
     let disks = sysinfo::Disks::new_with_refreshed_list();
     let total_disk_gb =
         (disks.iter().map(|d| d.total_space() as f64).sum::<f64>() / 1073741824.0 * 100.0).round()
             / 100.0;
 
-    let mut sys = match system().lock() {
-        Ok(guard) => guard,
-        Err(_) => return Err("internal lock poisoned".to_string()),
-    };
+    let mut sys = lock_system()?;
     // 只刷新内存。cpu_model / cpu_cores 在单例初始化时已填充；
     // 用 refresh_all 会重置 CPU 占用率采样基准，导致紧随其后的
     // get_resource_usage 在毫秒级间隔内读到 ~0% 占用。
@@ -246,10 +318,7 @@ pub fn get_resource_usage() -> Result<ResourceUsage, String> {
         0.0
     };
 
-    let mut sys = match system().lock() {
-        Ok(guard) => guard,
-        Err(_) => return Err("internal lock poisoned".to_string()),
-    };
+    let mut sys = lock_system()?;
     sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::everything());
     sys.refresh_memory();
 

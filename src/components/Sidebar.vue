@@ -6,8 +6,6 @@ import { invoke } from "@tauri-apps/api/core";
 import AppIcon from "./AppIcon.vue";
 import { t } from "../lib/i18n.js";
 import { APP_VERSION } from "../lib/version.js";
-import { getIslandEnabled, setIslandEnabled } from "../lib/stores.js";
-import { applyIslandState } from "../lib/island.js";
 
 const route = useRoute();
 const router = useRouter();
@@ -15,9 +13,6 @@ const router = useRouter();
 const appVersion = ref(APP_VERSION);
 const resourceUsage = ref(null);
 let timer = null;
-
-// 灵动岛开关：反映持久化状态，点击直接开/关灵动岛
-const islandOn = ref(getIslandEnabled().value);
 
 onMounted(() => {
   (async () => {
@@ -41,13 +36,6 @@ async function loadResourceUsage() {
   } catch {
     // silently fail
   }
-}
-
-async function toggleIsland() {
-  const next = !getIslandEnabled().value;
-  setIslandEnabled(next);
-  islandOn.value = next;
-  await applyIslandState();
 }
 
 const navItems = [
@@ -114,17 +102,6 @@ function handleClick(routePath) {
 
     <!-- Navigation -->
     <nav class="nav-menu">
-      <!-- 灵动岛快捷开关：点击直接开/关灵动岛，开启时高亮 -->
-      <button
-        type="button"
-        class="nav-item"
-        :class="{ active: islandOn }"
-        @click="toggleIsland"
-      >
-        <AppIcon name="island" class="nav-item-icon" />
-        <span>{{ islandOn ? t("nav.island_on") : t("nav.island_off") }}</span>
-      </button>
-
       <button
         v-for="item in navItems"
         :key="item.route"

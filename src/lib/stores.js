@@ -69,10 +69,16 @@ export function getIslandEnabled() {
   return islandEnabled;
 }
 
-export function setIslandEnabled(value) {
+// syncOnly=true 时只回写本地状态（localStorage + 内存 ref），不反向调用 Rust 命令。
+// 用途：托盘菜单切换后 Rust 会广播 island-state 事件，前端收到后只需同步本地状态；
+// 若此处再 invoke island_set_enabled，Rust 又会广播 island-state → 形成无限循环
+// （前端→Rust→事件→前端→Rust…），导致桌面反复开/关灵动岛。
+// 只有用户在前端主动切换（侧边栏/标题栏/设置页）时才 push 到 Rust（syncOnly=false）。
+export function setIslandEnabled(value, syncOnly = false) {
   islandEnabled.value = value;
   if (typeof window !== "undefined") {
     localStorage.setItem("devnexus-island-enabled", value ? "1" : "0");
+    if (syncOnly) return;
     // 同步到 Rust 侧持久化状态，保证托盘菜单 check 项与前端开关一致
     import("@tauri-apps/api/core")
       .then(({ invoke }) => invoke("island_set_enabled", { enabled: value }))

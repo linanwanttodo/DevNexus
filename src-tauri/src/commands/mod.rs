@@ -12,3 +12,4 @@ pub mod system;
 pub mod tray;
 pub mod updater;
 pub mod version_manager;
+pub mod window_factory;
