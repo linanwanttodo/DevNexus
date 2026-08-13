@@ -811,6 +811,7 @@ fn read_desktop_icon(path: &std::path::Path) -> Option<String> {
 /// snap 的运行时/基底/主题包不是软件，应排除：
 /// core20/core22/core24（运行时基底）、snapd（快照守护进程）、
 /// bare（空基底）、gtk-common-themes/snapd-desktop-integration（主题/集成）
+#[cfg(target_os = "linux")]
 fn is_snap_runtime_package(name: &str) -> bool {
     let n = name.to_lowercase();
     n == "snapd"
@@ -829,6 +830,8 @@ fn is_snap_runtime_package(name: &str) -> bool {
 /// 使 "steam-launcher" / "Steam" / "steam_launcher" 都归一为 "steamlauncher"。
 /// 同时去掉常见的包名后缀（-launcher/-desktop/-bin/-client/-player/-studio/-common/-libs），
 /// 使 "reasonix-desktop" 与 "Reasonix"、"steam-libs-amd64" 与 "Steam" 能正确配对。
+/// 仅 Linux 使用（调用方均在 cfg(target_os="linux") 内），未加门控会在 Windows/macOS 上产生 dead_code 警告。
+#[cfg(target_os = "linux")]
 fn normalize_app_name(name: &str) -> String {
     let lower = name.to_lowercase();
     let mut base = lower
@@ -929,9 +932,12 @@ fn desktop_display_name_for_package(package: &str) -> Option<String> {
 
 /// 把新版本合并进已有版本字符串（多来源去重，如 desktop 的 "installed" 与 apt 的 "1.24.1"）。
 /// 规则：
-///   - 已有值为 "installed"/"unknown"/"N/A" 且新值真实 → 直接替换
-///   - 新值与已有相同 → 不变
+///   - 已有值为 "installed"/"unknown"/"N/A" 且新值真实 -> 直接替换
+///   - 新值与已有相同 -> 不变
 ///   - 否则以 "a, b" 合并（同一软件不同来源/多版本共存）
+///
+/// 仅 Linux 使用（调用方均在 cfg(target_os="linux") 内），未加门控会在 Windows/macOS 上产生 dead_code 警告。
+#[cfg(target_os = "linux")]
 fn merge_versions(existing: &mut String, new_version: &str) {
     let cur = existing.trim();
     let new_ver = new_version.trim();
