@@ -216,7 +216,7 @@ fn get_pm_list_args(pm_name: &str) -> Option<&'static [&'static str]> {
     match pm_name {
         "apt" => Some(&["list", "--installed"]),
         "dnf" => Some(&["list", "installed"]),
-        "pacman" => Some(&["-Q"]),
+        "pacman" => Some(&["-Qe"]),
         "zypper" => Some(&["se", "--installed-only"]),
         "apk" => Some(&["list", "--installed"]),
         "Homebrew" => Some(&["list", "--formula", "--versions"]),
@@ -239,9 +239,12 @@ fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
     match pm_name {
         "apt" => {
             // apt list --installed 输出: pkgname/stable,now VERSION arch [installed]
+            // 只保留用户手动安装的包（[installed]），跳过 [installed,automatic]
+            // 依赖标记——否则系统库/依赖包（2183 个）全被当成"软件"列出，
+            // 这是用户看到卸载列表混入大量依赖的根因。
             for line in stdout.lines() {
                 let line = line.trim();
-                if line.is_empty() || !line.contains("[installed") {
+                if line.is_empty() || !line.contains("[installed") || line.contains("automatic") {
                     continue;
                 }
                 let pkg = line.split('/').next().unwrap_or("").trim();
@@ -281,9 +284,10 @@ fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
         }
         "apk" => {
             // apk list --installed: "pkgname-version arch {pkgname} ... [installed]"
+            // 只保留手动安装（[installed]），跳过 [installed,automatic] 依赖包
             for line in stdout.lines() {
                 let line = line.trim();
-                if line.is_empty() || !line.contains("[installed") {
+                if line.is_empty() || !line.contains("[installed") || line.contains("automatic") {
                     continue;
                 }
                 let first = line.split_whitespace().next().unwrap_or("");
@@ -338,7 +342,9 @@ fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
                     continue;
                 }
                 let parts: Vec<&str> = line.split('|').map(|s| s.trim()).collect();
-                if parts.len() >= 4 && parts[0] == "i" {
+                // zypper 状态列：i = 自动安装（依赖），i+ = 手动安装
+                // 只保留 i+（用户主动安装的软件），排除依赖包
+                if parts.len() >= 4 && parts[0] == "i+" {
                     apps.push((parts[1].to_string(), parts[3].to_string()));
                 }
             }
@@ -501,23 +507,85 @@ pub async fn list_installed_apps() -> Result<Vec<InstalledApp>, String> {
         let apps = parse_pm_list_output(pm.name, &stdout);
 
         for (name, version) in apps {
-            let key = format!("{}:{}", name, pm.name);
-            if seen.insert(key) {
-                let icon = resolve_app_icon(&name, pm.name);
-                // GUI 过滤仅适用于 Linux（依赖 .desktop 入口语义）：
-                // 无图标且无 desktop 入口 → 视为 CLI/系统组件，过滤。
-                // Windows/macOS 无 .desktop 概念，包管理器条目全部保留，
-                // 否则列表会被清空（图标与 desktop 判定恒为空）。
-                #[cfg(target_os = "linux")]
-                if icon.is_none() && !desktop_for_package(&name) {
+            // snap 运行时/基底包不是软件（core20/core22/snapd/bare/主题包等）
+            if pm.name == "snap" && is_snap_runtime_package(&name) {
+                continue;
+            }
+
+            // Linux：包名与 desktop 主来源匹配时，不新增重复条目，
+            // 而是把真实版本号合并到已有条目（desktop 版本常为 "installed"）。
+            // 否则同一软件会出现两条：一条有版本号（包管理器）、一条 "installed"（desktop）。
+            #[cfg(target_os = "linux")]
+            {
+                if let Some(display_name) = desktop_display_name_for_package(&name) {
+                    // 先用 desktop 显示名精确匹配（如 "Visual Studio Code"），
+                    // 再回退到归一化名匹配（如 "reasonix-desktop" ↔ "Reasonix"）
+                    let mut matched = false;
+                    for app in all_apps.iter_mut() {
+                        if app.name == display_name {
+                            merge_versions(&mut app.version, &version);
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if !matched {
+                        let pkg_norm = normalize_app_name(&name);
+                        for app in all_apps.iter_mut() {
+                            if normalize_app_name(&app.name) == pkg_norm {
+                                merge_versions(&mut app.version, &version);
+                                matched = true;
+                                break;
+                            }
+                        }
+                    }
+                    if !matched {
+                        // desktop 匹配到但条目未加入（不应发生），按 GUI 判定新增
+                        let icon = resolve_app_icon(&name, pm.name);
+                        if icon.is_some() {
+                            let key = format!("{}:{}", name, pm.name);
+                            if seen.insert(key) {
+                                all_apps.push(InstalledApp {
+                                    name,
+                                    version,
+                                    source: pm.name.to_string(),
+                                    icon,
+                                });
+                            }
+                        }
+                    }
                     continue;
                 }
-                all_apps.push(InstalledApp {
-                    name,
-                    version,
-                    source: pm.name.to_string(),
-                    icon,
-                });
+                // 无 desktop 入口 → 需有图标才保留（GUI 判定），否则视为 CLI/系统组件
+                let icon = resolve_app_icon(&name, pm.name);
+                if icon.is_none() {
+                    continue;
+                }
+                let key = format!("{}:{}", name, pm.name);
+                if seen.insert(key) {
+                    all_apps.push(InstalledApp {
+                        name,
+                        version,
+                        source: pm.name.to_string(),
+                        icon,
+                    });
+                }
+                continue;
+            }
+
+            // Windows/macOS：无 .desktop 概念，包管理器条目全部保留，
+            // 否则列表会被清空（图标与 desktop 判定恒为空）。
+            #[cfg(not(target_os = "linux"))]
+            {
+                let icon = resolve_app_icon(&name, pm.name);
+                let key = format!("{}:{}", name, pm.name);
+                if seen.insert(key) {
+                    all_apps.push(InstalledApp {
+                        name,
+                        version,
+                        source: pm.name.to_string(),
+                        icon,
+                    });
+                }
             }
         }
     }
@@ -562,7 +630,9 @@ fn list_gui_apps() -> Vec<InstalledApp> {
     ];
 
     let mut apps: Vec<InstalledApp> = Vec::new();
-    let mut seen: HashMap<String, String> = HashMap::new(); // desktop文件名 -> source
+    // 归一化显示名 -> 索引。同软件多个 desktop 文件（如 "CC Switch.desktop" 与
+    // "cc-switch.desktop"）归一化后相同，只保留一条；多来源时合并版本。
+    let mut seen: HashMap<String, usize> = HashMap::new();
 
     for (dir_idx, dir) in desktop_dirs.iter().enumerate() {
         let Ok(entries) = std::fs::read_dir(dir) else {
@@ -583,10 +653,6 @@ fn list_gui_apps() -> Vec<InstalledApp> {
             if file_stem.is_empty() || file_stem.ends_with(".desktop") {
                 continue; // 跳过如 "ai.opencode.desktop.desktop" 的嵌套
             }
-            // 去重：同一 desktop 文件名只取第一个来源
-            if seen.contains_key(&file_stem) {
-                continue;
-            }
             let source = match dir_idx {
                 0 => "manual", // ~/.local/share/applications
                 1 => "system", // /usr/share/applications
@@ -604,9 +670,33 @@ fn list_gui_apps() -> Vec<InstalledApp> {
             };
 
             let name = desktop_display_name(&path);
+            // 用显示名归一化去重；空显示名回退到文件 stem
+            let dedup_key = if name.is_empty() {
+                normalize_app_name(&file_stem)
+            } else {
+                normalize_app_name(&name)
+            };
+            if dedup_key.is_empty() {
+                continue;
+            }
+
+            if let Some(&idx) = seen.get(&dedup_key) {
+                // 同一软件已存在：合并版本，优先保留非 "system" 来源（用户安装优先）
+                let existing = &mut apps[idx];
+                merge_versions(&mut existing.version, &desktop_version(&path));
+                // manual/flatpak/snap 优先级高于 system；已有条目是 system 时升级来源
+                if existing.source == "system" && actual_source != "system" {
+                    existing.source = actual_source.to_string();
+                }
+                if existing.icon.is_none() {
+                    existing.icon = read_desktop_icon(&path);
+                }
+                continue;
+            }
+
             let version = desktop_version(&path);
             let icon = read_desktop_icon(&path);
-            seen.insert(file_stem, actual_source.to_string());
+            seen.insert(dedup_key, apps.len());
             apps.push(InstalledApp {
                 name,
                 version,
@@ -642,12 +732,18 @@ fn desktop_display_name(path: &std::path::Path) -> String {
         .unwrap_or_default()
 }
 
-/// 读取 .desktop 文件的版本字段（Version= 或 X-AppVersion=）
+/// 读取 .desktop 文件的版本字段。
+/// 优先级：X-AppVersion= / Version= → 从 Exec= 可执行路径中提取版本目录
+/// （如 JetBrains toolbox: ~/.../apps/clion-2026.1.1/bin/clion.sh → 2026.1.1）
+/// → 从 Name= 显示名尾部提取（如 "CLion 2026.1.1" → 2026.1.1）。
+/// 只做静态解析，绝不执行任何命令，避免启动 GUI 应用。
 #[cfg(target_os = "linux")]
 fn desktop_version(path: &std::path::Path) -> String {
     let Ok(content) = std::fs::read_to_string(path) else {
         return "installed".to_string();
     };
+    let mut exec_line: Option<String> = None;
+    let mut name_line: Option<String> = None;
     for line in content.lines() {
         let line = line.trim();
         if let Some(v) = line
@@ -657,6 +753,49 @@ fn desktop_version(path: &std::path::Path) -> String {
             let v = v.trim();
             if !v.is_empty() && v != "1.0" {
                 return v.to_string();
+            }
+        }
+        if let Some(v) = line.strip_prefix("Exec=") {
+            exec_line = Some(v.trim().to_string());
+        }
+        if let Some(v) = line.strip_prefix("Name=") {
+            if !line.starts_with("Name[") {
+                name_line = Some(v.trim().to_string());
+            }
+        }
+    }
+    // 从 Exec 路径中的版本目录提取版本号（如 "clion-2026.1.1"、"pycharm-2026.2"）
+    if let Some(exec) = exec_line {
+        for seg in exec.split(['/', '\\']) {
+            let seg = seg.trim();
+            if seg.is_empty() {
+                continue;
+            }
+            // 匹配 "<name>-<version>" 形态，版本以数字开头
+            if let Some((name, ver)) = seg.rsplit_once('-') {
+                if ver.chars().next().is_some_and(|c| c.is_ascii_digit())
+                    && ver
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_')
+                    && ver.len() <= 24
+                    && !name.is_empty()
+                {
+                    return ver.to_string();
+                }
+            }
+        }
+    }
+    // 从显示名尾部提取版本（"CLion 2026.1.1"、"Android Studio Quail 2 2026.1.2"）
+    if let Some(name) = name_line {
+        let trimmed = name.trim();
+        if let Some(ver) = trimmed.split_whitespace().last() {
+            if ver.chars().next().is_some_and(|c| c.is_ascii_digit())
+                && ver
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-')
+                && ver.len() <= 24
+            {
+                return ver.to_string();
             }
         }
     }
@@ -669,16 +808,83 @@ fn read_desktop_icon(path: &std::path::Path) -> Option<String> {
     desktop_icon_path(path).and_then(|p| read_image_as_data_url(&p))
 }
 
-/// 判断包名是否有对应 desktop 入口（用于包管理器列表过滤 GUI 应用）
+/// snap 的运行时/基底/主题包不是软件，应排除：
+/// core20/core22/core24（运行时基底）、snapd（快照守护进程）、
+/// bare（空基底）、gtk-common-themes/snapd-desktop-integration（主题/集成）
+fn is_snap_runtime_package(name: &str) -> bool {
+    let n = name.to_lowercase();
+    n == "snapd"
+        || n == "bare"
+        || n == "core"
+        || n.starts_with("core1")
+        || n.starts_with("core2")
+        || n == "gtk-common-themes"
+        || n == "snapd-desktop-integration"
+        || n == "snap-store"
+        || n.ends_with("-theme")
+}
+
+/// 归一化应用名用于去重匹配：
+/// 小写 + 去掉所有非字母数字字符（- _ 空格 . 等），
+/// 使 "steam-launcher" / "Steam" / "steam_launcher" 都归一为 "steamlauncher"。
+/// 同时去掉常见的包名后缀（-launcher/-desktop/-bin/-client/-player/-studio/-common/-libs），
+/// 使 "reasonix-desktop" 与 "Reasonix"、"steam-libs-amd64" 与 "Steam" 能正确配对。
+fn normalize_app_name(name: &str) -> String {
+    let lower = name.to_lowercase();
+    let mut base = lower
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>();
+    // 去掉 libs 后缀族（amd64/i386 架构变体）
+    let stripped = [
+        "launcher", "desktop", "client", "player", "studio", "common", "bin",
+    ];
+    for suffix in stripped {
+        if base.ends_with(suffix) && base.len() > suffix.len() + 2 {
+            base.truncate(base.len() - suffix.len());
+            break;
+        }
+    }
+    // libs-amd64 / libs-i386 等：去掉 "libs" 及架构尾巴
+    if base.ends_with("libs") && base.len() > 6 {
+        base.truncate(base.len() - 4);
+    }
+    base
+}
+
+/// 判断包名是否有对应 desktop 入口（用于包管理器列表去重 GUI 应用）。
+/// 归一化匹配：desktop 文件名 / Name= 归一化后与包名归一化后一致即命中。
+/// 相比旧代码：精确匹配会漏掉 "steam-launcher"↔"Steam" 这类后缀差异；
+/// contains 子串匹配会误命中 "code"↔"libcodec"。
+/// 归一化（去分隔符+去后缀）在两者之间取得平衡。
 #[cfg(target_os = "linux")]
-fn desktop_for_package(package: &str) -> bool {
-    let pkg_lower = package.to_lowercase();
+fn desktop_display_name_for_package(package: &str) -> Option<String> {
+    let pkg_norm = normalize_app_name(package);
+    if pkg_norm.is_empty() {
+        return None;
+    }
+    // 显式别名表：包名(归一化) → 软件显示名。覆盖名称完全不同的已知映射，
+    // 如 apt 包 "code"(VSCode) 与显示名 "Visual Studio Code"。
+    // 不依赖启发式弱匹配，避免 "zcode"↔"code" 这类误匹配。
+    let aliases: &[(&str, &str)] = &[
+        ("code", "Visual Studio Code"),
+        ("codium", "VSCodium"),
+        ("codeoss", "Visual Studio Code - OSS"),
+        ("wps", "WPS Office"),
+    ];
+    if let Some((_, display)) = aliases.iter().find(|(a, _)| *a == pkg_norm) {
+        return Some((*display).to_string());
+    }
+
     let desktop_dirs = [
         dirs_home_dir().join(".local/share/applications"),
         PathBuf::from("/usr/share/applications"),
         PathBuf::from("/var/lib/flatpak/exports/share/applications"),
         PathBuf::from("/var/lib/snapd/desktop/applications"),
     ];
+
+    // desktop 文件名精确匹配（code.desktop ↔ 包 "code"）。
+    // 优先返回文件名命中的条目，避免 url-handler 等辅助入口抢先。
     for dir in &desktop_dirs {
         let Ok(entries) = std::fs::read_dir(dir) else {
             continue;
@@ -692,16 +898,62 @@ fn desktop_for_package(package: &str) -> bool {
                 .file_stem()
                 .map(|s| s.to_string_lossy().to_lowercase())
                 .unwrap_or_default();
-            if stem == pkg_lower
-                || stem.contains(&pkg_lower)
-                || pkg_lower.contains(&stem)
-                || desktop_name_of(&path).to_lowercase() == pkg_lower
-            {
-                return true;
+            if normalize_app_name(&stem) == pkg_norm {
+                let display = desktop_display_name(&path);
+                if !display.is_empty() {
+                    return Some(display);
+                }
+                return Some(stem);
             }
         }
     }
-    false
+
+    // desktop 显示名（Name=）精确匹配
+    for dir in &desktop_dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e != "desktop").unwrap_or(true) {
+                continue;
+            }
+            let name = desktop_name_of(&path);
+            if !name.is_empty() && normalize_app_name(&name) == pkg_norm {
+                return Some(name);
+            }
+        }
+    }
+    None
+}
+
+/// 把新版本合并进已有版本字符串（多来源去重，如 desktop 的 "installed" 与 apt 的 "1.24.1"）。
+/// 规则：
+///   - 已有值为 "installed"/"unknown"/"N/A" 且新值真实 → 直接替换
+///   - 新值与已有相同 → 不变
+///   - 否则以 "a, b" 合并（同一软件不同来源/多版本共存）
+fn merge_versions(existing: &mut String, new_version: &str) {
+    let cur = existing.trim();
+    let new_ver = new_version.trim();
+    if cur.is_empty() {
+        *existing = new_ver.to_string();
+        return;
+    }
+    let placeholder = ["installed", "unknown", "N/A"];
+    let cur_is_placeholder = placeholder.contains(&cur);
+    let new_is_placeholder = placeholder.contains(&new_ver);
+
+    if cur == new_ver || new_is_placeholder {
+        return; // 无变化
+    }
+    if cur_is_placeholder {
+        *existing = new_ver.to_string();
+        return;
+    }
+    // 都真实且不同 → 合并（去重）
+    if !cur.split(',').any(|v| v.trim() == new_ver) {
+        existing.push_str(&format!(", {}", new_ver));
+    }
 }
 
 /// 从 Linux 桌面入口文件（.desktop）解析应用图标，返回 base64 data URL
@@ -1639,10 +1891,9 @@ mod tests {
     fn test_parse_apt_output() {
         let output = "Listing...\nfoo/stable,now 1.2.3 amd64 [installed]\nbar/stable 0.5.0 amd64\nbaz/stable,now 3.0.0 all [installed,automatic]\n";
         let apps = parse_pm_list_output("apt", output);
-        // Now matches both [installed] and [installed,automatic]
-        assert_eq!(apps.len(), 2);
+        // 只保留手动安装（[installed]），跳过 automatic 依赖
+        assert_eq!(apps.len(), 1);
         assert_eq!(apps[0], ("foo".to_string(), "1.2.3".to_string()));
-        assert_eq!(apps[1], ("baz".to_string(), "3.0.0".to_string()));
     }
 
     #[test]
@@ -1716,12 +1967,12 @@ mod tests {
 
     #[test]
     fn test_parse_zypper_output() {
-        // zypper se --installed-only format: i | Name | Summary | Version | Arch | Repository
-        let output = "S | Name | Summary | Type\n--+------+---------+-----\ni | foo | Foo pkg | 1.2.3 | x86_64 | repo\ni | bar | Bar pkg | 0.5.0 | noarch | repo\n";
+        // zypper se --installed-only format: Status | Name | Summary | Version | Arch | Repository
+        // i+ = 手动安装（保留）；i = 自动安装（跳过，依赖）
+        let output = "S | Name | Summary | Type\n--+------+---------+-----\ni+ | foo | Foo pkg | 1.2.3 | x86_64 | repo\ni | bar | Bar pkg | 0.5.0 | noarch | repo\n";
         let apps = parse_pm_list_output("zypper", output);
-        assert_eq!(apps.len(), 2);
+        assert_eq!(apps.len(), 1);
         assert_eq!(apps[0], ("foo".to_string(), "1.2.3".to_string()));
-        assert_eq!(apps[1], ("bar".to_string(), "0.5.0".to_string()));
     }
 
     #[test]
@@ -1784,7 +2035,7 @@ mod tests {
             get_pm_list_args("apt"),
             Some(&["list", "--installed"] as &[&str])
         );
-        assert_eq!(get_pm_list_args("pacman"), Some(&["-Q"] as &[&str]));
+        assert_eq!(get_pm_list_args("pacman"), Some(&["-Qe"] as &[&str]));
         assert_eq!(
             get_pm_list_args("dnf"),
             Some(&["list", "installed"] as &[&str])

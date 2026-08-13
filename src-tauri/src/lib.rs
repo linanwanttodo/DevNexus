@@ -3,6 +3,8 @@ pub mod commands;
 mod residue_scanner;
 mod utils;
 
+use commands::window_factory::create_main_window;
+
 use std::sync::Arc;
 use tauri::{
     image::Image,
@@ -62,12 +64,12 @@ pub fn run() {
             commands::island_bridge::init(app.handle().clone());
 
             // 静默启动：开启时主窗口不显示，后台常驻托盘 + 灵动岛。
-            // 同时从 Alt-Tab / 任务视图中移除，避免按 Win 键看到不相关的窗口
-            // （与 macOS 灵动岛在后台时不显示应用列表的行为保持一致）。
+            // 直接从 tauri.conf.json 自动创建的主窗口销毁（而非 hide），
+            // 省掉 ~260MB 主窗口渲染进程；用户从托盘「显示 DevNexus」时再重建。
             if commands::autostart::get_silent_start() {
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.set_skip_taskbar(true);
-                    let _ = w.hide();
+                    let _ = w.destroy();
                 }
             }
 
@@ -114,43 +116,74 @@ pub fn run() {
                 .show_menu_on_left_click(true)
                 .on_menu_event(move |app, event| match event.id().as_ref() {
                     "show" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.set_skip_taskbar(false);
-                            let _ = w.unminimize();
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
+                        // 关键：菜单事件在主线程且持有 GTK 菜单指针 grab 的上下文中触发，
+                        // 此处同步执行窗口 show/set_focus 等 X11 操作会令主循环死锁、
+                        // grab 永不释放 → 整个桌面卡死（参见下方 "island" 分支说明）。
+                        // 因此全部窗口操作抛到异步线程，先让菜单回调返回并释放 grab。
+                        let app_clone = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            // 主窗口可能因「关闭转后台」被 destroy()；不存在时先重建。
+                            if app_clone.get_webview_window("main").is_none() {
+                                create_main_window(&app_clone);
+                            }
+                            if let Some(w) = app_clone.get_webview_window("main") {
+                                let _ = w.set_skip_taskbar(false);
+                                let _ = w.unminimize();
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        });
                     }
                     "island" => {
-                        // 灵动岛开关：翻转 check 状态并同步显示/隐藏
-                        let menu = app.state::<tauri::menu::Menu<tauri::Wry>>();
-                        let next = if let Some(item) = menu.get("island") {
-                            if let Some(ci) = item.as_check_menuitem() {
-                                let cur = ci.is_checked().unwrap_or(false);
-                                let _ = ci.set_checked(!cur);
-                                !cur
-                            } else {
-                                !crate::commands::island_bridge::island_get_enabled()
+                        // 灵动岛开关：以 Rust 侧持久化状态文件为准计算 next，
+                        // 不再依赖 dbusmenu 的 is_checked()——在某些环境下
+                        // is_checked() 不可靠、恒返回 false，会导致 next 永远为
+                        // true（永远"启用"），托盘点击毫无变化（"开关没用"）。
+                        let cur = crate::commands::island_bridge::island_get_enabled();
+                        let next = !cur;
+                        // 同步更新菜单 check 项与文字，确保视觉一致
+                        {
+                            let menu = app.state::<tauri::menu::Menu<tauri::Wry>>();
+                            if let Some(item) = menu.get("island") {
+                                if let Some(ci) = item.as_check_menuitem() {
+                                    let _ = ci.set_checked(next);
+                                }
                             }
-                        } else {
-                            !crate::commands::island_bridge::island_get_enabled()
-                        };
-                        let _ =
-                            crate::commands::island_bridge::island_set_enabled(next, app.clone());
-                        // 同步更新菜单文字：开 → "灵动岛：开" / 关 → "灵动岛：关"
-                        let lang = crate::commands::tray::saved_lang();
-                        crate::commands::tray::update_island_menu_text(app, &lang, next);
+                        }
+
+                        // 关键修复：菜单事件回调运行在 GTK 主线程，且当时正持有
+                        // 托盘菜单的 pointer grab（指针捕获）。若在此处同步执行
+                        // island_set_enabled() 内的窗口 X11 操作（show/hide/
+                        // set_always_on_top/set_visible_on_all_workspaces），这些
+                        // 操作需要主事件循环继续推进才能完成 X11 往返，但当前回调
+                        // 本就阻塞着主循环 → 死锁。grab 永不释放，X 服务器把所有
+                        // 指针输入只路由给本进程 → 整个桌面冻结、仅光标可动。
+                        // 因此：先把 next 状态算好，让菜单回调立即返回释放 grab，
+                        // 再把真正的窗口变更抛到异步线程执行。
+                        let app_clone = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = crate::commands::island_bridge::island_set_enabled(
+                                next,
+                                app_clone.clone(),
+                            );
+                            // 同步更新菜单文字：开 → "灵动岛：开" / 关 → "灵动岛：关"
+                            let lang = crate::commands::tray::saved_lang();
+                            crate::commands::tray::update_island_menu_text(&app_clone, &lang, next);
+                        });
                     }
                     "check-update" => {
-                        // 打开主窗口并导航到设置页触发检查更新
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.set_skip_taskbar(false);
-                            let _ = w.unminimize();
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
-                        use tauri::Emitter;
-                        let _ = app.emit("tray-nav", "/settings");
+                        // 同样避免在菜单 grab 上下文中同步操作窗口（同 "island"/"show" 死锁风险）。
+                        let app_clone = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Some(w) = app_clone.get_webview_window("main") {
+                                let _ = w.set_skip_taskbar(false);
+                                let _ = w.unminimize();
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                            use tauri::Emitter;
+                            let _ = app_clone.emit("tray-nav", "/settings");
+                        });
                     }
                     "balance" => {
                         // 点击余额菜单项：查询 DeepSeek 余额并更新菜单文字
@@ -191,14 +224,16 @@ pub fn run() {
                     // 灵动岛：关闭即隐藏（设置页可重新显示）
                     let _ = window.hide();
                 } else {
-                    // 主窗口：最小化而非隐藏。GNOME 桌面默认无托盘扩展，
-                    // 隐藏后没有任何入口能找回窗口（用户会以为应用卡死）。
-                    // 最小化保留任务栏入口，随时可恢复。
-                    let _ = window.minimize();
-                    // 重要：将主窗口从 Alt-Tab / 任务视图 / Win+Tab 中移除，
-                    // 避免"灵动岛后台运行"时按 Win 键还能看到 DevNexus 主窗口。
-                    // 这是桌面软件后台常驻的标准行为（macOS 灵动岛 / 状态栏 App 同理）。
+                    // 主窗口：关闭即销毁 WebView 渲染进程（而非 hide）。
+                    // 原因：hide() 只把窗口 unmap，背后的 WebKit 渲染进程（~260MB）
+                    // 不退出、JS 上下文与 DOM 全保留 → 内存一分不少。
+                    // destroy() 才真正回收渲染进程；下次由托盘「显示 DevNexus」
+                    // 或点击灵动岛时按需重建（create_main_window）。
+                    // 这样软件后台常驻时，主窗口的 260MB 渲染进程被释放，
+                    // 常驻内存从 ~760MB 降到 ~300MB（仅 Rust 宿主 + 网络进程 + 岛窗口）。
+                    // 恢复入口：托盘「显示 DevNexus」(rebuild + show)，或点击灵动岛。
                     let _ = window.set_skip_taskbar(true);
+                    let _ = window.destroy();
                 }
             }
         })
@@ -208,6 +243,7 @@ pub fn run() {
             commands::autostart::get_silent_start,
             commands::autostart::set_silent_start,
             commands::tray::update_tray_menu,
+            commands::window_factory::show_main_window,
             commands::system::get_system_info,
             commands::system::get_resource_usage,
             commands::system::get_hardware_status,
@@ -284,6 +320,7 @@ pub fn run() {
             commands::island_bridge::island_media_status,
             commands::island_bridge::island_media_control,
             commands::island_bridge::island_set_sticky,
+            commands::island_bridge::island_get_hud,
             commands::island_bridge::island_get_enabled,
             commands::island_bridge::island_set_enabled,
             commands::island_bridge::deepseek_get_balance,

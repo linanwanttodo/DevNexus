@@ -392,3 +392,124 @@ body {
 .capsule {
   cursor: grab;
 }
+
+/* ── 展开态字号放大（与胶囊 spring 同步）──
+ * 收起态是紧凑小字，悬停/事件展开时不仅图形变大，文字也随之增长，
+ * 否则大胶囊里仍是小字，视觉上"空"且像没反应。与 .capsule 的
+ * cubic-bezier(0.34,1.56,0.64,1) 同曲线，保证字与图形一起弹性过渡。 */
+.clock-hm,
+.clock-sec,
+.bal-total,
+.bal-cur,
+.timer-text,
+.med-title,
+.med-artist {
+  transition: font-size 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.capsule.expanded .clock-hm,
+.capsule.expanded .clock-sec {
+  font-size: 38px;
+}
+
+.capsule.expanded .bal-total {
+  font-size: 24px;
+}
+
+.capsule.expanded .bal-cur {
+  font-size: 14px;
+}
+
+.capsule.expanded .bal-status {
+  font-size: 12px;
+}
+
+.capsule.expanded .timer-text {
+  font-size: 26px;
+  min-width: 64px;
+}
+
+.capsule.expanded .module-timer {
+  gap: 12px;
+}
+
+.capsule.expanded .med-title {
+  font-size: 20px;
+}
+
+.capsule.expanded .med-artist {
+  font-size: 13px;
+}
+
+/* 展开态模块整体更舒展（时钟/余额模块横向间距放大） */
+.capsule.expanded .module-clock {
+  gap: 10px;
+}
+
+.capsule.expanded .module-balance {
+  gap: 14px;
+}
+
+/* 模块4/5：系统 HUD（音量/亮度）与系统状态（CPU/内存） */
+.module-hud,
+.module-status {
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 0 24px;
+}
+
+.hud-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.hud-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.hud-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.hud-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.85);
+  transition: width 0.3s ease;
+}
+
+.hud-val {
+  width: 48px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+/* 展开态 HUD/状态模块更醒目 */
+.capsule.expanded .module-hud,
+.capsule.expanded .module-status {
+  gap: 12px;
+}
+
+.capsule.expanded .hud-track {
+  height: 8px;
+}
+
+.capsule.expanded .hud-val {
+  font-size: 14px;
+}
+

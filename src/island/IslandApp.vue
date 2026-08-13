@@ -23,6 +23,9 @@ import {
   Timer,
   Music2,
   Wallet,
+  Sun,
+  Cpu,
+  Database,
 } from "@lucide/vue";
 import deepseekIcon from "../assets/deepseek.png";
 
@@ -105,6 +108,46 @@ let mediaTimer = null;
 function startMediaPoll() {
   pollMedia();
   mediaTimer = setInterval(pollMedia, 3000);
+}
+
+// ═══════════════ 系统 HUD（音量/亮度）═══════════════
+const hud = ref(null); // { volumePercent, brightnessPercent }
+let hudTimer = null;
+
+async function pollHud() {
+  try {
+    hud.value = await invoke("island_get_hud");
+  } catch {
+    hud.value = null;
+  }
+}
+
+function startHudPoll() {
+  pollHud();
+  hudTimer = setInterval(pollHud, 5000);
+}
+
+// ═══════════════ 系统状态（CPU/内存）═══════════════
+const sysStatus = ref(null); // { cpuUsage, memoryPercent, memoryUsedGb, memoryTotalGb }
+let sysTimer = null;
+
+async function pollSysStatus() {
+  try {
+    const u = await invoke("get_resource_usage");
+    sysStatus.value = {
+      cpuUsage: u.cpu_usage,
+      memoryPercent: u.memory_percent,
+      memoryUsedGb: u.memory_used_gb,
+      memoryTotalGb: u.memory_total_gb,
+    };
+  } catch {
+    sysStatus.value = null;
+  }
+}
+
+function startSysPoll() {
+  pollSysStatus();
+  sysTimer = setInterval(pollSysStatus, 5000);
 }
 
 // ═══════════════ 专注倒计时 ═══════════════
@@ -247,7 +290,8 @@ const displayMediaArtist = computed(() => {
 });
 
 // ═══════════════ 模块切换（滚轮循环）═══════════════
-// 0 = 时间, 1 = DeepSeek 余额, 2 = 倒计时, 3 = 媒体控制；一次只显示一个
+// 0 = 时间, 1 = DeepSeek 余额, 2 = 倒计时, 3 = 媒体控制, 4 = 系统 HUD(音量/亮度),
+// 5 = 系统状态(CPU/内存)；一次只显示一个
 const activeModule = ref(0);
 
 const modules = [
@@ -255,6 +299,8 @@ const modules = [
   { key: "balance", icon: Wallet },
   { key: "timer", icon: Timer },
   { key: "media", icon: Music2 },
+  { key: "hud", icon: Music2 },
+  { key: "status", icon: Timer },
 ];
 
 function switchModule(i) {
@@ -286,15 +332,32 @@ function showBanner(app, title, body, kind = "system") {
   bannerSeq += 1;
   const seq = bannerSeq;
   banner.value = { app, title, body, kind };
-  // 通知嵌入胶囊：强制展开（窗口恒定，动画由胶囊 CSS spring 完成）
-  expanded.value = true;
-  if (bannerTimer) clearTimeout(bannerTimer);
-  bannerTimer = setTimeout(() => {
-    if (bannerSeq === seq) {
-      banner.value = null;
-      expanded.value = false; // 通知结束自动收起回小胶囊
+  if (kind === "system") {
+    // 系统通知：只在收起态短暂闪现（3 秒），绝不强制展开或覆盖媒体模块。
+    // 用户诉求：媒体/播放器区域只显示声音相关内容，不被微信/QQ/IDE 等
+    // 无关通知打断（此前 showBanner 直接 expanded=true 抢占，正是
+    // "播放器显示其他消息" 的根因）。
+    if (expanded.value) {
+      banner.value = null; // 展开态（用户在看内容）不打断
+      return;
     }
-  }, 5000);
+    if (bannerTimer) clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => {
+      if (bannerSeq === seq) {
+        banner.value = null;
+      }
+    }, 3000);
+  } else {
+    // 本地事件（倒计时完成等）：强制展开展示，5 秒后自动收起
+    expanded.value = true;
+    if (bannerTimer) clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => {
+      if (bannerSeq === seq) {
+        banner.value = null;
+        expanded.value = false;
+      }
+    }, 5000);
+  }
 }
 
 /** 本地通知（倒计时完成等）：无图标，走同一条横幅通道 */
@@ -404,15 +467,9 @@ async function onPointerUp() {
 /** 展开视图按钮：唤出主窗口 */
 async function openMainWindow() {
   try {
-    const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-    const mainWin = await WebviewWindow.getByLabel("main");
-    if (mainWin) {
-      // 恢复任务栏/Alt-Tab 显示（后台运行时不显示，主动打开后恢复）
-      await mainWin.setSkipTaskbar(false);
-      await mainWin.unminimize();
-      await mainWin.show();
-      await mainWin.setFocus();
-    }
+    // 主窗口可能因「关闭转后台」被 Rust 侧 destroy()，此时 getByLabel 返回 null，
+    // 直接 show 会失败。统一走 Rust 命令 show_main_window：不存在则先重建再显示。
+    await invoke("show_main_window");
   } catch {
     // 非 Tauri 环境忽略
   }
@@ -427,25 +484,59 @@ async function hideIsland() {
   }
 }
 
-// ═══════════════ 两态交互（悬停展开 / 移出收起 / 点击切换）═══════════════
+// ═══════════════ 两态交互（悬停展开 / 移出收起 / 点击切换 + 自动收起）═══════════════
 // 悬停：鼠标进入胶囊短暂延迟后展开（防误触），移出后收起。
 // 点击：切换展开/收起（拖拽结束后 clickSuppressed 会抑制本次 click）。
+// 自动收起：展开后若鼠标不在岛上，3 秒后自动恢复小胶囊；
+// 鼠标悬停期间保持展开（不启动倒计时），离开后才开始 3 秒倒计时，
+// 3 秒内返回则取消。符合用户诉求："鼠标放上面一直显示，离开 3 秒后再缩小"。
 // 窗口尺寸恒定，展开/收起完全由胶囊 CSS spring 动画过渡，无窗口 resize 抖动。
+const AUTO_COLLAPSE_MS = 3000;
+let collapseTimer = null;
+let hovering = false; // 鼠标当前是否在岛上（不存 ref，避免无谓渲染）
+
+function clearCollapseTimer() {
+  if (collapseTimer) {
+    clearTimeout(collapseTimer);
+    collapseTimer = null;
+  }
+}
+
+/** 离开后 3 秒自动收起；悬停中或展开前不启动 */
+function scheduleCollapse() {
+  clearCollapseTimer();
+  if (!expanded.value || banner.value || hovering) return;
+  collapseTimer = setTimeout(() => {
+    collapseTimer = null;
+    expanded.value = false;
+  }, AUTO_COLLAPSE_MS);
+}
+
 async function setExpanded(val) {
   if (expanded.value === val) return;
   expanded.value = val;
+  if (val) {
+    scheduleCollapse(); // 若此时悬停中，scheduleCollapse 会因 hovering 直接跳过
+  } else {
+    clearCollapseTimer();
+  }
 }
 
 function onMouseEnter() {
+  hovering = true;
   if (banner.value) return; // 横幅显示期间不响应悬停展开（通知已强制展开）
   clearTimeout(hoverTimer);
+  clearCollapseTimer(); // 悬停中：取消任何待执行的自动收起
   hoverTimer = setTimeout(() => setExpanded(true), 120);
 }
 
 function onMouseLeave() {
+  hovering = false;
   clearTimeout(hoverTimer);
   if (banner.value) return; // 横幅显示期间不收起：通知由自身计时器统一收起
-  setExpanded(false);
+  if (expanded.value) {
+    scheduleCollapse(); // 离开后 3 秒收起（期间返回则取消）
+  }
 }
 
 async function onCapsuleClick() {
@@ -457,13 +548,17 @@ async function onCapsuleClick() {
   await setExpanded(!expanded.value);
 }
 
-/** 点击横幅：打开主窗口并关闭横幅（收起回小胶囊） */
+/** 点击横幅：系统通知仅关闭横幅（不打开主窗口，避免误跳转）；
+ *  本地事件（倒计时完成）打开主窗口。 */
 async function onBannerClick() {
+  const wasLocal = banner.value?.kind === "local";
   banner.value = null;
   if (bannerTimer) clearTimeout(bannerTimer);
   bannerTimer = null;
-  expanded.value = false; // 窗口恒定，收起由胶囊 CSS 动画完成
-  await openMainWindow();
+  if (expanded.value && wasLocal) {
+    expanded.value = false; // 窗口恒定，收起由胶囊 CSS 动画完成
+    await openMainWindow();
+  }
 }
 
 /** 关闭横幅（不打开主窗口） */
@@ -480,6 +575,8 @@ onMounted(async () => {
   startClock();
   startMediaPoll();
   startKeyPoll(); // 读取设置页保存的 DeepSeek Key 查询余额，并轮询 key 变化
+  startHudPoll();
+  startSysPoll();
   await resizeWindow(); // 先定尺寸再定位：避免与下方位置恢复竞态，保证默认落在顶部居中
   try {
     // 系统通知监听（Rust 侧 BecomeMonitor 转发）
@@ -527,7 +624,10 @@ onBeforeUnmount(() => {
   if (mediaTimer) clearInterval(mediaTimer);
   if (timerTick) clearInterval(timerTick);
   if (keyPollTimer) clearInterval(keyPollTimer);
+  if (hudTimer) clearInterval(hudTimer);
+  if (sysTimer) clearInterval(sysTimer);
   if (bannerTimer) clearTimeout(bannerTimer);
+  if (collapseTimer) clearTimeout(collapseTimer);
   if (unlistenNotify) unlistenNotify();
   window.removeEventListener("pointermove", onPointerMove);
   window.removeEventListener("pointerup", onPointerUp);
@@ -654,7 +754,7 @@ watch(activeModule, () => {
         </div>
 
         <!-- 模块3：媒体控制（收起态横向一行；展开态上行标题、下行按钮+播放器名） -->
-        <div v-else class="module module-media" :class="{ expanded }">
+        <div v-else-if="activeModule === 3" class="module module-media" :class="{ expanded }">
           <template v-if="media && (media.title || media.status)">
             <!-- 展开态：上下结构（上行标题、下行控制按钮 + 播放器名） -->
             <div v-if="expanded" class="media-expanded">
@@ -702,6 +802,76 @@ watch(activeModule, () => {
           <div v-else class="med-empty">
             <Music2 :size="16" />
             <span>未检测到播放器</span>
+          </div>
+        </div>
+
+        <!-- 模块4：系统 HUD（音量 / 亮度） -->
+        <div v-else-if="activeModule === 4" class="module module-hud">
+          <template v-if="hud">
+            <div class="hud-item">
+              <span class="hud-icon" title="Volume">
+                <Play :size="14" />
+              </span>
+              <div class="hud-track">
+                <div
+                  class="hud-fill"
+                  :style="{ width: (hud.volumePercent ?? 0) + '%' }"
+                ></div>
+              </div>
+              <span class="hud-val">{{ hud.volumePercent != null ? Math.round(hud.volumePercent) : "--" }}%</span>
+            </div>
+            <div class="hud-item">
+              <span class="hud-icon" title="Brightness">
+                <Sun :size="14" />
+              </span>
+              <div class="hud-track">
+                <div
+                  class="hud-fill"
+                  :style="{ width: (hud.brightnessPercent ?? 0) + '%' }"
+                ></div>
+              </div>
+              <span class="hud-val">{{ hud.brightnessPercent != null ? Math.round(hud.brightnessPercent) : "--" }}%</span>
+            </div>
+          </template>
+          <div v-else class="med-empty">
+            <Music2 :size="16" />
+            <span>系统 HUD 不可用</span>
+          </div>
+        </div>
+
+        <!-- 模块5：系统状态（CPU / 内存） -->
+        <div v-else-if="activeModule === 5" class="module module-status">
+          <template v-if="sysStatus">
+            <div class="hud-item">
+              <span class="hud-icon" title="CPU">
+                <Cpu :size="14" />
+              </span>
+              <div class="hud-track">
+                <div
+                  class="hud-fill"
+                  :style="{ width: Math.min(sysStatus.cpuUsage ?? 0, 100) + '%' }"
+                ></div>
+              </div>
+              <span class="hud-val">{{ sysStatus.cpuUsage != null ? sysStatus.cpuUsage.toFixed(0) : "--" }}%</span>
+            </div>
+            <div class="hud-item">
+              <span class="hud-icon" title="Memory">
+                <Database :size="14" />
+              </span>
+              <div class="hud-track">
+                <div
+                  class="hud-fill"
+                  :style="{ width: Math.min(sysStatus.memoryPercent ?? 0, 100) + '%' }"
+                ></div>
+              </div>
+              <span class="hud-val">
+                {{ sysStatus.memoryUsedGb != null ? sysStatus.memoryUsedGb.toFixed(1) : "--" }}G
+              </span>
+            </div>
+          </template>
+          <div v-else class="med-empty">
+            <Music2 :size="16" />
+            <span>系统状态不可用</span>
           </div>
         </div>
       </div>

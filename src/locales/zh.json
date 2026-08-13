@@ -77,7 +77,9 @@
     "maximize": "最大化",
     "close": "关闭",
     "pin": "窗口置顶",
-    "unpin": "取消置顶"
+    "unpin": "取消置顶",
+    "island_on": "关闭灵动岛",
+    "island_off": "开启灵动岛"
   },
   "dashboard": {
     "title": "概览",

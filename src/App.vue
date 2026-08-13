@@ -5,7 +5,7 @@ import Sidebar from "./components/Sidebar.vue";
 import ErrorBoundary from "./components/ErrorBoundary.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
 import Sonner from "./components/ui/sonner/Sonner.vue";
-import { getTheme } from "./lib/stores.js";
+import { getTheme, setIslandEnabled } from "./lib/stores.js";
 import { applyIslandState } from "./lib/island.js";
 import { router } from "./router.js";
 
@@ -23,6 +23,14 @@ onMounted(() => {
       const path = ev?.payload;
       if (typeof path === "string" && path.startsWith("/")) {
         router.push(path);
+      }
+    });
+    // 托盘开关灵动岛：Rust 侧直接隐藏/显示窗口后广播新状态，
+    // 这里只回写本地状态（syncOnly=true），不反向调用 Rust 命令，
+    // 否则会再次触发 island-state 事件 → 前端/后端无限循环开关节目岛。
+    listen("island-state", (ev) => {
+      if (typeof ev?.payload === "boolean") {
+        setIslandEnabled(ev.payload, true);
       }
     });
   } catch {

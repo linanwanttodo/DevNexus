@@ -77,7 +77,9 @@
     "maximize": "Maximize",
     "close": "Close",
     "pin": "Always on Top",
-    "unpin": "Exit Always on Top"
+    "unpin": "Exit Always on Top",
+    "island_on": "Turn off Dynamic Island",
+    "island_off": "Turn on Dynamic Island"
   },
   "dashboard": {
     "title": "Dashboard",
