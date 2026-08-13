@@ -811,7 +811,6 @@ fn read_desktop_icon(path: &std::path::Path) -> Option<String> {
 /// snap 的运行时/基底/主题包不是软件，应排除：
 /// core20/core22/core24（运行时基底）、snapd（快照守护进程）、
 /// bare（空基底）、gtk-common-themes/snapd-desktop-integration（主题/集成）
-#[cfg(target_os = "linux")]
 fn is_snap_runtime_package(name: &str) -> bool {
     let n = name.to_lowercase();
     n == "snapd"
