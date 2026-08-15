@@ -156,3 +156,109 @@ pub fn update_tray_menu(app: tauri::AppHandle, lang: String) -> Result<(), Strin
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::island_bridge::{DeepSeekBalance, DeepSeekBalanceInfo};
+
+    #[test]
+    fn test_island_label_by_state_zh() {
+        assert_eq!(island_label_by_state("zh", true), "灵动岛：开");
+        assert_eq!(island_label_by_state("zh", false), "灵动岛：关");
+    }
+
+    #[test]
+    fn test_island_label_by_state_ru() {
+        assert_eq!(island_label_by_state("ru", true), "Остров: вкл");
+        assert_eq!(island_label_by_state("ru", false), "Остров: выкл");
+    }
+
+    #[test]
+    fn test_island_label_by_state_default_en() {
+        // 未知语言回退英文
+        assert_eq!(island_label_by_state("fr", true), "Dynamic Island: On");
+        assert_eq!(island_label_by_state("fr", false), "Dynamic Island: Off");
+        assert_eq!(island_label_by_state("en", true), "Dynamic Island: On");
+    }
+
+    #[test]
+    fn test_tray_texts_zh() {
+        let (show, island, check, quit) = tray_texts("zh");
+        assert_eq!(show, "显示 DevNexus");
+        assert_eq!(island, "灵动岛");
+        assert_eq!(check, "检查更新");
+        assert_eq!(quit, "退出");
+    }
+
+    #[test]
+    fn test_tray_texts_ru() {
+        let (show, _island, check, quit) = tray_texts("ru");
+        assert_eq!(show, "Показать DevNexus");
+        assert_eq!(check, "Проверить обновления");
+        assert_eq!(quit, "Выход");
+    }
+
+    #[test]
+    fn test_tray_texts_default_en() {
+        let (show, _island, check, quit) = tray_texts("xx");
+        assert_eq!(show, "Show DevNexus");
+        assert_eq!(check, "Check for Updates");
+        assert_eq!(quit, "Quit");
+    }
+
+    #[test]
+    fn test_balance_placeholder_langs() {
+        assert_eq!(balance_placeholder("zh"), "DeepSeek 余额: —");
+        assert_eq!(balance_placeholder("ru"), "Баланс DeepSeek: —");
+        assert_eq!(balance_placeholder("en"), "DeepSeek Balance: —");
+        assert_eq!(balance_placeholder("fr"), "DeepSeek Balance: —");
+    }
+
+    #[test]
+    fn test_format_balance_prefers_cny() {
+        let b = DeepSeekBalance {
+            is_available: true,
+            balance_infos: vec![
+                DeepSeekBalanceInfo {
+                    currency: "USD".into(),
+                    total_balance: "1.5".into(),
+                    granted_balance: "0".into(),
+                    topped_up_balance: "1.5".into(),
+                },
+                DeepSeekBalanceInfo {
+                    currency: "CNY".into(),
+                    total_balance: "10.0".into(),
+                    granted_balance: "5.0".into(),
+                    topped_up_balance: "5.0".into(),
+                },
+            ],
+        };
+        let text = format_balance(&b);
+        assert_eq!(text, "DeepSeek 余额: 10.0 CNY");
+    }
+
+    #[test]
+    fn test_format_balance_falls_back_to_first() {
+        let b = DeepSeekBalance {
+            is_available: true,
+            balance_infos: vec![DeepSeekBalanceInfo {
+                currency: "USD".into(),
+                total_balance: "3.25".into(),
+                granted_balance: "0".into(),
+                topped_up_balance: "3.25".into(),
+            }],
+        };
+        let text = format_balance(&b);
+        assert_eq!(text, "DeepSeek 余额: 3.25 USD");
+    }
+
+    #[test]
+    fn test_format_balance_empty_placeholder() {
+        let b = DeepSeekBalance {
+            is_available: false,
+            balance_infos: vec![],
+        };
+        assert_eq!(format_balance(&b), "DeepSeek 余额: —");
+    }
+}

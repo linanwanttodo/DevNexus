@@ -27,6 +27,7 @@ DevNexus 是一个**跨平台桌面应用**，将开发者日常需要的环境�
 - **API Hub** — 本地 AI 统一网关，兼容 OpenAI/Anthropic/Google 等多协议转换
 - **镜像设置** — 一键配置 pip / npm / apt 镜像源
 - **系统仪表板** — 实时查看 CPU、内存、磁盘、运行时版本
+- **灵动岛** — 全局悬浮胶囊：系统状态 HUD、通知融合、媒体控制
 - **全局设置** — 应用偏好与主题管理
 
 安装包仅 **~10MB**，内存占用约 **60MB**，告别 Electron 的臃肿。
@@ -104,7 +105,7 @@ DevNexus 是一个**跨平台桌面应用**，将开发者日常需要的环境�
 | **macOS** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Linux** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Windows** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **框架** | Tauri+Svelte+Rust | Tauri+React+Rust | Go | Go | Tauri+React+Rust | Tauri+React+Rust |
+| **框架** | Tauri+Vue+Rust | Tauri+React+Rust | Go | Go | Tauri+React+Rust | Tauri+React+Rust |
 
 **核心差异：**
 
@@ -120,8 +121,8 @@ DevNexus 是一个**跨平台桌面应用**，将开发者日常需要的环境�
 
 ```
 ┌──────────────────────────────────────────────┐
-│              Frontend (Svelte 5)              │
-│           Tailwind CSS · svelte-spa-router     │
+│              Frontend (Vue 3)                 │
+│           Tailwind CSS · vue-router           │
 ├──────────────────────────────────────────────┤
 │            Tauri 2.0 IPC Bridge              │
 │         invoke() / emit() / Channel          │
@@ -141,7 +142,7 @@ DevNexus 是一个**跨平台桌面应用**，将开发者日常需要的环境�
 | 层级 | 技术 | 说明 |
 |---|---|---|
 | **桌面框架** | [Tauri 2.0](https://tauri.app/) | 系统原生 Webview，非 Electron |
-| **前端** | [Svelte 5](https://svelte.dev/) | 编译时框架，运行时仅 ~2KB |
+| **前端** | [Vue 3](https://vuejs.org/) | 组合式 API，按需编译 |
 | **样式** | [Tailwind CSS](https://tailwindcss.com/) | 原子化 CSS，直接复用设计原型 |
 | **后端语言** | [Rust](https://www.rust-lang.org/) | 系统调用、性能、内存安全 |
 | **异步运行时** | [tokio](https://crates.io/crates/tokio) | Rust 异步 I/O |
@@ -152,7 +153,7 @@ DevNexus 是一个**跨平台桌面应用**，将开发者日常需要的环境�
 ### 为什么选这套技术？
 
 - **Tauri 而非 Electron** — 安装包 10MB vs 150MB，内存 60MB vs 300MB，使用系统 Webview 而非内置 Chromium
-- **Svelte 而非 React** — 编译时消除框架运行时，产物更小；HTML 原生语法，迁移设计原型零成本
+- **Vue 3 而非 Svelte** — 生态成熟，组合式 API 配合 `<script setup>` 开发效率高
 - **Rust 而非 Node.js** — 原生系统调用能力，内存安全
 
 ---
@@ -161,40 +162,44 @@ DevNexus 是一个**跨平台桌面应用**，将开发者日常需要的环境�
 
 ```
 devnexus/
-├── src/                          # Svelte 前端
+├── src/                          # Vue 3 前端
 │   ├── lib/
-│   │   ├── stores.js             # 路由与搜索状态
-│   │   └── i18n.js               # 多语言 (zh/en/ru)
+│   │   ├── stores.js             # 全局状态
+│   │   ├── i18n.js               # 多语言 (zh/en/ru)
+│   │   ├── toast.js / confirm.js # 轻提示与确认框
+│   │   └── ...
 │   ├── locales/                  # 翻译文件
 │   │   ├── zh.json
 │   │   ├── en.json
 │   │   └── ru.json
-│   ├── routes/                   # 页面路由
-│   │   ├── Dashboard.svelte      # 系统仪表板
-│   │   ├── EnvironmentManager.svelte
-│   │   ├── SoftwareCenter.svelte
-│   │   ├── ContainerManager.svelte # 容器管理
-│   │   ├── ApiHub.svelte         # API Hub
-│   │   ├── MirrorSettings.svelte
-│   │   ├── ProcessManager.svelte # 进程/端口管理
-│   │   ├── PasswordManager.svelte
-│   │   ├── CookieExtractor.svelte
-│   │   ├── AppUninstaller.svelte # 深度卸载
-│   │   ├── Migration.svelte      # 环境迁移
-│   │   ├── Settings.svelte
+│   ├── views/                    # 页面路由
+│   │   ├── Dashboard.vue         # 系统仪表板
+│   │   ├── EnvironmentManager.vue
+│   │   ├── SoftwareCenter.vue
+│   │   ├── ContainerManager.vue  # 容器管理
+│   │   ├── ApiHub.vue            # API Hub
+│   │   ├── MirrorSettings.vue
+│   │   ├── ProcessManager.vue    # 进程/端口管理
+│   │   ├── PasswordManager.vue
+│   │   ├── CookieExtractor.vue
+│   │   ├── AppUninstaller.vue    # 深度卸载
+│   │   ├── Migration.vue         # 环境迁移
+│   │   ├── IslandSettings.vue    # 灵动岛设置
+│   │   ├── Settings.vue
 │   │   └── ...
 │   ├── components/
-│   │   ├── Sidebar.svelte
-│   │   ├── TitleBar.svelte
-│   │   ├── ConfirmDialog.svelte
-│   │   ├── Toast.svelte
-│   │   └── ErrorBoundary.svelte
-│   ├── lib/
-│   │   ├── stores.svelte.js
-│   │   ├── i18n.svelte.js
-│   │   ├── toast.svelte.js
-│   │   └── confirm.svelte.js
-│   ├── App.svelte
+│   │   ├── Sidebar.vue
+│   │   ├── TitleBar.vue
+│   │   ├── ConfirmDialog.vue
+│   │   ├── ErrorBoundary.vue
+│   │   ├── AppIcon.vue           # 按需导入的 lucide 图标
+│   │   └── ...
+│   ├── island/                   # 灵动岛独立窗口入口
+│   │   ├── IslandApp.vue
+│   │   ├── island.css
+│   │   └── main.js
+│   ├── App.vue
+│   ├── router.js                 # Vue Router（hash 模式，懒加载）
 │   └── main.js
 ├── src-tauri/                    # Rust 后端
 │   ├── src/
@@ -207,11 +212,14 @@ devnexus/
 │   │   │   ├── container.rs      # Docker/Podman 管理
 │   │   │   ├── api_hub/          # API Hub 模块
 │   │   │   ├── mirror.rs         # 镜像源
-│   │   │   ├── process_ports.rs # 端口/进程管理
+│   │   │   ├── process_ports.rs  # 端口/进程管理
 │   │   │   ├── password_manager.rs
 │   │   │   ├── cookie_extractor.rs
 │   │   │   ├── version_manager.rs
 │   │   │   ├── migration.rs      # 环境迁移
+│   │   │   ├── island_bridge.rs  # 灵动岛数据桥
+│   │   │   ├── tray.rs           # 系统托盘
+│   │   │   ├── autostart.rs      # 开机自启/静默启动
 │   │   │   ├── updater.rs        # 自动更新
 │   │   │   └── mod.rs
 │   │   └── ...

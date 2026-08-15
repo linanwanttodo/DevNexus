@@ -56,12 +56,12 @@ export function setWindowTop(value) {
 
 // ---- 灵动岛 ----
 // 持久化到 localStorage，主应用启动时按此恢复悬浮窗显示。
-// 默认开启：未显式关闭（"0"）即视为启用——打开软件默认显示灵动岛，
-// 与设置页开关默认开启保持一致（开关显示必须与真实行为一致）。
+// 默认关闭：未显式开启（"1"）即视为关闭——与设置页开关默认关闭保持一致
+// （开关显示必须与真实行为一致；用户可随时在设置页/标题栏/托盘开启）。
 const initialIslandEnabled =
   typeof window !== "undefined"
-    ? localStorage.getItem("devnexus-island-enabled") !== "0"
-    : true;
+    ? localStorage.getItem("devnexus-island-enabled") === "1"
+    : false;
 
 const islandEnabled = ref(initialIslandEnabled);
 

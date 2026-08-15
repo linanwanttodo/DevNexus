@@ -103,7 +103,7 @@ Developers face these fragmented tools every day:
 | **macOS** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Linux** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Windows** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Stack** | Tauri+Svelte+Rust | Tauri+React+Rust | Go | Go | Tauri+React+Rust | Tauri+React+Rust |
+| **Stack** | Tauri+Vue+Rust | Tauri+React+Rust | Go | Go | Tauri+React+Rust | Tauri+React+Rust |
 
 **Key Differences:**
 
@@ -119,8 +119,8 @@ Developers face these fragmented tools every day:
 
 ```
 ┌──────────────────────────────────────────────┐
-│              Frontend (Svelte 5)              │
-│           Tailwind CSS · svelte-spa-router     │
+│              Frontend (Vue 3)                 │
+│           Tailwind CSS · vue-router           │
 ├──────────────────────────────────────────────┤
 │            Tauri 2.0 IPC Bridge              │
 │         invoke() / emit() / Channel          │
@@ -140,7 +140,7 @@ Developers face these fragmented tools every day:
 | Layer | Technology | Description |
 |---|---|---|
 | **Desktop Framework** | [Tauri 2.0](https://tauri.app/) | Native system Webview, not Electron |
-| **Frontend** | [Svelte 5](https://svelte.dev/) | Compile-time framework, only ~2KB runtime |
+| **Frontend** | [Vue 3](https://vuejs.org/) | Composition API, on-demand compilation |
 | **Styling** | [Tailwind CSS](https://tailwindcss.com/) | Utility-first CSS |
 | **Backend Language** | [Rust](https://www.rust-lang.org/) | System calls, performance, memory safety |
 | **Async Runtime** | [tokio](https://crates.io/crates/tokio) | Rust async I/O |
@@ -151,7 +151,7 @@ Developers face these fragmented tools every day:
 ### Why This Stack?
 
 - **Tauri over Electron** — 10MB vs 150MB install, 60MB vs 300MB memory, uses system Webview instead of bundled Chromium
-- **Svelte over React** — Compile-time elimination of framework runtime, smaller output; native HTML syntax, zero-cost migration from design prototypes
+- **Vue 3 over Svelte** — Mature ecosystem, Composition API with `<script setup>` boosts productivity
 - **Rust over Node.js** — Native system call capabilities, memory safe
 
 ---
@@ -160,37 +160,44 @@ Developers face these fragmented tools every day:
 
 ```
 devnexus/
-├── src/                          # Svelte Frontend
+├── src/                          # Vue 3 Frontend
 │   ├── lib/
-│   │   ├── stores.svelte.js      # Router & search state
-│   │   ├── i18n.svelte.js        # i18n (zh/en/ru)
-│   │   ├── toast.svelte.js
-│   │   └── confirm.svelte.js
+│   │   ├── stores.js             # Global state
+│   │   ├── i18n.js               # i18n (zh/en/ru)
+│   │   ├── toast.js / confirm.js # Toasts & confirm dialogs
+│   │   └── ...
 │   ├── locales/                  # Translation files
 │   │   ├── zh.json
 │   │   ├── en.json
 │   │   └── ru.json
-│   ├── routes/                   # Page routes
-│   │   ├── Dashboard.svelte      # System dashboard
-│   │   ├── EnvironmentManager.svelte
-│   │   ├── SoftwareCenter.svelte
-│   │   ├── ContainerManager.svelte # Container management
-│   │   ├── ApiHub.svelte         # API Hub
-│   │   ├── MirrorSettings.svelte
-│   │   ├── ProcessManager.svelte # Process/port management
-│   │   ├── PasswordManager.svelte
-│   │   ├── CookieExtractor.svelte
-│   │   ├── AppUninstaller.svelte # Deep uninstall
-│   │   ├── Migration.svelte      # Environment migration
-│   │   ├── Settings.svelte
+│   ├── views/                    # Page routes
+│   │   ├── Dashboard.vue         # System dashboard
+│   │   ├── EnvironmentManager.vue
+│   │   ├── SoftwareCenter.vue
+│   │   ├── ContainerManager.vue  # Container management
+│   │   ├── ApiHub.vue            # API Hub
+│   │   ├── MirrorSettings.vue
+│   │   ├── ProcessManager.vue    # Process/port management
+│   │   ├── PasswordManager.vue
+│   │   ├── CookieExtractor.vue
+│   │   ├── AppUninstaller.vue    # Deep uninstall
+│   │   ├── Migration.vue         # Environment migration
+│   │   ├── IslandSettings.vue    # Dynamic Island settings
+│   │   ├── Settings.vue
 │   │   └── ...
 │   ├── components/
-│   │   ├── Sidebar.svelte
-│   │   ├── TitleBar.svelte
-│   │   ├── ConfirmDialog.svelte
-│   │   ├── Toast.svelte
-│   │   └── ErrorBoundary.svelte
-│   ├── App.svelte
+│   │   ├── Sidebar.vue
+│   │   ├── TitleBar.vue
+│   │   ├── ConfirmDialog.vue
+│   │   ├── ErrorBoundary.vue
+│   │   ├── AppIcon.vue           # On-demand lucide icons
+│   │   └── ...
+│   ├── island/                   # Dynamic Island window entry
+│   │   ├── IslandApp.vue
+│   │   ├── island.css
+│   │   └── main.js
+│   ├── App.vue
+│   ├── router.js                 # Vue Router (hash mode, lazy loading)
 │   └── main.js
 ├── src-tauri/                    # Rust Backend
 │   ├── src/

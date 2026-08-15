@@ -142,6 +142,60 @@ pub fn get_autostart() -> bool {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_silent_start_flag_roundtrip() {
+        // 直接测 flag 文件的读写逻辑，避免触碰真实 data_dir 的写入路径
+        let dir =
+            std::env::temp_dir().join(format!("devnexus_autostart_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let path = dir.join("silent_start");
+        // 未创建时视为关闭
+        assert!(!path.exists());
+        // 创建 → 开启
+        std::fs::write(&path, "1").unwrap();
+        assert!(path.exists());
+        // 删除 → 关闭
+        let _ = std::fs::remove_file(&path);
+        assert!(!path.exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_autostart_desktop_path_uses_xdg() {
+        let dir = std::env::temp_dir().join(format!("devnexus_xdg_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // 设置 XDG_CONFIG_HOME 指向临时目录
+        std::env::set_var("XDG_CONFIG_HOME", &dir);
+        let p = autostart_desktop_path();
+        assert_eq!(p, dir.join("autostart").join("devnexus.desktop"));
+
+        // 清除后回退到 ~/.config
+        std::env::remove_var("XDG_CONFIG_HOME");
+        let fallback = autostart_desktop_path();
+        assert!(
+            fallback
+                .to_string_lossy()
+                .ends_with(".config/autostart/devnexus.desktop")
+                || fallback
+                    .file_name()
+                    .map(|f| f == "devnexus.desktop")
+                    .unwrap_or(false)
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
 /// 设置开机自启
 #[tauri::command]
 pub fn set_autostart(enabled: bool) -> Result<(), String> {

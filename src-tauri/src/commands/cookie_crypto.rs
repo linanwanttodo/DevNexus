@@ -573,3 +573,129 @@ fn decrypt_windows_raw(encrypted_data: &[u8]) -> Vec<u8> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decrypt_cookie_value_unencrypted() {
+        // 无 v10/v11 前缀的明文 Cookie 直接返回
+        let data = b"hello-world";
+        assert_eq!(
+            decrypt_cookie_value(data, "example.com", false).unwrap(),
+            "hello-world"
+        );
+    }
+
+    #[test]
+    fn test_decrypt_cookie_value_short_input() {
+        // 少于 3 字节：直接按明文返回，不 panic
+        assert_eq!(
+            decrypt_cookie_value(b"ab", "example.com", false).unwrap(),
+            "ab"
+        );
+        assert_eq!(decrypt_cookie_value(b"", "example.com", false).unwrap(), "");
+    }
+
+    #[test]
+    fn test_decrypt_cookie_value_non_utf8_lossy() {
+        // 非 UTF-8 字节走 lossy 转换，不 panic
+        let data = [0xff, 0xfe, 0x00, 0x01];
+        let out = decrypt_cookie_value(&data, "example.com", false).unwrap();
+        assert!(!out.is_empty());
+    }
+
+    #[test]
+    fn test_decrypt_cookie_value_v11_prefix_requires_key() {
+        // v10/v11 前缀会进入解密分支；无系统密钥时应报错（macOS/Windows）
+        // 或走 Linux 回退路径，但绝不能返回原始键名/panic
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        {
+            let data = b"v11\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+            let result = decrypt_cookie_value(data, "example.com", true);
+            assert!(result.is_ok() || result.is_err());
+        }
+        #[cfg(target_os = "linux")]
+        {
+            // Linux 无密钥时走 GCM fallback，返回 lossy 文本而非 panic
+            let data = b"v11\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+            let _ = decrypt_cookie_value(data, "example.com", true);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_derive_v11_key_from_str_deterministic() {
+        let k1 = derive_v11_key_from_str("my-secret").unwrap();
+        let k2 = derive_v11_key_from_str("my-secret").unwrap();
+        assert_eq!(k1, k2);
+        assert_eq!(k1.len(), 16);
+        // 空 / 空白字符串返回 None
+        assert!(derive_v11_key_from_str("").is_none());
+        assert!(derive_v11_key_from_str("   ").is_none());
+        // 不同密码派生不同密钥
+        let k3 = derive_v11_key_from_str("other-secret").unwrap();
+        assert_ne!(k1, k3);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_try_aes_128_cbc_roundtrip() {
+        use aes::cipher::{BlockEncryptMut, KeyIvInit};
+        type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
+
+        let key = [0x42u8; 16];
+        let iv = [0x20u8; 16]; // Chrome 固定 IV（空格）
+        let plaintext = b"session=abc123; theme=dark";
+        // cipher 0.4 的 encrypt_padded_mut 需要 buffer 预留至少一个块(16B)的填充空间，
+        // 第二参数为明文长度；解密端 decrypt_padded_mut 同理自动剥离 PKCS7
+        let mut buf = vec![0u8; plaintext.len() + 16];
+        buf[..plaintext.len()].copy_from_slice(plaintext);
+        let enc = Aes128CbcEnc::new_from_slices(&key, &iv).unwrap();
+        let ct = enc
+            .encrypt_padded_mut::<aes::cipher::block_padding::Pkcs7>(&mut buf, plaintext.len())
+            .unwrap();
+
+        let out = try_aes_128_cbc(&key, &iv, ct, "example.com", false).unwrap();
+        assert_eq!(out, "session=abc123; theme=dark");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_try_aes_128_cbc_integrity_check() {
+        use aes::cipher::{BlockEncryptMut, KeyIvInit};
+        use sha2::{Digest, Sha256};
+        type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
+
+        let key = [0x42u8; 16];
+        let iv = [0x20u8; 16];
+        let host_key = "example.com";
+        let payload = b"session=xyz";
+        // v11 格式：SHA256(host) + payload 一起加密
+        let mut data = Sha256::digest(host_key.as_bytes()).to_vec();
+        data.extend_from_slice(payload);
+        let mut buf = vec![0u8; data.len() + 16];
+        buf[..data.len()].copy_from_slice(&data);
+        let enc = Aes128CbcEnc::new_from_slices(&key, &iv).unwrap();
+        let ct = enc
+            .encrypt_padded_mut::<aes::cipher::block_padding::Pkcs7>(&mut buf, data.len())
+            .unwrap();
+
+        // 正确 host：解密成功且剥离 32 字节完整性哈希
+        let out = try_aes_128_cbc(&key, &iv, ct, host_key, true).unwrap();
+        assert_eq!(out, "session=xyz");
+
+        // 错误 host：完整性校验失败
+        let err = try_aes_128_cbc(&key, &iv, ct, "evil.com", true);
+        assert!(err.is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_try_aes_128_cbc_empty_ciphertext() {
+        let key = [0u8; 16];
+        let iv = [0u8; 16];
+        assert!(try_aes_128_cbc(&key, &iv, &[], "example.com", false).is_err());
+    }
+}

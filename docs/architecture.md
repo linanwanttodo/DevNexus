@@ -34,6 +34,8 @@ DevNexus 采用 **Tauri 2.0** 标准架构：Rust 后端 + Vue 3 前端，通过
 │  │  mirror.rs  process_ports.rs                │   ││
 │  │  password_manager.rs  cookie_extractor.rs     │   ││
 │  │  version_manager.rs  migration.rs  updater.rs │   ││
+│  │  island_bridge.rs  tray.rs  autostart.rs      │   ││
+│  │  window_factory.rs  software_pm.rs            │   ││
 │  └──────────────────────────────────────────────┘   ││
 │  ┌──────────────────────────────────────────────┐   ││
 │  │ 工具模块                                       │   ││
@@ -81,25 +83,29 @@ DevNexus 采用 **Tauri 2.0** 标准架构：Rust 后端 + Vue 3 前端，通过
          → 前端响应式更新 (Vue ref / reactive + <script setup>)
 ```
 
-所有命令都是请求-响应模式。没有 WebSocket / 事件推送（除了前端的 `setInterval` 轮询）。
+所有命令都是请求-响应模式；另有事件推送（`tauri::Emitter`）用于灵动岛数据桥（系统通知 → 灵动岛横幅）、托盘更新与余额刷新，前端无需轮询即可收到部分实时事件。
 
 ## 前端路由表
 
 ```javascript
 // src/router.js 中的路由（Vue Router，hash 模式，懒加载）
 const routes = {
-    '/':                Dashboard,          // 系统仪表板
+    '/':                redirect → /dashboard
+    '/dashboard':       Dashboard,          // 系统仪表板
     '/environments':    EnvironmentManager,  // 环境管理
     '/software':        SoftwareCenter,      // 软件中心
     '/mirrors':         MirrorSettings,      // 镜像设置
     '/processes':       ProcessManager,      // 进程/端口管理
+    '/ports':           redirect → /processes
     '/passwords':       PasswordManager,     // 密码管理器
     '/cookies':         CookieExtractor,     // Cookie 提取
     '/uninstall':       AppUninstaller,      // 应用卸载（深度清理）
     '/containers':      ContainerManager,    // 容器管理
+    '/island':          IslandSettings,      // 灵动岛设置
     '/api-hub':         ApiHub,              // API Hub
     '/migration':       Migration,           // 环境迁移
     '/settings':        Settings,            // 设置
+    '/:pathMatch(.*)*': redirect → /dashboard
 };
 ```
 
@@ -120,6 +126,9 @@ const routes = {
 | 13 | 容器管理 | `commands/container.rs` | Docker/Podman 容器、镜像、卷、Compose |
 | 14 | 环境迁移 | `commands/migration.rs` | 配置文件导入/导出 |
 | 15 | 自动更新 | `commands/updater.rs` | GitHub Release 检查 + 双语日志 |
+| 16 | 灵动岛 | `commands/island_bridge.rs` | 系统通知监听、HUD/媒体状态、跨工作区可见 |
+| 17 | 托盘 | `commands/tray.rs` | 托盘菜单、DeepSeek 余额、语言跟随 |
+| 18 | 开机自启 | `commands/autostart.rs` | 开机自启 + 静默启动 |
 
 ## 安全边界
 

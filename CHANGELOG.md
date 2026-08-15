@@ -9,8 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Docker / Podman container management (planned)
 - Cloud service credential management (AWS / GCP CLI) (planned)
+
+---
+
+## [1.3.10] - 2026-08-13
+
+### Added (English)
+- Dynamic Island optimizations: HUD display, system status, auto-collapse, notification isolation
+- Uninstaller list deduplication (duplicate entries removed)
+
+### Fixed (English)
+- Added cfg gates for Linux-only software-list helpers, fixing clippy failures on Windows/macOS CI
+- Removed the Linux gate on `is_snap_runtime_package`, fixing non-Linux compile errors
+
+### 新增（中文）
+- 灵动岛优化：HUD 显示、系统状态、自动收起、通知隔离
+- 卸载列表去重（重复条目自动合并）
+
+### 修复（中文）
+- 为 Linux-only 软件列表辅助函数补 cfg 门控，修复 Windows/macOS CI 的 clippy 失败
+- 移除 `is_snap_runtime_package` 的 Linux 门控，修复非 Linux 平台编译错误
 
 ---
 

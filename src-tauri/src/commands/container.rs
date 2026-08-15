@@ -50,9 +50,10 @@ pub struct DockerStatus {
 
 /// Container actions allowed through `container_action`. Anything else
 /// (e.g. `--privileged`, `rm -rf /`, `pull`) is rejected.
-const ALLOWED_ACTIONS: &[&str] = &[
-    "start", "stop", "restart", "pause", "unpause", "kill", "rm", "rename",
-];
+// 仅保留 container_action 支持的动作。注意：docker rename 需要额外的新名称参数，
+// 而 container_action 签名只有 (name, action)，前端也无 rename 入口，
+// 因此不列入白名单，避免调用时必然报 "docker rename requires 2 arguments"。
+const ALLOWED_ACTIONS: &[&str] = &["start", "stop", "restart", "pause", "unpause", "kill", "rm"];
 
 /// Validate a container id/name. Rejects empty/oversized values, option
 /// injection (`-...`) and shell metacharacters.

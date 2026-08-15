@@ -425,3 +425,161 @@ pub struct DailyStats {
     pub input_tokens: u64,
     pub output_tokens: u64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api_hub::types::RequestLog;
+
+    fn log(
+        id: &str,
+        model: &str,
+        input: u64,
+        output: u64,
+        latency: u64,
+        status: u16,
+        timestamp: i64,
+    ) -> RequestLog {
+        RequestLog {
+            id: id.to_string(),
+            provider_id: "p1".to_string(),
+            provider_name: "Test".to_string(),
+            model: model.to_string(),
+            request_model: model.to_string(),
+            input_tokens: input,
+            output_tokens: output,
+            latency_ms: latency,
+            status_code: status,
+            error_message: None,
+            timestamp,
+            is_streaming: false,
+        }
+    }
+
+    #[test]
+    fn test_stats_aggregation_empty() {
+        let stats = stats_from_iter(std::iter::empty());
+        assert_eq!(stats.total_requests, 0);
+        assert_eq!(stats.total_errors, 0);
+        assert!(stats.by_model.is_empty());
+        assert_eq!(stats.avg_latency_ms, 0);
+    }
+
+    #[test]
+    fn test_stats_aggregation_counts_and_errors() {
+        let now = chrono::Utc::now().timestamp();
+        let logs = [
+            log("1", "gpt-4", 10, 20, 100, 200, now),
+            log("2", "gpt-4", 30, 40, 200, 500, now), // 错误
+            log("3", "claude", 5, 5, 50, 200, now),
+        ];
+        let stats = stats_from_iter(logs.iter());
+        assert_eq!(stats.total_requests, 3);
+        assert_eq!(stats.total_errors, 1);
+        assert_eq!(stats.total_input_tokens, 45);
+        assert_eq!(stats.total_output_tokens, 65);
+        assert_eq!(stats.total_latency_ms, 350);
+        assert_eq!(stats.avg_latency_ms, 116); // 350/3
+        assert_eq!(stats.by_model["gpt-4"].requests, 2);
+        assert_eq!(stats.by_model["claude"].requests, 1);
+        // 最近 24h 内 → by_hour / by_day 有记录
+        assert!(!stats.by_hour.is_empty());
+        assert!(!stats.by_day.is_empty());
+    }
+
+    #[test]
+    fn test_stats_hourly_buckets_only_recent() {
+        let now = chrono::Utc::now().timestamp();
+        let old = now - 2 * 86400; // 2 天前（超出小时桶，但在天桶内）
+        let logs = [log("1", "m", 1, 1, 10, 200, old)];
+        let stats = stats_from_iter(logs.iter());
+        assert!(stats.by_hour.is_empty(), "旧日志不应进入小时桶");
+        assert_eq!(stats.by_day.len(), 1, "旧日志应进入天桶");
+    }
+
+    #[test]
+    fn test_stats_buckets_rollup() {
+        // 锚点取"一小时前"：保证日志时间戳恒在过去（secs_ago > 0 才会进小时桶），
+        // 且两条日志落在同一小时内——避免整点后几十秒内运行时第二条日志
+        // 时间戳晚于 now 被过滤（时序竞态导致 flaky）。
+        let now = chrono::Utc::now().timestamp();
+        let anchor = now - 3600; // 一小时前
+        let hour_start = (anchor / 3600) * 3600;
+        let logs = [
+            log("1", "m", 5, 5, 10, 200, hour_start + 60),
+            log("2", "m", 5, 5, 10, 200, hour_start + 120),
+        ];
+        let stats = stats_from_iter(logs.iter());
+        let h = &stats.by_hour[&hour_start];
+        assert_eq!(h.requests, 2);
+        assert_eq!(h.input_tokens, 10);
+        assert_eq!(h.output_tokens, 10);
+    }
+
+    #[test]
+    fn test_truncate_long_error_message() {
+        // 模拟 log_request 的错误截断逻辑：超长错误信息应被截断到 MAX_ERROR_LEN
+        let mut err = Some("e".repeat(2000));
+        if let Some(ref mut e) = err {
+            if e.len() > MAX_ERROR_LEN {
+                let mut cut = MAX_ERROR_LEN;
+                while !e.is_char_boundary(cut) {
+                    cut -= 1;
+                }
+                e.truncate(cut);
+                e.push('…');
+            }
+        }
+        let err = err.unwrap();
+        // 截断到 MAX_ERROR_LEN 字节 + 省略号（… 为 3 字节 UTF-8）
+        assert_eq!(err.len(), MAX_ERROR_LEN + 3);
+        assert!(err.ends_with('…'));
+        assert!(err.starts_with("eeee"));
+    }
+
+    #[test]
+    fn test_sqlite_log_roundtrip_and_cleanup() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        crate::api_hub::provider::init_db_sync(&conn).expect("init db");
+
+        // 插入两条日志
+        let now = chrono::Utc::now().timestamp();
+        for (i, status) in [(1i64, 200i64), (2, 500)] {
+            conn.execute(
+                "INSERT INTO request_logs (id, provider_id, provider_name, model, request_model,
+                 input_tokens, output_tokens, latency_ms, status_code, error_message, timestamp, is_streaming)
+                 VALUES (?1, 'p1', 'Test', 'gpt-4', 'gpt-4', 10, 20, 100, ?2, NULL, ?3, 0)",
+                rusqlite::params![format!("log-{}", i), status, now],
+            )
+            .unwrap();
+        }
+
+        // 加载：按时间正序，两条都在
+        let logs = load_recent_logs_sync(&conn);
+        assert_eq!(logs.len(), 2);
+        assert_eq!(logs[0].id, "log-1");
+        assert_eq!(logs[1].id, "log-2");
+
+        // 清理不删新日志
+        cleanup_old_logs_sync(&conn);
+        let remaining: i64 = conn
+            .query_row("SELECT COUNT(*) FROM request_logs", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(remaining, 2);
+
+        // 清理旧日志（30 天前）应被删除
+        let ancient = now - 60 * 86400;
+        conn.execute(
+            "INSERT INTO request_logs (id, provider_id, provider_name, model, request_model,
+             input_tokens, output_tokens, latency_ms, status_code, error_message, timestamp, is_streaming)
+             VALUES ('log-old', 'p1', 'Test', 'gpt-4', 'gpt-4', 0, 0, 0, 200, NULL, ?1, 0)",
+            rusqlite::params![ancient],
+        )
+        .unwrap();
+        cleanup_old_logs_sync(&conn);
+        let remaining: i64 = conn
+            .query_row("SELECT COUNT(*) FROM request_logs", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(remaining, 2);
+    }
+}

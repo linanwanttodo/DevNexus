@@ -22,8 +22,15 @@ pub fn run() {
     // GDK_BACKEND=wayland（含用户显式设置）；纯 Wayland 环境若有 XWayland 同样适用。
     #[cfg(target_os = "linux")]
     {
-        std::env::set_var("GDK_BACKEND", "x11");
-        eprintln!("[DevNexus] GDK_BACKEND forced to x11 (XWayland) for transparent + always-on-top support");
+        // 仅在用户未显式指定后端时强制 x11：尊重显式设置，
+        // 避免覆盖用户为兼容性/调试目的配置的 GDK_BACKEND。
+        if std::env::var_os("GDK_BACKEND").is_none() {
+            std::env::set_var("GDK_BACKEND", "x11");
+        }
+        eprintln!(
+            "[DevNexus] GDK_BACKEND = {}",
+            std::env::var("GDK_BACKEND").unwrap_or_default()
+        );
     }
 
     let password_manager = commands::password_manager::PasswordManager::new();

@@ -70,7 +70,9 @@
     "autostart": "Launch at Startup",
     "autostart_desc": "Automatically start DevNexus when you log in",
     "silent_start": "Silent Start",
-    "silent_start_desc": "Don't show the main window on autostart; keep running in tray and island"
+    "silent_start_desc": "Don't show the main window on autostart; keep running in tray and island",
+    "start_island": "Show Dynamic Island at startup",
+    "start_island_desc": "Show the Dynamic Island overlay after autostart (linked to the island settings toggle)"
   },
   "titleBar": {
     "minimize": "Minimize",
@@ -259,7 +261,9 @@
     "edit_success": "Password updated",
     "edit_failed": "Failed to update password: {error}",
     "keep_password": "Leave blank to keep current password",
-    "title_edit": "Edit password"
+    "title_edit": "Edit password",
+    "cancel": "Cancel",
+    "close": "Close"
   },
   "cookies": {
     "title": "Cookie Extractor",

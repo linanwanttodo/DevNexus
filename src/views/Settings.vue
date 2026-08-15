@@ -4,6 +4,8 @@ import { useRouter } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
 import { t, initI18n, getLang } from "../lib/i18n.js";
 import { setTheme } from "../lib/stores.js";
+import { getIslandEnabled, setIslandEnabled } from "../lib/stores.js";
+import { applyIslandState } from "../lib/island.js";
 import { friendlyError } from "../lib/errors.js";
 import AppIcon from "../components/AppIcon.vue";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,9 @@ const proxyPort = ref("");
 const appVersion = ref("");
 const autostartEnabled = ref(false);
 const silentStart = ref(false);
+// 灵动岛开关：与灵动岛设置页共享同一状态源（stores.js），
+// 作为开机自启的联动子项——开机自启开启时，可选择启动后是否显示灵动岛。
+const startIsland = getIslandEnabled();
 
 const updateState = ref("idle");
 const updateInfo = ref(null);
@@ -172,6 +177,17 @@ async function onToggleSilentStart(value) {
     silentStart.value = !value;
   }
 }
+
+// 灵动岛联动开关：写入共享状态（localStorage + Rust 持久化）并同步窗口显示/隐藏，
+// 与灵动岛设置页/标题栏/托盘完全一致（同一状态源，双向同步）。
+async function onToggleStartIsland(value) {
+  setIslandEnabled(value);
+  try {
+    await applyIslandState();
+  } catch {
+    // 非 Tauri 环境忽略
+  }
+}
 </script>
 
 <template>
@@ -286,6 +302,17 @@ async function onToggleSilentStart(value) {
                 <div class="setting-desc">{{ t("settings.silent_start_desc") }}</div>
               </div>
               <Switch :model-value="silentStart" @update:model-value="onToggleSilentStart" />
+            </div>
+
+            <!-- 灵动岛联动子选项：开机自启开启时，可选择启动后是否显示灵动岛。
+                 与灵动岛设置页/标题栏/托盘共享同一状态源，两处开关相互同步。 -->
+            <Separator />
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">{{ t("settings.start_island") }}</div>
+                <div class="setting-desc">{{ t("settings.start_island_desc") }}</div>
+              </div>
+              <Switch :model-value="startIsland" @update:model-value="onToggleStartIsland" />
             </div>
           </template>
         </CardContent>
@@ -480,12 +507,6 @@ async function onToggleSilentStart(value) {
   color: var(--color-foreground);
 }
 .changelog {
-  margin-top: 6px;
-}
-.changelog-lang {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-foreground);
   margin-top: 6px;
 }
 .changelog-body {

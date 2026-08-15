@@ -383,9 +383,36 @@ fn set_sticky_x11(_window: &tauri::Window) -> Result<(), String> {
     Ok(())
 }
 
+/// X11 下透明窗口默认**整个矩形**都接收鼠标事件，透明边缘也会拦截点击。
+/// 用 GDK input shape 把岛窗口的输入区域限制为胶囊覆盖区（窗口顶部居中），
+/// 其余透明区域点击穿透——防止岛窗口覆盖主窗口标题栏/内容时抢走点击
+/// （"界面显示但点不动"的根因之一）。岛窗口自身仍可拖拽/点击（胶囊在内）。
+#[cfg(target_os = "linux")]
+fn set_island_input_shape(window: &tauri::Window) -> Result<(), String> {
+    use gtk::prelude::*; // GtkWindowExt::window()
+    let gtk_win = window.gtk_window().map_err(|e| e.to_string())?;
+    let gdk_win = gtk_win.window().ok_or("no gdk window")?;
+    // 窗口恒定 400x116；胶囊 top:4、水平居中，收起 240x40 / 展开最高 ~384x68。
+    // 输入区域取覆盖胶囊所有状态的矩形：顶部居中 384x72，其余透明区穿透。
+    const WIN_W: i32 = 400;
+    const CAPSULE_W: i32 = 384;
+    const CAPSULE_H: i32 = 72;
+    let rect = gtk::gdk::cairo::RectangleInt::new((WIN_W - CAPSULE_W) / 2, 0, CAPSULE_W, CAPSULE_H);
+    let region = gtk::gdk::cairo::Region::create_rectangle(&rect);
+    gdk_win.input_shape_combine_region(&region, 0, 0);
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn set_island_input_shape(_window: &tauri::Window) -> Result<(), String> {
+    Ok(())
+}
+
 /// 让指定岛窗口在所有工作区可见（X11 直接写 STICKY，不依赖 GTK stick）
 #[tauri::command]
 pub fn island_set_sticky(window: tauri::Window) -> Result<(), String> {
+    // 一并设置输入形状（透明区点击穿透），与 sticky 共用窗口访问，幂等。
+    let _ = set_island_input_shape(&window);
     set_sticky_x11(&window)
 }
 
@@ -397,12 +424,12 @@ fn island_enabled_path() -> std::path::PathBuf {
     crate::utils::data_dir().join("island_enabled")
 }
 
-/// 读取灵动岛开关状态（默认开启）
+/// 读取灵动岛开关状态（默认关闭，与前端 stores.js 默认一致）
 #[tauri::command]
 pub fn island_get_enabled() -> bool {
     std::fs::read_to_string(island_enabled_path())
         .map(|s| s.trim() == "1")
-        .unwrap_or(true)
+        .unwrap_or(false)
 }
 
 /// 设置灵动岛开关状态并同步所有岛窗口显示/隐藏
@@ -691,4 +718,97 @@ pub async fn island_get_hud() -> IslandHud {
         volume_percent: None,
         brightness_percent: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deepseek_balance_resp_parsing() {
+        // 模拟 DeepSeek /user/balance 的 JSON 响应
+        let json = r#"{
+            "is_available": true,
+            "balance_infos": [
+                {
+                    "currency": "CNY",
+                    "total_balance": "10.00",
+                    "granted_balance": "5.00",
+                    "topped_up_balance": "5.00"
+                },
+                {
+                    "currency": "USD",
+                    "total_balance": "1.50",
+                    "granted_balance": "0.00",
+                    "topped_up_balance": "1.50"
+                }
+            ]
+        }"#;
+        let parsed: BalanceResp = serde_json::from_str(json).expect("parse balance resp");
+        assert!(parsed.is_available);
+        assert_eq!(parsed.balance_infos.len(), 2);
+        assert_eq!(parsed.balance_infos[0].currency, "CNY");
+        assert_eq!(parsed.balance_infos[0].total_balance, "10.00");
+        assert_eq!(parsed.balance_infos[1].currency, "USD");
+        assert_eq!(parsed.balance_infos[1].granted_balance, "0.00");
+    }
+
+    #[test]
+    fn test_deepseek_balance_serialization_camel_case() {
+        let b = DeepSeekBalance {
+            is_available: true,
+            balance_infos: vec![DeepSeekBalanceInfo {
+                currency: "CNY".to_string(),
+                total_balance: "10.00".to_string(),
+                granted_balance: "5.00".to_string(),
+                topped_up_balance: "5.00".to_string(),
+            }],
+        };
+        let json = serde_json::to_string(&b).expect("serialize balance");
+        // 序列化为 camelCase 字段（前端约定）
+        assert!(json.contains("\"isAvailable\":true"));
+        assert!(json.contains("\"balanceInfos\""));
+        assert!(json.contains("\"totalBalance\":\"10.00\""));
+        assert!(json.contains("\"grantedBalance\":\"5.00\""));
+        assert!(json.contains("\"toppedUpBalance\":\"5.00\""));
+    }
+
+    #[test]
+    fn test_island_hud_serialization() {
+        let hud = IslandHud {
+            volume_percent: Some(42.5),
+            brightness_percent: None,
+        };
+        let json = serde_json::to_string(&hud).expect("serialize hud");
+        // IslandHud 未配置 rename_all，字段按 snake_case 序列化
+        assert!(json.contains("\"volume_percent\":42.5"));
+        assert!(json.contains("\"brightness_percent\":null"));
+    }
+
+    #[test]
+    fn test_island_media_status_fields() {
+        // MediaStatus 字段应可序列化（island 前端渲染）
+        let ms = MediaStatus {
+            player: "org.mpris.MediaPlayer2.spotify".to_string(),
+            title: Some("Song".to_string()),
+            artist: Some("Artist".to_string()),
+            status: "Playing".to_string(),
+            length_ms: Some(240_000),
+        };
+        let json = serde_json::to_string(&ms).expect("serialize media status");
+        assert!(json.contains("\"player\":\"org.mpris.MediaPlayer2.spotify\""));
+        assert!(json.contains("\"status\":\"Playing\""));
+        assert!(json.contains("\"lengthMs\":240000"));
+        assert!(json.contains("\"title\":\"Song\""));
+        // 无标题时序列化为 null
+        let empty = MediaStatus {
+            player: "p".to_string(),
+            title: None,
+            artist: None,
+            status: "Stopped".to_string(),
+            length_ms: None,
+        };
+        let json2 = serde_json::to_string(&empty).expect("serialize empty media status");
+        assert!(json2.contains("\"title\":null"));
+    }
 }
