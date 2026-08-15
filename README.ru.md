@@ -106,7 +106,7 @@ DevNexus — это **кроссплатформенное десктопное 
 | **macOS** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Linux** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Windows** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Стек** | Tauri+Svelte+Rust | Tauri+React+Rust | Go | Go | Tauri+React+Rust | Tauri+React+Rust |
+| **Стек** | Tauri+Vue+Rust | Tauri+React+Rust | Go | Go | Tauri+React+Rust | Tauri+React+Rust |
 
 **Ключевые отличия:**
 
@@ -122,8 +122,8 @@ DevNexus — это **кроссплатформенное десктопное 
 
 ```
 ┌──────────────────────────────────────────────┐
-│              Frontend (Svelte 5)              │
-│           Tailwind CSS · svelte-spa-router     │
+│              Frontend (Vue 3)                 │
+│           Tailwind CSS · vue-router           │
 ├──────────────────────────────────────────────┤
 │            Tauri 2.0 IPC Bridge              │
 │         invoke() / emit() / Channel          │
@@ -143,7 +143,7 @@ DevNexus — это **кроссплатформенное десктопное 
 | Слой | Технология | Описание |
 |---|---|---|
 | **Десктоп-фреймворк** | [Tauri 2.0](https://tauri.app/) | Системный Webview, не Electron |
-| **Фронтенд** | [Svelte 5](https://svelte.dev/) | Компилируемый фреймворк, runtime ~2 КБ |
+| **Фронтенд** | [Vue 3](https://vuejs.org/) | Composition API, компиляция по требованию |
 | **Стили** | [Tailwind CSS](https://tailwindcss.com/) | Утилитарный CSS |
 | **Язык бэкенда** | [Rust](https://www.rust-lang.org/) | Системные вызовы, производительность, безопасность памяти |
 | **Асинхронный runtime** | [tokio](https://crates.io/crates/tokio) | Асинхронный I/O для Rust |
@@ -154,7 +154,7 @@ DevNexus — это **кроссплатформенное десктопное 
 ### Почему этот стек?
 
 - **Tauri вместо Electron** — 10 МБ vs 150 МБ установка, 60 МБ vs 300 МБ память, системный Webview вместо встроенного Chromium
-- **Svelte вместо React** — Компилируемый фреймворк без runtime, меньший размер; нативный HTML-синтаксис, нулевая стоимость миграции с дизайн-прототипов
+- **Vue 3 вместо Svelte** — Зрелая экосистема, Composition API с `<script setup>` повышает продуктивность
 - **Rust вместо Node.js** — Нативные системные вызовы, безопасность памяти
 
 ---
@@ -163,30 +163,44 @@ DevNexus — это **кроссплатформенное десктопное 
 
 ```
 devnexus/
-├── src/                          # Svelte фронтенд
+├── src/                          # Vue 3 фронтенд
 │   ├── lib/
-│   │   ├── stores.js             # Состояние маршрутизации и поиска
-│   │   └── i18n.js               # Интернационализация (zh/en/ru)
+│   │   ├── stores.js             # Глобальное состояние
+│   │   ├── i18n.js               # Интернационализация (zh/en/ru)
+│   │   ├── toast.js / confirm.js # Уведомления и диалоги подтверждения
+│   │   └── ...
 │   ├── locales/                  # Файлы переводов
 │   │   ├── zh.json
 │   │   ├── en.json
 │   │   └── ru.json
-│   ├── routes/                   # Маршруты страниц
-│   │   ├── Dashboard.svelte      # Панель системы
-│   │   ├── EnvironmentManager.svelte
-│   │   ├── SoftwareCenter.svelte
-│   │   ├── MirrorSettings.svelte
-│   │   ├── ProcessManager.svelte # Управление процессами/портами
-│   │   ├── PasswordManager.svelte
-│   │   ├── CookieExtractor.svelte
-│   │   ├── AppUninstaller.svelte # Глубокое удаление
-│   │   ├── VersionManager.svelte # Управление версиями
-│   │   └── Settings.svelte
+│   ├── views/                    # Маршруты страниц
+│   │   ├── Dashboard.vue         # Панель системы
+│   │   ├── EnvironmentManager.vue
+│   │   ├── SoftwareCenter.vue
+│   │   ├── ContainerManager.vue  # Управление контейнерами
+│   │   ├── ApiHub.vue            # API Hub
+│   │   ├── MirrorSettings.vue
+│   │   ├── ProcessManager.vue    # Управление процессами/портами
+│   │   ├── PasswordManager.vue
+│   │   ├── CookieExtractor.vue
+│   │   ├── AppUninstaller.vue    # Глубокое удаление
+│   │   ├── Migration.vue         # Миграция окружения
+│   │   ├── IslandSettings.vue    # Настройки Dynamic Island
+│   │   ├── Settings.vue
+│   │   └── ...
 │   ├── components/
-│   │   ├── Sidebar.svelte
-│   │   ├── TopBar.svelte
-│   │   └── TitleBar.svelte
-│   ├── app.svelte
+│   │   ├── Sidebar.vue
+│   │   ├── TitleBar.vue
+│   │   ├── ConfirmDialog.vue
+│   │   ├── ErrorBoundary.vue
+│   │   ├── AppIcon.vue           # По требованию lucide-иконки
+│   │   └── ...
+│   ├── island/                   # Отдельное окно Dynamic Island
+│   │   ├── IslandApp.vue
+│   │   ├── island.css
+│   │   └── main.js
+│   ├── App.vue
+│   ├── router.js                 # Vue Router (hash-режим, ленивая загрузка)
 │   └── main.js
 ├── src-tauri/                    # Rust бэкенд
 │   ├── src/
@@ -196,11 +210,16 @@ devnexus/
 │   │       ├── system.rs         # Системная информация
 │   │       ├── environment.rs    # PATH/переменные окружения
 │   │       ├── software.rs       # Управление пакетами
+│   │       ├── container.rs      # Docker/Podman
 │   │       ├── mirror.rs         # Зеркала
 │   │       ├── process_ports.rs  # Управление портами
 │   │       ├── password_manager.rs
 │   │       ├── cookie_extractor.rs
 │   │       ├── version_manager.rs # Управление версиями (pyenv/fnm/jenv/gvm/rustup)
+│   │       ├── migration.rs       # Миграция окружения
+│   │       ├── island_bridge.rs   # Мост данных Dynamic Island
+│   │       ├── tray.rs            # Системный трей
+│   │       ├── autostart.rs       # Автозапуск / тихий старт
 │   │       ├── updater.rs         # Автообновление
 │   │       └── mod.rs
 │   ├── icons/

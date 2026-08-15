@@ -20,6 +20,8 @@ DevNexus 是一款面向开发者的系统工具集合，提供系统信息监�
 | **深度卸载**    | 残留文件扫描，跨平台清理已知工具的配置文件和数据目录 | [09-uninstall.md](modules/09-uninstall.md) |
 | **版本管理**    | 多语言版本检测与切换，支持 pyenv/fnm/rustup 等版本管理器 | [10-version.md](modules/10-version.md) |
 | **环境迁移**    | 导出/导入开发环境配置（PATH、软件清单、运行时版本） | [14-migration.md](modules/14-migration.md) |
+| **灵动岛**      | 全局悬浮胶囊：系统状态 HUD、通知融合、媒体控制、跨工作区可见 | [16-island.md](modules/16-island.md) |
+| **托盘与自启**  | 托盘菜单（余额/语言/开关）、开机自启与静默启动 | [architecture.md](architecture.md) |
 
 ## 跨平台支持
 
@@ -75,6 +77,7 @@ docs/
 │   ├── 11-api-hub.md     # API Hub
 │   ├── 13-containers.md  # 容器管理
 │   ├── 14-migration.md   # 环境迁移
+│   ├── 16-island.md      # 灵动岛
 │   └── 99-cross-platform.md  # 跨平台实现详解
 └── README.md             # 本文件
 ```

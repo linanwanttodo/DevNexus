@@ -70,14 +70,18 @@
     "autostart": "Автозапуск",
     "autostart_desc": "Запускать DevNexus при входе в систему",
     "silent_start": "Тихий запуск",
-    "silent_start_desc": "Не показывать главное окно при автозапуске; работать в трее и на острове"
+    "silent_start_desc": "Не показывать главное окно при автозапуске; работать в трее и на острове",
+    "start_island": "Показывать Dynamic Island при запуске",
+    "start_island_desc": "Показывать Dynamic Island после автозапуска (связано с переключателем на странице острова)"
   },
   "titleBar": {
     "minimize": "Свернуть",
     "maximize": "Развернуть",
     "close": "Закрыть",
     "pin": "Поверх всех окон",
-    "unpin": "Отключить поверх окон"
+    "unpin": "Отключить поверх окон",
+    "island_on": "Выключить Dynamic Island",
+    "island_off": "Включить Dynamic Island"
   },
   "dashboard": {
     "title": "Панель",
@@ -257,7 +261,9 @@
     "edit_success": "Пароль обновлён",
     "edit_failed": "Не удалось обновить пароль: {error}",
     "keep_password": "Оставьте пустым, чтобы сохранить текущий",
-    "title_edit": "Изменить пароль"
+    "title_edit": "Изменить пароль",
+    "cancel": "Отмена",
+    "close": "Закрыть"
   },
   "cookies": {
     "title": "Извлечение Cookie",

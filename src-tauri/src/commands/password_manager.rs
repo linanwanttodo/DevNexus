@@ -539,4 +539,88 @@ mod tests {
     fn test_escape_csv_empty() {
         assert_eq!(escape_csv(""), "");
     }
+
+    /// 用固定密钥构造 PasswordManager，避免测试触碰系统钥匙串/真实数据文件
+    fn test_manager(key: [u8; 32]) -> PasswordManager {
+        PasswordManager {
+            entries: Arc::new(Mutex::new(Vec::new())),
+            next_id: Arc::new(Mutex::new(1)),
+            encryption_key: Arc::new(Mutex::new(key)),
+        }
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_roundtrip() {
+        let pm = test_manager([0x42; 32]);
+        let secrets: Vec<String> = vec![
+            "hunter2".to_string(),
+            String::new(),
+            "中文密码🔐".to_string(),
+            "a".repeat(1024),
+            "with\nnewline".to_string(),
+        ];
+        for s in &secrets {
+            let enc = pm.encrypt(s).expect("encrypt");
+            // 密文不应包含明文
+            assert!(!enc.contains(s.as_str()) || s.is_empty());
+            assert_eq!(pm.decrypt(&enc).expect("decrypt"), *s);
+        }
+    }
+
+    #[test]
+    fn test_encrypt_produces_randomized_nonce() {
+        let pm = test_manager([0x42; 32]);
+        // 相同明文两次加密结果不同（随机 nonce）
+        let e1 = pm.encrypt("same-password").unwrap();
+        let e2 = pm.encrypt("same-password").unwrap();
+        assert_ne!(e1, e2);
+        // 但都能正确解密
+        assert_eq!(pm.decrypt(&e1).unwrap(), "same-password");
+        assert_eq!(pm.decrypt(&e2).unwrap(), "same-password");
+    }
+
+    #[test]
+    fn test_decrypt_wrong_key_fails() {
+        let pm = test_manager([0x42; 32]);
+        let enc = pm.encrypt("secret-data").unwrap();
+        let wrong = test_manager([0x24; 32]);
+        assert!(wrong.decrypt(&enc).is_err());
+    }
+
+    #[test]
+    fn test_decrypt_invalid_base64_fails() {
+        let pm = test_manager([0x42; 32]);
+        assert!(pm.decrypt("not-base64!!!").is_err());
+        assert!(pm.decrypt("").is_err());
+    }
+
+    #[test]
+    fn test_decrypt_truncated_data_fails() {
+        let pm = test_manager([0x42; 32]);
+        let enc = pm.encrypt("x").unwrap();
+        // 去掉部分字节导致 nonce/密文不完整
+        let truncated = &enc[..enc.len() - 4];
+        assert!(pm.decrypt(truncated).is_err());
+    }
+
+    #[test]
+    fn test_password_entry_serialization() {
+        let entry = PasswordEntry {
+            id: 1,
+            name: "GitHub".to_string(),
+            username: "user".to_string(),
+            password_encrypted: "enc".to_string(),
+            url: Some("https://github.com".to_string()),
+            notes: None,
+            created_at: "2026-08-15 12:00:00".to_string(),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(json.contains("\"name\":\"GitHub\""));
+        assert!(json.contains("\"url\":\"https://github.com\""));
+        // 反序列化往返
+        let back: PasswordEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.id, entry.id);
+        assert_eq!(back.password_encrypted, "enc");
+        assert!(back.notes.is_none());
+    }
 }

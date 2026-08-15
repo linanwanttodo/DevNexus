@@ -70,7 +70,9 @@
     "autostart": "开机自启",
     "autostart_desc": "登录系统时自动启动 DevNexus",
     "silent_start": "静默启动",
-    "silent_start_desc": "开机自启时不显示主窗口，后台常驻托盘和灵动岛"
+    "silent_start_desc": "开机自启时不显示主窗口，后台常驻托盘和灵动岛",
+    "start_island": "启动时显示灵动岛",
+    "start_island_desc": "开机自启后自动显示灵动岛悬浮窗（与灵动岛设置页开关联动）"
   },
   "titleBar": {
     "minimize": "最小化",
@@ -259,7 +261,9 @@
     "edit_success": "密码更新成功",
     "edit_failed": "更新密码失败：{error}",
     "keep_password": "留空则保留原密码",
-    "title_edit": "编辑密码"
+    "title_edit": "编辑密码",
+    "cancel": "取消",
+    "close": "关闭"
   },
   "cookies": {
     "title": "Cookie 提取",

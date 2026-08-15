@@ -51,6 +51,7 @@ devnexus/
 │   ├── styles/                  # 全局样式 (Tailwind v4 + 设计 token)
 │   ├── lib/                     # 通用工具（stores、i18n、toast、confirm 等）
 │   ├── components/              # 可复用组件（含 ui/ 基础组件）
+│   ├── island/                  # 灵动岛独立窗口入口（IslandApp.vue）
 │   ├── icons/                   # 图标
 │   ├── locales/                 # 多语言（zh / en / ru）
 │   └── views/                   # 页面组件（每个模块一个 .vue）
@@ -65,6 +66,7 @@ devnexus/
 │       ├── ContainerManager.vue   # 容器管理
 │       ├── ApiHub.vue             # API Hub
 │       ├── Migration.vue          # 环境迁移
+│       ├── IslandSettings.vue     # 灵动岛设置
 │       └── Settings.vue           # 设置页
 ├── src-tauri/                    # 后端 (Rust)
 │   ├── src/
@@ -202,8 +204,7 @@ cargo check
 | 平台 | 产物 |
 |------|------|
 | macOS | `target/release/bundle/dmg/devnexus.dmg` |
-| Linux | `target/release/bundle/deb/devnexus.deb`,
-|       | `target/release/bundle/appimage/devnexus.AppImage` |
+| Linux | `target/release/bundle/deb/devnexus.deb`、`target/release/bundle/appimage/devnexus.AppImage` |
 | Windows | `target/release/bundle/msi/devnexus.msi` |
 
 ---
@@ -255,7 +256,7 @@ cargo test test_name   # 单个测试
 
 ### Q: macOS 上 `lsof` 不可用？
 
-A: macOS 自带的 lsof 位于 `/usr/sbin/lsof`，但可能不在普通用户的 PATH 中。`software.rs` 中的端口检测使用 `which` crate 动态查找，如果找不到会显示空列表而非崩溃。
+A: macOS 自带的 lsof 位于 `/usr/sbin/lsof`，但可能不在普通用户的 PATH 中。`process_ports.rs` 中的端口检测使用 `which` crate 动态查找，如果找不到会显示空列表而非崩溃。
 
 ### Q: Windows 编译时 `openssl` 报错？
 
@@ -318,24 +319,31 @@ cargo update
 | 前端依赖 | 用途 |
 |---------|------|
 | `vue` ^3.5 | 前端框架 |
+| `vue-router` ^5 | 前端路由（hash 模式） |
 | `@tauri-apps/api` ^2 | Tauri IPC |
-| `vue-router` ^4 | 前端路由 |
-| `tailwindcss` ^4 | CSS 框架（v4 + `@tailwindcss/vite`） |
-| `@lucide/vue` | 图标库 |
+| `@tauri-apps/plugin-*` ^2 | dialog / shell / process / updater 插件 |
+| `tailwindcss` ^4 + `@tailwindcss/vite` | CSS 框架（v4 + Vite 插件） |
+| `@lucide/vue` | 图标库（按需导入） |
+| `@vueuse/core` | Vue 组合式工具集 |
 | `reka-ui` | 无障碍 UI 基础组件 |
 | `vue-sonner` | 轻提示（toast） |
+| `class-variance-authority` + `clsx` + `tailwind-merge` | 组件样式变体与类名合并 |
 
 | Rust 依赖 | 用途 |
 |----------|------|
 | `tauri` ^2 | GUI 框架 |
+| `tauri-plugin-process/updater/shell/dialog` | 进程 / 更新 / Shell / 对话框插件 |
 | `sysinfo` | 系统信息 |
 | `serde` + `serde_json` | 序列化 |
 | `reqwest` | HTTP 请求（rustls-tls） |
 | `rusqlite` | SQLite（bundled） |
 | `aes-gcm` / `aes` / `cbc` | AES 加密 |
-| `pbkdf2` + `sha2` | 密钥派生 / 哈希 |
+| `pbkdf2` + `sha2` / `sha1` | 密钥派生 / 哈希 |
+| `keyring` | 系统钥匙串（Windows/macOS/Linux） |
 | `axum` + `tower-http` | API Hub HTTP 网关 |
 | `chrono` | 日期时间 |
 | `tokio` | 异步运行时 |
 | `which` | PATH 搜索 |
 | `zip` / `csv` / `walkdir` | 压缩 / 解析 / 文件遍历 |
+| `x11-dl` / `gtk` / `gdkx11` | Linux 灵动岛跨工作区置顶（X11） |
+| `windows` / `winreg` | Windows 注册表与加密（目标平台） |

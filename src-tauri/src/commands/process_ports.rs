@@ -211,11 +211,14 @@ fn list_ports_unix() -> Result<Vec<PortEntry>, String> {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn extract_ss_process_name(info: &str) -> Option<String> {
-    info.find("(\"").and_then(|start| {
-        info[start + 2..]
-            .find('"')
-            .map(|end| info[start + 2..start + 2 + end].to_string())
-    })
+    info.find("(\"")
+        .and_then(|start| {
+            info[start + 2..]
+                .find('"')
+                .map(|end| info[start + 2..start + 2 + end].to_string())
+        })
+        // 空进程名视为解析失败，让调用方回退到 "unknown"
+        .filter(|name| !name.is_empty())
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -445,4 +448,120 @@ pub fn kill_port(port: u16) -> Result<String, String> {
         .ok_or_else(|| format!("No process found on port {}", port))?;
     // Reuse sysinfo-based kill
     kill_process_force(target.pid)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    mod ss_parsing {
+        use super::{extract_ss_pid, extract_ss_process_name};
+
+        #[test]
+        fn test_extract_ss_pid_typical() {
+            // ss -tlnp 的典型输出: users:(("nginx",pid=1234,fd=10))
+            assert_eq!(
+                extract_ss_pid("users:((\"nginx\",pid=1234,fd=10))"),
+                Some(1234)
+            );
+        }
+
+        #[test]
+        fn test_extract_ss_pid_without_fd() {
+            assert_eq!(extract_ss_pid("users:((\"node\",pid=5678))"), Some(5678));
+        }
+
+        #[test]
+        fn test_extract_ss_pid_missing() {
+            assert_eq!(extract_ss_pid("users:((\"systemd\"))"), None);
+            assert_eq!(extract_ss_pid(""), None);
+            assert_eq!(extract_ss_pid("pid=abc"), None);
+        }
+
+        #[test]
+        fn test_extract_ss_pid_after_fd() {
+            // fd 出现在 pid 前面时也能正确解析
+            assert_eq!(
+                extract_ss_pid("users:((\"python\",fd=5,pid=999))"),
+                Some(999)
+            );
+        }
+
+        #[test]
+        fn test_extract_ss_process_name_typical() {
+            assert_eq!(
+                extract_ss_process_name("users:((\"nginx\",pid=1234,fd=10))"),
+                Some("nginx".to_string())
+            );
+        }
+
+        #[test]
+        fn test_extract_ss_process_name_missing() {
+            assert_eq!(extract_ss_process_name("users:((\"\"))"), None);
+            assert_eq!(extract_ss_process_name("no users field"), None);
+        }
+
+        #[test]
+        fn test_extract_ss_process_name_multiple_entries() {
+            // 多个进程共享端口: users:(("nginx",pid=1,fd=10),("nginx",pid=2,fd=11))
+            assert_eq!(
+                extract_ss_process_name("users:((\"nginx\",pid=1,fd=10),(\"nginx\",pid=2,fd=11))"),
+                Some("nginx".to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn test_kill_port_no_process_error_path() {
+        // 端口 0 永远不会被 LISTEN（保留端口），且不依赖真实环境：
+        // 只要返回 Err（找不到进程）或 Err（lsof/ss 不可用）都属于正确错误路径，
+        // 绝不应 Ok —— 这验证 kill_port 在目标缺失时不会误杀。
+        let result = kill_port(0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_process_entry_defaults_serializable() {
+        // ProcessEntry / ProcessGroup / PortEntry 必须可序列化（IPC 传输）
+        let entry = ProcessEntry {
+            pid: 42,
+            name: "test".to_string(),
+            cpu_usage: 0.5,
+            memory_bytes: 1024,
+            start_time_secs: 100,
+            elapsed_secs: 10,
+        };
+        let json = serde_json::to_string(&entry).expect("serialize ProcessEntry");
+        assert!(json.contains("\"pid\":42"));
+        assert!(json.contains("\"name\":\"test\""));
+
+        let group = ProcessGroup {
+            name: "test".to_string(),
+            count: 1,
+            total_cpu: 0.5,
+            total_memory_bytes: 1024,
+            earliest_start: 100,
+            entries: vec![entry],
+            ports: vec![8080, 3000],
+        };
+        let json = serde_json::to_string(&group).expect("serialize ProcessGroup");
+        assert!(json.contains("\"ports\":[3000,8080]") || json.contains("\"ports\":[8080,3000]"));
+
+        let port = PortEntry {
+            port: 8080,
+            protocol: "TCP".to_string(),
+            process_name: "nginx".to_string(),
+            pid: 42,
+        };
+        let json = serde_json::to_string(&port).expect("serialize PortEntry");
+        assert!(json.contains("\"port\":8080"));
+    }
+
+    #[test]
+    fn test_now_secs_monotonic() {
+        let a = now_secs();
+        let b = now_secs();
+        assert!(b >= a);
+    }
 }

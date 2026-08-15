@@ -103,9 +103,14 @@ function handleClearError() {
 </template>
 
 <style scoped>
+/* 错误遮罩：只盖内容区、让出标题栏（top:36px），保证窗口仍可拖动/关闭，
+   避免全窗口被冻结成"点不动、移不动"——这是用户反馈的核心问题。 */
 .error-overlay {
   position: fixed;
-  inset: 0;
+  top: 36px; /* 标题栏高度，标题栏保持可拖拽 + 窗口按钮可用 */
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 100;
   display: flex;
   align-items: center;

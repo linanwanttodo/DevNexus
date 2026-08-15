@@ -26,9 +26,19 @@ fi
 
 echo ""
 echo "==> [pre-commit] pnpm check (vite build)"
-if ! pnpm check; then
-  echo "!! 前端类型/语法检查失败。修复后再提交"
-  FAILED=1
+# 本机可能未安装 pnpm：优先 pnpm check，回退到 npx vite build（等价）
+if command -v pnpm >/dev/null 2>&1; then
+  if ! pnpm check; then
+    echo "!! 前端类型/语法检查失败。修复后再提交"
+    FAILED=1
+  fi
+elif command -v npx >/dev/null 2>&1; then
+  if ! npx vite build; then
+    echo "!! 前端类型/语法检查失败。修复后再提交"
+    FAILED=1
+  fi
+else
+  echo "!! 未找到 pnpm 或 npx，跳过前端检查（请手动运行 vite build）"
 fi
 
 echo ""
