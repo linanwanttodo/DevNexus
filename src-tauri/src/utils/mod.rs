@@ -1,3 +1,4 @@
+pub mod crypto;
 pub mod error;
 pub mod exec;
 pub mod rc_editor;

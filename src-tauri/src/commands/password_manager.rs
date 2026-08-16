@@ -1,6 +1,4 @@
-use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
-use base64::{engine::general_purpose, Engine as _};
-use rand::Rng;
+use crate::utils::crypto::CryptoVault;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::sync::{Arc, Mutex};
@@ -19,21 +17,19 @@ pub struct PasswordEntry {
 pub struct PasswordManager {
     pub entries: Arc<Mutex<Vec<PasswordEntry>>>,
     pub next_id: Arc<Mutex<u32>>,
-    encryption_key: Arc<Mutex<[u8; 32]>>, // AES-256 key
+    crypto: CryptoVault,
 }
 
 #[allow(clippy::new_without_default)]
 impl PasswordManager {
     pub fn new() -> Self {
-        let key = Self::load_or_create_key();
-
         let entries = Arc::new(Mutex::new(Vec::new()));
         let next_id = Arc::new(Mutex::new(1));
 
         let pm = Self {
             entries: entries.clone(),
             next_id,
-            encryption_key: Arc::new(Mutex::new(key)),
+            crypto: CryptoVault::new(),
         };
 
         // 无锁模式：启动即加载已保存条目，不再要求用户设置/输入主密码，
@@ -58,7 +54,7 @@ impl PasswordManager {
 
         let entries = self.entries.lock().map_err(|e| e.to_string())?;
         let json = serde_json::to_string(&*entries).map_err(|e| e.to_string())?;
-        let encrypted = self.encrypt(&json)?;
+        let encrypted = self.crypto.encrypt(&json)?;
         fs::write(&path, &encrypted).map_err(|e| format!("Failed to save entries: {}", e))?;
 
         // 设置文件权限 0600
@@ -80,7 +76,7 @@ impl PasswordManager {
 
         let encrypted =
             fs::read_to_string(&path).map_err(|e| format!("Failed to read entries: {}", e))?;
-        let json = self.decrypt(&encrypted)?;
+        let json = self.crypto.decrypt(&encrypted)?;
         let loaded_entries: Vec<PasswordEntry> =
             serde_json::from_str(&json).map_err(|e| format!("Failed to parse entries: {}", e))?;
 
@@ -94,231 +90,6 @@ impl PasswordManager {
 
         Ok(())
     }
-
-    /// 密钥文件兜底路径（H2 安全修复）：keyring 不可用时落盘，避免密钥丢失导致密文永久不可解
-    fn key_file_path() -> std::path::PathBuf {
-        crate::utils::data_dir().join("password_key.bin")
-    }
-
-    /// 从系统钥匙串（keyring）加载或创建加密密钥
-    /// 使用 OS 原生安全存储（macOS Keychain / Linux Secret Service / Windows Credential Manager）
-    /// 替代旧版 flat file 方案，避免密钥以明文形式暴露在文件系统中。
-    ///
-    /// 回退链（H2 修复）：keyring → `data_dir/password_key.bin`（0600 文件兜底）。
-    /// 只有密钥确实被持久化（keyring 或文件之一成功）后才清理旧版 key.bin，
-    /// 避免「生成新密钥 → 持久化失败 → 旧密钥被删 → 数据永久丢失」。
-    fn load_or_create_key() -> [u8; 32] {
-        const SERVICE_NAME: &str = "com.devnexus.app";
-        const KEYRING_USER: &str = "encryption-key";
-
-        // 1. 优先从系统钥匙串读取
-        let entry = keyring::Entry::new(SERVICE_NAME, KEYRING_USER).ok();
-        if let Some(ref entry) = entry {
-            if let Ok(pw) = entry.get_password() {
-                if let Ok(decoded) = general_purpose::STANDARD.decode(&pw) {
-                    if decoded.len() == 32 {
-                        let mut key = [0u8; 32];
-                        key.copy_from_slice(&decoded);
-                        // 迁移后清理旧版 key.bin
-                        Self::try_remove_old_keyfile();
-                        return key;
-                    }
-                }
-            }
-        }
-
-        // 2. 回退：从 data_dir 密钥文件读取
-        if let Some(key) = Self::read_key_file() {
-            Self::try_remove_old_keyfile();
-            return key;
-        }
-
-        // 3. 向后兼容：尝试从旧版 key.bin 迁移
-        if let Some(key) = Self::migrate_from_keyfile(entry.as_ref()) {
-            Self::try_remove_old_keyfile();
-            return key;
-        }
-
-        // 4. 生成新密钥并尝试持久化（keyring → 文件兜底）
-        let mut key = [0u8; 32];
-        rand::thread_rng().fill(&mut key);
-
-        let mut persisted = false;
-        if let Some(ref entry) = entry {
-            let encoded = general_purpose::STANDARD.encode(key);
-            match entry.set_password(&encoded) {
-                Ok(_) => persisted = true,
-                Err(e) => eprintln!("[PasswordManager] Failed to persist key to keyring: {}", e),
-            }
-        }
-        if !persisted {
-            persisted = Self::write_key_file(&key);
-            if !persisted {
-                eprintln!(
-                    "[PasswordManager] WARNING: unable to persist encryption key (keyring and {} both unavailable). \
-                     Vault data saved now will be UNREADABLE after restart.",
-                    Self::key_file_path().display()
-                );
-            }
-        }
-
-        // 仅当新密钥已持久化时才清理旧版 key.bin（H2 修复：防止唯一可用密钥被误删）
-        if persisted {
-            Self::try_remove_old_keyfile();
-        }
-        key
-    }
-
-    /// 读取 data_dir 密钥文件（32 字节）；不存在/损坏返回 None
-    fn read_key_file() -> Option<[u8; 32]> {
-        let data = std::fs::read(Self::key_file_path()).ok()?;
-        if data.len() != 32 {
-            return None;
-        }
-        let mut key = [0u8; 32];
-        key.copy_from_slice(&data);
-        Some(key)
-    }
-
-    /// 写入 data_dir 密钥文件（Unix 上设置 0600 权限）
-    fn write_key_file(key: &[u8; 32]) -> bool {
-        let path = Self::key_file_path();
-        if let Some(parent) = path.parent() {
-            if std::fs::create_dir_all(parent).is_err() {
-                return false;
-            }
-        }
-        if std::fs::write(&path, key).is_err() {
-            return false;
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if let Ok(meta) = std::fs::metadata(&path) {
-                let mut perms = meta.permissions();
-                perms.set_mode(0o600);
-                let _ = std::fs::set_permissions(&path, perms);
-            }
-        }
-        true
-    }
-
-    /// 从旧版 key.bin 迁移密钥到钥匙串
-    fn migrate_from_keyfile(entry: Option<&keyring::Entry>) -> Option<[u8; 32]> {
-        let key_path = {
-            let base = if cfg!(target_os = "macos") {
-                std::env::var("HOME")
-                    .map(|h| std::path::PathBuf::from(h).join("Library/Application Support"))
-                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
-            } else if cfg!(target_os = "windows") {
-                std::env::var("APPDATA")
-                    .map(std::path::PathBuf::from)
-                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
-            } else {
-                std::env::var("HOME")
-                    .map(|h| std::path::PathBuf::from(h).join(".config"))
-                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
-            };
-            base.join("devnexus").join("key.bin")
-        };
-
-        let data = std::fs::read(&key_path).ok()?;
-        let key = if data.len() == 48 {
-            let mut k = [0u8; 32];
-            k.copy_from_slice(&data[16..]);
-            k
-        } else if data.len() == 32 {
-            let mut k = [0u8; 32];
-            k.copy_from_slice(&data);
-            k
-        } else {
-            return None;
-        };
-
-        // 写入钥匙串
-        if let Some(e) = entry {
-            let encoded = general_purpose::STANDARD.encode(key);
-            if let Err(err) = e.set_password(&encoded) {
-                eprintln!(
-                    "[PasswordManager] Failed to persist master password to keyring: {}",
-                    err
-                );
-            }
-        }
-
-        Some(key)
-    }
-
-    fn try_remove_old_keyfile() {
-        let base = if cfg!(target_os = "macos") {
-            let Ok(home) = std::env::var("HOME") else {
-                return;
-            };
-            std::path::PathBuf::from(home).join("Library/Application Support")
-        } else if cfg!(target_os = "windows") {
-            let Ok(appdata) = std::env::var("APPDATA") else {
-                return;
-            };
-            std::path::PathBuf::from(appdata)
-        } else {
-            let Ok(home) = std::env::var("HOME") else {
-                return;
-            };
-            std::path::PathBuf::from(home).join(".config")
-        };
-        let key_path = base.join("devnexus").join("key.bin");
-        let _ = std::fs::remove_file(key_path);
-    }
-
-    /// 加密数据
-    fn encrypt(&self, data: &str) -> Result<String, String> {
-        let key = self
-            .encryption_key
-            .lock()
-            .map_err(|e| format!("Encryption lock error: {}", e))?;
-        let cipher =
-            Aes256Gcm::new_from_slice(&key[..]).map_err(|e| format!("Encryption error: {}", e))?;
-
-        let nonce_bytes: [u8; 12] = rand::random();
-        let nonce = Nonce::from_slice(&nonce_bytes);
-
-        let ciphertext = cipher
-            .encrypt(nonce, data.as_bytes())
-            .map_err(|e| format!("Encryption error: {}", e))?;
-
-        // 将 nonce 和 ciphertext 组合并 base64 编码
-        let mut combined = nonce_bytes.to_vec();
-        combined.extend_from_slice(&ciphertext);
-
-        Ok(general_purpose::STANDARD.encode(&combined))
-    }
-
-    /// 解密数据
-    fn decrypt(&self, encrypted_data: &str) -> Result<String, String> {
-        let combined = general_purpose::STANDARD
-            .decode(encrypted_data)
-            .map_err(|e| format!("Decoding error: {}", e))?;
-
-        if combined.len() < 12 {
-            return Err("Invalid encrypted data".to_string());
-        }
-
-        let (nonce_bytes, ciphertext) = combined.split_at(12);
-        let nonce = Nonce::from_slice(nonce_bytes);
-
-        let key = self
-            .encryption_key
-            .lock()
-            .map_err(|e| format!("Decryption lock error: {}", e))?;
-        let cipher =
-            Aes256Gcm::new_from_slice(&key[..]).map_err(|e| format!("Decryption error: {}", e))?;
-
-        let plaintext = cipher
-            .decrypt(nonce, ciphertext)
-            .map_err(|e| format!("Decryption error: {}", e))?;
-
-        String::from_utf8(plaintext).map_err(|e| format!("UTF-8 error: {}", e))
-    }
 }
 
 /// 添加密码条目
@@ -331,7 +102,7 @@ pub fn add_password(
     notes: Option<String>,
     state: tauri::State<'_, PasswordManager>,
 ) -> Result<u32, String> {
-    let encrypted = state.encrypt(&password)?;
+    let encrypted = state.crypto.encrypt(&password)?;
 
     let mut next_id = state.next_id.lock().map_err(|e| e.to_string())?;
     let id = *next_id;
@@ -377,7 +148,7 @@ pub fn get_password(id: u32, state: tauri::State<'_, PasswordManager>) -> Result
         .find(|e| e.id == id)
         .ok_or_else(|| "Password entry not found".to_string())?;
 
-    state.decrypt(&entry.password_encrypted)
+    state.crypto.decrypt(&entry.password_encrypted)
 }
 
 /// 删除密码条目
@@ -408,7 +179,7 @@ pub fn update_password(
         entry.username = username;
 
         if let Some(new_password) = password {
-            entry.password_encrypted = state.encrypt(&new_password)?;
+            entry.password_encrypted = state.crypto.encrypt(&new_password)?;
         }
 
         entry.url = url;
@@ -430,7 +201,7 @@ pub fn export_chrome_csv(state: tauri::State<'_, PasswordManager>) -> Result<Str
     let mut csv_content = String::from("name,url,username,password\n");
 
     for entry in entries.iter() {
-        let password = state.decrypt(&entry.password_encrypted)?;
+        let password = state.crypto.decrypt(&entry.password_encrypted)?;
         let url = entry.url.as_deref().unwrap_or("");
 
         // CSV 转义
@@ -541,17 +312,17 @@ mod tests {
     }
 
     /// 用固定密钥构造 PasswordManager，避免测试触碰系统钥匙串/真实数据文件
-    fn test_manager(key: [u8; 32]) -> PasswordManager {
+    fn test_manager() -> PasswordManager {
         PasswordManager {
             entries: Arc::new(Mutex::new(Vec::new())),
             next_id: Arc::new(Mutex::new(1)),
-            encryption_key: Arc::new(Mutex::new(key)),
+            crypto: CryptoVault::for_test(),
         }
     }
 
     #[test]
     fn test_encrypt_decrypt_roundtrip() {
-        let pm = test_manager([0x42; 32]);
+        let pm = test_manager();
         let secrets: Vec<String> = vec![
             "hunter2".to_string(),
             String::new(),
@@ -560,47 +331,51 @@ mod tests {
             "with\nnewline".to_string(),
         ];
         for s in &secrets {
-            let enc = pm.encrypt(s).expect("encrypt");
+            let enc = pm.crypto.encrypt(s).expect("encrypt");
             // 密文不应包含明文
             assert!(!enc.contains(s.as_str()) || s.is_empty());
-            assert_eq!(pm.decrypt(&enc).expect("decrypt"), *s);
+            assert_eq!(pm.crypto.decrypt(&enc).expect("decrypt"), *s);
         }
     }
 
     #[test]
     fn test_encrypt_produces_randomized_nonce() {
-        let pm = test_manager([0x42; 32]);
+        let pm = test_manager();
         // 相同明文两次加密结果不同（随机 nonce）
-        let e1 = pm.encrypt("same-password").unwrap();
-        let e2 = pm.encrypt("same-password").unwrap();
+        let e1 = pm.crypto.encrypt("same-password").unwrap();
+        let e2 = pm.crypto.encrypt("same-password").unwrap();
         assert_ne!(e1, e2);
         // 但都能正确解密
-        assert_eq!(pm.decrypt(&e1).unwrap(), "same-password");
-        assert_eq!(pm.decrypt(&e2).unwrap(), "same-password");
+        assert_eq!(pm.crypto.decrypt(&e1).unwrap(), "same-password");
+        assert_eq!(pm.crypto.decrypt(&e2).unwrap(), "same-password");
     }
 
     #[test]
     fn test_decrypt_wrong_key_fails() {
-        let pm = test_manager([0x42; 32]);
-        let enc = pm.encrypt("secret-data").unwrap();
-        let wrong = test_manager([0x24; 32]);
-        assert!(wrong.decrypt(&enc).is_err());
+        let pm = test_manager();
+        let enc = pm.crypto.encrypt("secret-data").unwrap();
+        let wrong = PasswordManager {
+            entries: Arc::new(Mutex::new(Vec::new())),
+            next_id: Arc::new(Mutex::new(1)),
+            crypto: CryptoVault::for_test_with_key([0x24; 32]),
+        };
+        assert!(wrong.crypto.decrypt(&enc).is_err());
     }
 
     #[test]
     fn test_decrypt_invalid_base64_fails() {
-        let pm = test_manager([0x42; 32]);
-        assert!(pm.decrypt("not-base64!!!").is_err());
-        assert!(pm.decrypt("").is_err());
+        let pm = test_manager();
+        assert!(pm.crypto.decrypt("not-base64!!!").is_err());
+        assert!(pm.crypto.decrypt("").is_err());
     }
 
     #[test]
     fn test_decrypt_truncated_data_fails() {
-        let pm = test_manager([0x42; 32]);
-        let enc = pm.encrypt("x").unwrap();
+        let pm = test_manager();
+        let enc = pm.crypto.encrypt("x").unwrap();
         // 去掉部分字节导致 nonce/密文不完整
         let truncated = &enc[..enc.len() - 4];
-        assert!(pm.decrypt(truncated).is_err());
+        assert!(pm.crypto.decrypt(truncated).is_err());
     }
 
     #[test]
