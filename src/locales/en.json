@@ -746,6 +746,8 @@
     "test_success": "Connected",
     "delete_confirm": "Delete connection {name}?",
     "secret_required": "Credential required — saving overwrites the existing one",
-    "testing": "Testing…"
+    "testing": "Testing…",
+    "term_empty_hint": "Pick a connection below to open a terminal session",
+    "connecting": "Connecting…"
   }
 }

@@ -746,6 +746,8 @@
     "test_success": "连接成功",
     "delete_confirm": "确定删除连接 {name}？",
     "secret_required": "凭据必填：保存会覆盖旧凭据",
-    "testing": "测试中…"
+    "testing": "测试中…",
+    "term_empty_hint": "从下方选择连接，打开终端会话",
+    "connecting": "连接中…"
   }
 }
