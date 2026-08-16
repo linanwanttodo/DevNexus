@@ -57,6 +57,18 @@ const routes = [
     path: "/migration",
     component: () => import("./views/Migration.vue"),
   },
+  {
+    path: "/ssh",
+    component: () => import("./views/SSHConnections.vue"),
+  },
+  {
+    path: "/ssh/sessions",
+    component: () => import("./views/SSHTerminal.vue"),
+  },
+  {
+    path: "/ssh/sftp",
+    component: () => import("./views/SSHSftp.vue"),
+  },
   { path: "/:pathMatch(.*)*", redirect: "/dashboard" },
 ];
 
