@@ -741,6 +741,11 @@
     "empty": "No connections yet",
     "add_hint": "Click the button in the top right to create an SSH connection",
     "disconnected": "Disconnected",
-    "reconnect": "Reconnect"
+    "reconnect": "Reconnect",
+    "save_success": "Saved",
+    "test_success": "Connected",
+    "delete_confirm": "Delete connection {name}?",
+    "secret_required": "Credential required — saving overwrites the existing one",
+    "testing": "Testing…"
   }
 }
