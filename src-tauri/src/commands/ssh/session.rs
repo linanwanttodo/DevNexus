@@ -22,6 +22,12 @@ pub struct PendingKey {
 pub struct SessionEntry {
     pub client: russh::client::Handle<SshHandler>,
     pub connection_id: String,
+    pub terminals: tokio::sync::Mutex<HashMap<String, TerminalHandle>>,
+}
+
+// TerminalHandle 持有可写的 write half（读 half 已移入后台 task）
+pub struct TerminalHandle {
+    pub write: russh::ChannelWriteHalf<russh::client::Msg>,
 }
 
 pub struct SshHandler {
@@ -258,6 +264,7 @@ pub async fn open(
         SessionEntry {
             client,
             connection_id: conn.id.clone(),
+            terminals: tokio::sync::Mutex::new(HashMap::new()),
         },
     );
     Ok(session_id)
