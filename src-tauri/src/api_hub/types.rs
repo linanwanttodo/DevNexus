@@ -44,6 +44,10 @@ pub enum ApiProtocol {
     /// Anthropic Messages（/v1/messages）
     #[serde(rename = "anthropic")]
     Anthropic,
+    /// Google Gemini（路径含模型名 /v1beta/models/{model}:generateContent，
+    /// 实际上游端点由 server 侧按模型生成）
+    #[serde(rename = "gemini")]
+    Gemini,
 }
 
 /// token 用量字段风格
@@ -53,6 +57,8 @@ pub enum TokenScheme {
     PromptCompletion,
     /// input_tokens + output_tokens (Anthropic / OpenAI Responses)
     InputOutput,
+    /// usageMetadata.promptTokenCount + candidatesTokenCount (Gemini)
+    GeminiMetadata,
 }
 
 impl ApiProtocol {
@@ -61,6 +67,7 @@ impl ApiProtocol {
             ApiProtocol::OpenAIChat => "openai_chat",
             ApiProtocol::OpenAIResponses => "openai_responses",
             ApiProtocol::Anthropic => "anthropic",
+            ApiProtocol::Gemini => "gemini",
         }
     }
 
@@ -69,16 +76,20 @@ impl ApiProtocol {
             "openai_chat" => Some(ApiProtocol::OpenAIChat),
             "openai_responses" | "responses" => Some(ApiProtocol::OpenAIResponses),
             "anthropic" => Some(ApiProtocol::Anthropic),
+            "gemini" | "google_gemini" => Some(ApiProtocol::Gemini),
             _ => None,
         }
     }
 
-    /// 上游请求端点（路径部分）
+    /// 上游请求端点（路径部分）。
+    /// Gemini 的真实路径含模型名，此处为占位串，实际由
+    /// server::upstream_endpoint 按模型生成。
     pub fn endpoint(&self) -> &'static str {
         match self {
             ApiProtocol::OpenAIChat => "/v1/chat/completions",
             ApiProtocol::OpenAIResponses => "/v1/responses",
             ApiProtocol::Anthropic => "/v1/messages",
+            ApiProtocol::Gemini => "/v1beta/models/{model}:generateContent",
         }
     }
 
@@ -87,6 +98,7 @@ impl ApiProtocol {
         match self {
             ApiProtocol::OpenAIChat => TokenScheme::PromptCompletion,
             ApiProtocol::OpenAIResponses | ApiProtocol::Anthropic => TokenScheme::InputOutput,
+            ApiProtocol::Gemini => TokenScheme::GeminiMetadata,
         }
     }
 }

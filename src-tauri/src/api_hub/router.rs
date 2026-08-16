@@ -33,6 +33,7 @@ pub async fn route_by_model(state: &AppState, model: &str) -> Option<RouteResult
                 "gpt-", "o1-", "o3-", "o4-", "text-", "dall-e", "tts-", "whisper",
             ],
             ApiProtocol::Anthropic => &["claude-"],
+            ApiProtocol::Gemini => &["gemini-"],
         };
 
         if known_prefixes.iter().any(|prefix| {
