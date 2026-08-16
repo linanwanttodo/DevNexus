@@ -1,6 +1,7 @@
 use crate::commands::ssh::connections::{SshConnection, SshStore};
 use russh::client::Handler;
 use russh::keys::PrivateKeyWithHashAlg;
+use russh_sftp::client::SftpSession;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex};
@@ -23,11 +24,17 @@ pub struct SessionEntry {
     pub client: russh::client::Handle<SshHandler>,
     pub connection_id: String,
     pub terminals: tokio::sync::Mutex<HashMap<String, TerminalHandle>>,
+    pub sftp_sessions: tokio::sync::Mutex<HashMap<String, SftpHandle>>,
 }
 
 // TerminalHandle 持有可写的 write half（读 half 已移入后台 task）
 pub struct TerminalHandle {
     pub write: russh::ChannelWriteHalf<russh::client::Msg>,
+}
+
+// SftpHandle 持有 sftp 会话
+pub struct SftpHandle {
+    pub sftp: SftpSession,
 }
 
 pub struct SshHandler {
@@ -265,6 +272,7 @@ pub async fn open(
             client,
             connection_id: conn.id.clone(),
             terminals: tokio::sync::Mutex::new(HashMap::new()),
+            sftp_sessions: tokio::sync::Mutex::new(HashMap::new()),
         },
     );
     Ok(session_id)
