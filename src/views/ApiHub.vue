@@ -72,6 +72,13 @@ const protocolOptions = computed(() => [
     endpoint: "/v1/messages",
     desc: t("apiHub.protocol.anthropic.desc"),
   },
+  {
+    id: "gemini",
+    label: t("apiHub.protocol.gemini.label"),
+    defaultUrl: "https://generativelanguage.googleapis.com",
+    endpoint: "/v1beta/models/{model}:generateContent",
+    desc: t("apiHub.protocol.gemini.desc"),
+  },
 ]);
 
 let pollTimer = null;

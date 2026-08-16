@@ -13,7 +13,74 @@ pub async fn fetch_models_from_provider(
             fetch_openai_style_models(client, base_url, api_key, false).await
         }
         ApiProtocol::Anthropic => fetch_openai_style_models(client, base_url, api_key, true).await,
+        ApiProtocol::Gemini => fetch_gemini_models(client, base_url, api_key).await,
     }
+}
+
+/// Gemini 模型列表：GET /v1beta/models，models[].name 形如 "models/gemini-2.5-flash"
+async fn fetch_gemini_models(
+    client: &reqwest::Client,
+    base_url: &str,
+    api_key: &str,
+) -> Result<Vec<FetchedModel>, String> {
+    let url = format!(
+        "{}/v1beta/models?pageSize=100",
+        base_url.trim_end_matches('/')
+    );
+    let mut req = client.get(&url);
+    if !api_key.is_empty() {
+        req = req.header("x-goog-api-key", api_key);
+    }
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        let _error = resp.text().await.unwrap_or_default();
+        return Ok(vec![]);
+    }
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let mut models = Vec::new();
+    if let Some(arr) = body.get("models").and_then(|m| m.as_array()) {
+        for item in arr {
+            let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            // 仅保留支持 generateContent 的对话模型，且去掉 "models/" 前缀
+            let methods = item
+                .get("supportedGenerationMethods")
+                .and_then(|m| m.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str())
+                        .any(|s| s == "generateContent")
+                })
+                .unwrap_or(true);
+            if !methods {
+                continue;
+            }
+            let id = name.strip_prefix("models/").unwrap_or(name);
+            if id.is_empty() {
+                continue;
+            }
+            let display = item
+                .get("displayName")
+                .and_then(|d| d.as_str())
+                .unwrap_or(id)
+                .to_string();
+            models.push(FetchedModel {
+                id: id.to_string(),
+                name: display,
+                owned_by: Some("google".to_string()),
+                enabled: true,
+            });
+        }
+    }
+    models.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(models)
 }
 
 /// OpenAI 风格的 /v1/models 端点（OpenAI / Anthropic 兼容）

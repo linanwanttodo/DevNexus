@@ -192,15 +192,15 @@ async fn handle_unified(
         Err(e) => return error_response(400, &e),
     };
 
-    let endpoint = route.provider.protocol.endpoint();
+    let endpoint = upstream_endpoint(&route.provider.protocol, &route.model, is_streaming);
 
     if is_streaming {
-        return handle_streaming(&state, &route, endpoint, upstream_body, client).await;
+        return handle_streaming(&state, &route, &endpoint, upstream_body, client).await;
     }
 
     // 3. 转发到上游
     let (resp_body, _status) =
-        match super::forwarder::forward_request(&state, &route.provider, endpoint, upstream_body)
+        match super::forwarder::forward_request(&state, &route.provider, &endpoint, upstream_body)
             .await
         {
             Ok(r) => r,
@@ -248,6 +248,21 @@ async fn list_models_handler(State(state): State<Arc<AppState>>) -> Json<serde_j
 
 // ── Format conversion ─────────────────────────────────────────
 
+/// 生成上游端点路径。Gemini 的路径含模型名（流式还带 ?alt=sse），
+/// 其余协议沿用 ApiProtocol::endpoint() 的静态路径。
+fn upstream_endpoint(protocol: &ApiProtocol, model: &str, streaming: bool) -> String {
+    match protocol {
+        ApiProtocol::Gemini => {
+            if streaming {
+                format!("/v1beta/models/{model}:streamGenerateContent?alt=sse")
+            } else {
+                format!("/v1beta/models/{model}:generateContent")
+            }
+        }
+        _ => protocol.endpoint().to_string(),
+    }
+}
+
 /// 客户端请求 → 内部 OpenAIChat 格式
 fn client_request_to_internal(
     client: ClientFormat,
@@ -281,6 +296,11 @@ fn internal_request_to_provider(
             let anth = super::transform::anthropic::openai_to_anthropic(&oai);
             serde_json::to_value(anth).map_err(|e| format!("Serialization error: {}", e))
         }
+        ApiProtocol::Gemini => {
+            let oai: super::types::OpenAIChatRequest = serde_json::from_value(internal.clone())
+                .map_err(|e| format!("Invalid OpenAI request: {}", e))?;
+            Ok(super::transform::gemini::openai_to_gemini(&oai))
+        }
     }
 }
 
@@ -301,6 +321,11 @@ fn provider_response_to_internal(
                 super::transform::anthropic::anthropic_to_openai(&anth.id, &route.model, &anth);
             serde_json::to_value(oai).map_err(|e| format!("Serialization error: {}", e))
         }
+        ApiProtocol::Gemini => Ok(super::transform::gemini::gemini_to_openai(
+            &format!("chatcmpl-{}", uuid::Uuid::new_v4().simple()),
+            &route.model,
+            resp,
+        )),
     }
 }
 
@@ -355,7 +380,7 @@ async fn handle_streaming(
 
     if let Some(dir) = direction {
         // Cross-protocol: transform each SSE line
-        let transformed = transform_byte_stream(byte_stream, dir);
+        let transformed = transform_byte_stream(byte_stream, dir, route.model.clone());
         let body = axum::body::Body::from_stream(transformed);
 
         let content_type = match client {
@@ -443,6 +468,17 @@ fn determine_stream_direction(
         // Responses → OpenAI Chat 会让客户端收到 chat.completion.chunk 流，破坏
         // Anthropic 协议契约，因此显式报错而不是静默降级。
         (ApiProtocol::OpenAIResponses, ApiProtocol::Anthropic) => Err(format!(
+            "Streaming conversion {} -> {} is not supported",
+            provider_protocol.as_str(),
+            client_protocol.as_str()
+        )),
+        // Provider is Gemini, Client wants OpenAI Chat
+        (ApiProtocol::Gemini, ApiProtocol::OpenAIChat) => {
+            Ok(Some(StreamDirection::GeminiToOpenAIChat))
+        }
+        // Provider is Gemini, Client wants Anthropic / Responses
+        // 级联转换（Gemini → OpenAI Chat → Anthropic/Responses）未实现，显式报错
+        (ApiProtocol::Gemini, _) => Err(format!(
             "Streaming conversion {} -> {} is not supported",
             provider_protocol.as_str(),
             client_protocol.as_str()
@@ -535,10 +571,16 @@ fn extract_usage_from_sse_line(line: &str, input: &mut u64, output: &mut u64) {
 fn transform_byte_stream(
     byte_stream: impl futures_util::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + 'static,
     direction: StreamDirection,
+    model: String,
 ) -> impl futures_util::Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send + 'static {
     async_stream::stream! {
         use futures_util::StreamExt;
         let mut state = StreamState::default();
+        // Gemini 流式 chunk 不携带模型名/响应 id，预填路由模型与生成 id
+        if direction == StreamDirection::GeminiToOpenAIChat {
+            state.model = model;
+            state.id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
+        }
         let mut buffer = String::new();
         let mut consumed = 0usize; // 已处理字节偏移，避免每次重建剩余缓冲区（O(n²)→O(n)）
 

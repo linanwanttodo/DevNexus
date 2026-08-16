@@ -614,6 +614,10 @@
       "anthropic": {
         "label": "Anthropic Messages",
         "desc": "Нативный формат Claude для Anthropic SDK"
+      },
+      "gemini": {
+        "label": "Google Gemini",
+        "desc": "Нативный формат Gemini, автоконвертация в OpenAI-совместимый вывод"
       }
     },
     "models": {

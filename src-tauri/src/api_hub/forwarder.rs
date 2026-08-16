@@ -155,6 +155,7 @@ fn apply_auth_headers(
         ApiProtocol::Anthropic => req_builder
             .header("x-api-key", &provider.api_key)
             .header("anthropic-version", "2023-06-01"),
+        ApiProtocol::Gemini => req_builder.header("x-goog-api-key", &provider.api_key),
         ApiProtocol::OpenAIChat | ApiProtocol::OpenAIResponses => {
             if !provider.api_key.is_empty() {
                 req_builder.header("Authorization", format!("Bearer {}", provider.api_key))
@@ -246,6 +247,18 @@ fn extract_tokens(resp: &serde_json::Value, protocol: &ApiProtocol) -> (u64, u64
                 .unwrap_or(0);
             let output = usage
                 .and_then(|u| u.get("output_tokens"))
+                .and_then(|t| t.as_u64())
+                .unwrap_or(0);
+            (input, output)
+        }
+        super::types::TokenScheme::GeminiMetadata => {
+            let usage = resp.get("usageMetadata");
+            let input = usage
+                .and_then(|u| u.get("promptTokenCount"))
+                .and_then(|t| t.as_u64())
+                .unwrap_or(0);
+            let output = usage
+                .and_then(|u| u.get("candidatesTokenCount"))
                 .and_then(|t| t.as_u64())
                 .unwrap_or(0);
             (input, output)

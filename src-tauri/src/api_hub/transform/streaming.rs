@@ -16,6 +16,8 @@ pub enum StreamDirection {
     OpenAIChatToResponses,
     /// OpenAI Responses events → OpenAI Chat chunks
     ResponsesToOpenAIChat,
+    /// Gemini SSE chunks（:streamGenerateContent?alt=sse）→ OpenAI Chat chunks
+    GeminiToOpenAIChat,
 }
 
 /// State tracker for multi-event protocol conversions.
@@ -49,6 +51,7 @@ pub fn transform_sse_line(
         StreamDirection::AnthropicToOpenAIChat => anthropic_to_openai_chat(line, state),
         StreamDirection::OpenAIChatToResponses => openai_chat_to_responses(line, state),
         StreamDirection::ResponsesToOpenAIChat => responses_to_openai_chat(line, state),
+        StreamDirection::GeminiToOpenAIChat => gemini_to_openai_chat(line, state),
     }
 }
 
@@ -509,6 +512,27 @@ fn responses_to_openai_chat(line: &str, state: &mut StreamState) -> Vec<String> 
         }
         _ => vec![],
     }
+}
+
+// ── Gemini → OpenAI Chat ─────────────────────────────────────
+
+/// Gemini 流式 chunk 不携带模型名与响应 id，由调用方预填 StreamState
+/// （server::transform_byte_stream 以路由到的模型名与生成的 id 初始化）。
+fn gemini_to_openai_chat(line: &str, state: &mut StreamState) -> Vec<String> {
+    let data = match extract_data_field(line) {
+        Some(d) => d,
+        None => return vec![],
+    };
+    let chunk: Value = match serde_json::from_str(data) {
+        Ok(v) => v,
+        Err(_) => return vec![],
+    };
+    let id = if state.id.is_empty() {
+        "chatcmpl-gemini-stream".to_string()
+    } else {
+        state.id.clone()
+    };
+    super::gemini::gemini_chunk_to_openai_lines(&chunk, &state.model, &id, &mut state.started)
 }
 
 // ── Helpers ──────────────────────────────────────────────────
