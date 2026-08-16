@@ -761,6 +761,8 @@
     "sftp_hint": "Pick a connection and hit Connect to browse remote files",
     "empty_dir": "Empty directory",
     "uploading": "Uploading",
-    "downloading": "Downloading"
+    "downloading": "Downloading",
+    "import_key": "Import from File",
+    "key_file_empty": "Selected file is empty"
   }
 }

@@ -1,6 +1,8 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
+import { open } from "@tauri-apps/plugin-dialog";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import {
   listConnections,
   saveConnection,
@@ -159,6 +161,33 @@ function openTerminal(c) {
   router.push({ path: "/ssh/sessions", query: { open: c.id } });
 }
 
+// 从本地文件导入私钥（~/.ssh/id_ed25519 之类）
+async function importKeyFile() {
+  let path;
+  try {
+    path = await open({
+      multiple: false,
+      directory: false,
+      title: t("ssh.private_key"),
+    });
+  } catch {
+    return; // 对话框失败/取消
+  }
+  if (!path) return;
+  try {
+    const content = await readTextFile(path);
+    if (!content.trim()) {
+      showToast(t("ssh.key_file_empty"), "warning");
+      return;
+    }
+    form.value.secret = content;
+    const name = String(path).split("/").pop();
+    showToast(`${name} ✓`, "success");
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  }
+}
+
 async function onHostkeyAccept() {
   const p = hostkeyPrompt.value;
   hostkeyPrompt.value = null;
@@ -285,9 +314,21 @@ async function onHostkeyReject() {
             </Select>
           </div>
           <div>
-            <Label for="ssh-secret" class="mb-1.5 block">
-              {{ form.auth_type === "private_key" ? t("ssh.private_key") : t("ssh.password") }} *
-            </Label>
+            <div class="mb-1.5 flex items-center justify-between">
+              <Label for="ssh-secret">
+                {{ form.auth_type === "private_key" ? t("ssh.private_key") : t("ssh.password") }} *
+              </Label>
+              <Button
+                v-if="form.auth_type === 'private_key'"
+                variant="ghost"
+                size="sm"
+                class="h-6 gap-1 px-2 text-xs"
+                @click="importKeyFile"
+              >
+                <AppIcon name="folder-open" class="size-3.5" />
+                {{ t("ssh.import_key") }}
+              </Button>
+            </div>
             <Textarea
               v-if="form.auth_type === 'private_key'"
               id="ssh-secret"

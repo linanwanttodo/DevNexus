@@ -5,7 +5,9 @@ use super::provider;
 use super::server::build_router;
 use super::types::{ApiProtocol, AppState, Provider};
 use axum::{
-    response::IntoResponse,
+    extract::Path,
+    http::StatusCode,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -130,11 +132,64 @@ async fn mock_openai_responses(Json(body): Json<serde_json::Value>) -> impl Into
     }))
 }
 
+// ── Gemini mock：验证请求转换形态，返回可断言的响应 ──
+// 路径形如 "mock-gemini:generateContent" / "mock-gemini:streamGenerateContent"
+async fn mock_gemini(
+    Path(model_action): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    if model_action.ends_with(":streamGenerateContent") {
+        let sse = format!(
+            "data: {}\n\ndata: {}\n\n",
+            serde_json::json!({"candidates":[{"content":{"role":"model","parts":[{"text":"Hel"}]}}]}),
+            serde_json::json!({
+                "candidates":[{"content":{"parts":[{"text":"lo"}]},"finishReason":"STOP"}],
+                "usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":3,"totalTokenCount":10}
+            }),
+        );
+        return (
+            [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+            sse,
+        )
+            .into_response();
+    }
+
+    // 非流式：请求形态校验结果编码进返回文本，供 e2e 断言
+    let sys_ok = body
+        .pointer("/systemInstruction/parts/0/text")
+        .and_then(|v| v.as_str())
+        .map(|s| s == "be brief")
+        .unwrap_or(false);
+    let user_ok = body
+        .pointer("/contents/0/parts/0/text")
+        .and_then(|v| v.as_str())
+        .map(|s| s == "hello")
+        .unwrap_or(false);
+    let role_ok = body
+        .pointer("/contents/0/role")
+        .and_then(|v| v.as_str())
+        .map(|s| s == "user")
+        .unwrap_or(false);
+    let text = match (sys_ok, user_ok, role_ok) {
+        (true, true, true) => "hello-from-gemini-mock",
+        _ => "GEMINI_REQUEST_SHAPE_MISMATCH",
+    };
+    Json(serde_json::json!({
+        "candidates": [{
+            "content": {"role": "model", "parts": [{"text": text}]},
+            "finishReason": "STOP"
+        }],
+        "usageMetadata": {"promptTokenCount": 11, "candidatesTokenCount": 4, "totalTokens": 15, "totalTokenCount": 15}
+    }))
+    .into_response()
+}
+
 async fn spawn_mock_upstream() -> (SocketAddr, tokio::task::JoinHandle<()>) {
     let app = Router::new()
         .route("/v1/chat/completions", post(mock_openai_chat))
         .route("/v1/messages", post(mock_anthropic_messages))
         .route("/v1/responses", post(mock_openai_responses))
+        .route("/v1beta/models/*model_action", post(mock_gemini))
         .route("/health", get(|| async { "ok" }));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -169,6 +224,18 @@ fn test_state(upstream: &str) -> AppState {
             base_url: format!("http://{}", upstream),
             api_key: "anth-test".into(),
             models: vec!["mock-claude".into()],
+            model_aliases: Default::default(),
+            model_context_lengths: Default::default(),
+            enabled: true,
+            created_at: 0,
+        },
+        Provider {
+            id: "p-gemini".into(),
+            name: "Mock Gemini".into(),
+            protocol: ApiProtocol::Gemini,
+            base_url: format!("http://{}", upstream),
+            api_key: "gem-test".into(),
+            models: vec!["mock-gemini".into()],
             model_aliases: Default::default(),
             model_context_lengths: Default::default(),
             enabled: true,
@@ -973,4 +1040,118 @@ async fn e2e_concurrent_streaming_requests() {
         "expected exactly {} streaming logs, got {}: {:?}",
         N, streamed, logs
     );
+}
+
+// ── Gemini e2e ───────────────────────────────────────────────
+
+#[tokio::test]
+async fn e2e_openai_client_to_gemini_upstream() {
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let (status, body) = post_json(
+        &format!("http://{}/v1/chat/completions", hub),
+        serde_json::json!({
+            "model": "mock-gemini",
+            "messages": [
+                {"role": "system", "content": "be brief"},
+                {"role": "user", "content": "hello"}
+            ]
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{:?}", body);
+    assert_eq!(body["object"], "chat.completion");
+    assert_eq!(
+        body["choices"][0]["message"]["content"], "hello-from-gemini-mock",
+        "request shape mismatch at Gemini upstream: {:?}",
+        body
+    );
+    assert_eq!(body["choices"][0]["finish_reason"], "stop");
+    assert_eq!(body["usage"]["prompt_tokens"], 11);
+    assert_eq!(body["usage"]["completion_tokens"], 4);
+}
+
+#[tokio::test]
+async fn e2e_gemini_upstream_streaming_to_openai_client() {
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://{}/v1/chat/completions", hub))
+        .header("X-DevNexus-Token", TEST_TOKEN)
+        .json(&serde_json::json!({
+            "model": "mock-gemini",
+            "stream": true,
+            "messages": [{"role": "user", "content": "hello"}]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 200);
+    let ct = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert!(ct.starts_with("text/event-stream"), "content-type: {ct}");
+    let body = resp.text().await.unwrap();
+
+    assert!(body.contains("chat.completion.chunk"), "body: {body}");
+    assert!(body.contains("\"role\":\"assistant\""), "body: {body}");
+    assert!(body.contains("\"content\":\"Hel\""), "body: {body}");
+    assert!(body.contains("\"content\":\"lo\""), "body: {body}");
+    assert!(body.contains("\"finish_reason\":\"stop\""), "body: {body}");
+    assert!(body.contains("\"prompt_tokens\":7"), "body: {body}");
+    assert!(body.contains("\"completion_tokens\":3"), "body: {body}");
+    assert!(body.contains("data: [DONE]"), "body: {body}");
+}
+
+#[tokio::test]
+async fn e2e_gemini_streaming_to_anthropic_client_rejected() {
+    // 级联流式转换（Gemini → OpenAI Chat → Anthropic）未实现：必须显式 422
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://{}/v1/messages", hub))
+        .header("X-DevNexus-Token", TEST_TOKEN)
+        .json(&serde_json::json!({
+            "model": "mock-gemini",
+            "stream": true,
+            "max_tokens": 32,
+            "messages": [{"role": "user", "content": "hello"}]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn e2e_anthropic_client_to_gemini_upstream_nonstream() {
+    // 双层转换：Anthropic 客户端 → 内部 OpenAI → Gemini 上游（非流式）
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let (status, body) = post_json(
+        &format!("http://{}/v1/messages", hub),
+        serde_json::json!({
+            "model": "mock-gemini",
+            "max_tokens": 64,
+            "system": "be brief",
+            "messages": [{"role": "user", "content": "hello"}]
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{:?}", body);
+    assert_eq!(body["type"], "message");
+    assert_eq!(body["content"][0]["text"], "hello-from-gemini-mock");
 }
