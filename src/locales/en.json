@@ -30,7 +30,8 @@
     "migration": "Migration",
     "island": "Dynamic Island",
     "island_on": "Island: On",
-    "island_off": "Island: Off"
+    "island_off": "Island: Off",
+    "ssh": "SSH"
   },
   "settings": {
     "title": "Settings",
@@ -707,5 +708,38 @@
     "ds_hide_key": "Hide API key",
     "not_tauri": "Dynamic Island is only available in the desktop app",
     "not_tauri_desc": "This is the web preview. Use the desktop build for the full experience."
+  },
+  "ssh": {
+    "connections": "Connections",
+    "sessions": "Terminals",
+    "sftp": "Files",
+    "add": "New Connection",
+    "edit": "Edit Connection",
+    "delete": "Delete Connection",
+    "test": "Test Connection",
+    "name": "Name",
+    "host": "Host",
+    "port": "Port",
+    "username": "Username",
+    "auth_type": "Auth Type",
+    "password": "Password",
+    "private_key": "Private Key",
+    "key_passphrase": "Key Passphrase",
+    "connect": "Connect",
+    "hostkey_title": "Confirm server fingerprint",
+    "hostkey_body": "Trust {host} fingerprint {fingerprint}?",
+    "accept": "Trust",
+    "reject": "Cancel",
+    "open_terminal": "Open Terminal",
+    "upload": "Upload",
+    "download": "Download",
+    "refresh": "Refresh",
+    "new_folder": "New Folder",
+    "rename": "Rename",
+    "up": "Parent Directory",
+    "empty": "No connections yet",
+    "add_hint": "Click the button in the top right to create an SSH connection",
+    "disconnected": "Disconnected",
+    "reconnect": "Reconnect"
   }
 }

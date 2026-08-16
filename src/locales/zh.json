@@ -30,7 +30,8 @@
     "migration": "环境迁移",
     "island": "灵动岛",
     "island_on": "灵动岛：开",
-    "island_off": "灵动岛：关"
+    "island_off": "灵动岛：关",
+    "ssh": "SSH"
   },
   "settings": {
     "title": "设置",
@@ -707,5 +708,38 @@
     "ds_hide_key": "隐藏 API Key",
     "not_tauri": "灵动岛仅在桌面应用中可用",
     "not_tauri_desc": "当前为网页预览模式，请使用 Tauri 桌面构建体验完整功能。"
+  },
+  "ssh": {
+    "connections": "连接",
+    "sessions": "终端",
+    "sftp": "文件",
+    "add": "新建连接",
+    "edit": "编辑连接",
+    "delete": "删除连接",
+    "test": "测试连接",
+    "name": "名称",
+    "host": "主机",
+    "port": "端口",
+    "username": "用户名",
+    "auth_type": "认证方式",
+    "password": "密码",
+    "private_key": "私钥",
+    "key_passphrase": "私钥口令",
+    "connect": "连接",
+    "hostkey_title": "确认服务器指纹",
+    "hostkey_body": "是否信任 {host} 的指纹 {fingerprint}？",
+    "accept": "信任",
+    "reject": "取消",
+    "open_terminal": "打开终端",
+    "upload": "上传",
+    "download": "下载",
+    "refresh": "刷新",
+    "new_folder": "新建文件夹",
+    "rename": "重命名",
+    "up": "上级目录",
+    "empty": "暂无连接",
+    "add_hint": "点击右上角新建 SSH 连接",
+    "disconnected": "已断开",
+    "reconnect": "重连"
   }
 }

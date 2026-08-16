@@ -68,6 +68,11 @@ export const iconMap = {
   "code-block": "CodeXml",
   archive: "Archive",
   island: "Pill",
+
+  // SSH 模块
+  server: "Server",
+  list: "List",
+  terminal: "Terminal",
 };
 
 export const FALLBACK_ICON = "CircleAlert";
