@@ -48,6 +48,7 @@ uuid = { version = "1", features = ["v4"] }
 dirs = "5"
 walkdir = "2"
 semver = "1"
+tauri-plugin-fs = "2.5.1"
 
 [target.'cfg(unix)'.dependencies]
 wait-timeout = "0.2"
