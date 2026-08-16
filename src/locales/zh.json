@@ -145,6 +145,7 @@
     "timeout": "超时",
     "use": "使用",
     "refresh": "刷新",
+    "all": "全部",
     "npm": "NPM 仓库",
     "pypi": "PyPI 仓库",
     "docker": "Docker Hub",
