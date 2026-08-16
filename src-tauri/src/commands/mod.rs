@@ -8,6 +8,7 @@ pub mod mirror;
 pub mod password_manager;
 pub mod process_ports;
 pub mod software;
+pub mod ssh;
 pub mod system;
 pub mod tray;
 pub mod updater;
