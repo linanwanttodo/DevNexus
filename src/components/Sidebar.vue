@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
@@ -39,9 +39,39 @@ async function loadResourceUsage() {
   }
 }
 
+// /ports 与 /processes 共用进程页，导航高亮统一落到 /processes
 const active = computed(() =>
   navForPath(route.path === "/ports" ? "/processes" : route.path)
 );
+
+// 上下文模式：null = 主导航列表；否则整个侧边栏切换为该模块的子导航。
+// 点击带子项的模块进入；「返回」按钮退回主导航（仅切换列表，不改变当前页面）。
+const contextNav = ref(null);
+
+// 路由进入带子项模块的页面时自动展开子导航（覆盖刷新、托盘跳转等入口）
+function syncContextFromRoute() {
+  const { nav } = navForPath(route.path === "/ports" ? "/processes" : route.path);
+  contextNav.value = nav?.context ? nav : null;
+}
+watch(() => route.path, syncContextFromRoute);
+syncContextFromRoute();
+
+function handleNavClick(item) {
+  if (item.context) {
+    contextNav.value = item;
+    router.push(item.context.items[0].route);
+  } else {
+    router.push(item.route);
+  }
+}
+
+function handleSubClick(sub) {
+  router.push(sub.route);
+}
+
+function handleBack() {
+  contextNav.value = null;
+}
 
 const cpuPercent = computed(() =>
   resourceUsage.value ? resourceUsage.value.cpu_usage.toFixed(0) : null
@@ -55,14 +85,6 @@ const cpuBar = computed(() =>
 const memBar = computed(() =>
   resourceUsage.value ? Math.min(resourceUsage.value.memory_percent, 100) : 0
 );
-
-function handleNavClick(item) {
-  router.push(item.route);
-}
-
-function handleSubClick(sub) {
-  router.push(sub.route);
-}
 </script>
 
 <template>
@@ -87,39 +109,41 @@ function handleSubClick(sub) {
       <span class="logo-text">DevNexus</span>
     </div>
 
-    <!-- Navigation -->
-    <div class="sidebar-body">
-      <!-- 左：图标轨 -->
-      <nav class="icon-rail" aria-label="Main navigation">
-        <button
-          v-for="item in navItems"
-          :key="item.id"
-          type="button"
-          class="rail-item"
-          :class="{ active: active.nav && active.nav.id === item.id }"
-          :title="t(item.labelKey)"
-          @click="handleNavClick(item)"
-        >
-          <AppIcon :name="item.icon" class="rail-icon" />
-        </button>
-      </nav>
+    <!-- 主导航列表 -->
+    <nav v-if="!contextNav" class="nav-menu">
+      <button
+        v-for="item in navItems"
+        :key="item.id"
+        type="button"
+        class="nav-item"
+        :class="{ active: active.nav && active.nav.id === item.id }"
+        @click="handleNavClick(item)"
+      >
+        <AppIcon :name="item.icon" class="nav-item-icon" />
+        <span>{{ t(item.labelKey) }}</span>
+        <AppIcon v-if="item.context" name="right" class="nav-item-chevron" />
+      </button>
+    </nav>
 
-      <!-- 右：上下文面板 -->
-      <nav v-if="active.nav && active.nav.context" class="context-panel">
-        <div class="context-title">{{ t(active.nav.context.titleKey) }}</div>
-        <button
-          v-for="sub in active.nav.context.items"
-          :key="sub.route"
-          type="button"
-          class="context-item"
-          :class="{ active: active.sub && active.sub.route === sub.route }"
-          @click="handleSubClick(sub)"
-        >
-          <AppIcon :name="sub.icon" class="context-icon" />
-          <span>{{ t(sub.labelKey) }}</span>
-        </button>
-      </nav>
-    </div>
+    <!-- 模块子导航：整体替换主导航，顶部提供返回按钮 -->
+    <nav v-else class="nav-menu" :aria-label="t(contextNav.context.titleKey)">
+      <button type="button" class="nav-item nav-back" @click="handleBack">
+        <AppIcon name="left" class="nav-item-icon" />
+        <span>{{ t("nav.back") }}</span>
+      </button>
+      <div class="context-heading">{{ t(contextNav.context.titleKey) }}</div>
+      <button
+        v-for="sub in contextNav.context.items"
+        :key="sub.route"
+        type="button"
+        class="nav-item"
+        :class="{ active: active.sub && active.sub.route === sub.route }"
+        @click="handleSubClick(sub)"
+      >
+        <AppIcon :name="sub.icon" class="nav-item-icon" />
+        <span>{{ t(sub.labelKey) }}</span>
+      </button>
+    </nav>
 
     <!-- Status Bar -->
     <div v-if="resourceUsage" class="status-bar">
@@ -173,8 +197,7 @@ function handleSubClick(sub) {
 .sidebar {
   display: flex;
   flex-direction: column;
-  width: auto;
-  min-width: 52px;
+  width: 240px;
   flex-shrink: 0;
   height: 100%;
   border-right: 1px solid var(--color-border);
@@ -202,78 +225,22 @@ function handleSubClick(sub) {
   color: var(--color-sidebar-foreground);
 }
 
-.sidebar-body {
-  display: flex;
+.nav-menu {
   flex: 1;
-  min-height: 0;
-}
-
-.icon-rail {
-  width: 52px;
-  flex-shrink: 0;
-  padding: 8px 6px;
+  overflow-y: auto;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  border-right: 1px solid var(--color-border);
-  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.rail-item {
+.nav-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  height: 34px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-sidebar-foreground);
-  opacity: 0.72;
-  cursor: pointer;
-  transition:
-    background-color 0.12s ease,
-    opacity 0.12s ease;
-}
-
-.rail-item:hover {
-  background-color: var(--color-sidebar-accent);
-  opacity: 1;
-}
-
-.rail-item.active {
-  background-color: var(--color-sidebar-accent);
-  opacity: 1;
-}
-
-.rail-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.context-panel {
-  flex: 1;
-  min-width: 0;
-  padding: 10px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow-y: auto;
-}
-
-.context-title {
-  padding: 4px 10px 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-muted-foreground);
-  letter-spacing: 0.02em;
-}
-
-.context-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 6px 10px;
+  padding: 7px 12px;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -287,21 +254,45 @@ function handleSubClick(sub) {
     opacity 0.12s ease;
 }
 
-.context-item:hover {
+.nav-item:hover {
   background-color: var(--color-sidebar-accent);
   opacity: 1;
 }
 
-.context-item.active {
+.nav-item.active {
   background-color: var(--color-sidebar-accent);
+  color: var(--color-sidebar-foreground);
   opacity: 1;
   font-weight: 500;
 }
 
-.context-icon {
-  width: 15px;
-  height: 15px;
+.nav-item-icon {
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
+}
+
+/* 带子项的模块右侧的下钻指示 */
+.nav-item-chevron {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+/* 子导航：返回按钮 + 模块标题 */
+.nav-back {
+  color: var(--color-muted-foreground);
+}
+
+.context-heading {
+  padding: 10px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
 }
 
 .status-bar {

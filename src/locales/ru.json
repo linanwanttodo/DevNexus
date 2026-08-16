@@ -31,7 +31,8 @@
     "island": "Dynamic Island",
     "island_on": "Остров: вкл",
     "island_off": "Остров: выкл",
-    "ssh": "SSH"
+    "ssh": "SSH",
+    "back": "Назад"
   },
   "settings": {
     "title": "Настройки",
