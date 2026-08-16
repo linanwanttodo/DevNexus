@@ -741,6 +741,11 @@
     "empty": "暂无连接",
     "add_hint": "点击右上角新建 SSH 连接",
     "disconnected": "已断开",
-    "reconnect": "重连"
+    "reconnect": "重连",
+    "save_success": "已保存",
+    "test_success": "连接成功",
+    "delete_confirm": "确定删除连接 {name}？",
+    "secret_required": "凭据必填：保存会覆盖旧凭据",
+    "testing": "测试中…"
   }
 }
