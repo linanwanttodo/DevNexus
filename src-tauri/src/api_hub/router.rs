@@ -34,6 +34,8 @@ pub async fn route_by_model(state: &AppState, model: &str) -> Option<RouteResult
             ],
             ApiProtocol::Anthropic => &["claude-"],
             ApiProtocol::Gemini => &["gemini-"],
+            // Ollama 模型名任意（llama3、qwen2.5:7b…），无通用前缀
+            ApiProtocol::Ollama => &[],
         };
 
         if known_prefixes.iter().any(|prefix| {

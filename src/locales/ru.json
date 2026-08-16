@@ -618,6 +618,10 @@
       "gemini": {
         "label": "Google Gemini",
         "desc": "Нативный формат Gemini, автоконвертация в OpenAI-совместимый вывод"
+      },
+      "ollama": {
+        "label": "Ollama",
+        "desc": "Нативный формат локальных моделей, поток NDJSON"
       }
     },
     "models": {

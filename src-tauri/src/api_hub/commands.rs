@@ -94,7 +94,7 @@ pub async fn api_hub_fetch_models(
 ) -> Result<Vec<FetchedModel>, String> {
     let pt = super::types::ApiProtocol::from_protocol_str(&protocol).ok_or_else(|| {
         format!(
-            "Unknown protocol: '{}'. Supported: openai_chat, openai_responses, anthropic, gemini",
+            "Unknown protocol: '{}'. Supported: openai_chat, openai_responses, anthropic, gemini, ollama",
             protocol
         )
     })?;

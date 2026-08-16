@@ -3,7 +3,7 @@
 //! Converts individual SSE `data:` lines between OpenAI Chat, OpenAI Responses,
 //! and Anthropic streaming formats.
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 /// Direction of streaming format conversion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +18,12 @@ pub enum StreamDirection {
     ResponsesToOpenAIChat,
     /// Gemini SSE chunks（:streamGenerateContent?alt=sse）→ OpenAI Chat chunks
     GeminiToOpenAIChat,
+    /// OpenAI Chat chunks → Gemini SSE chunks
+    OpenAIChatToGemini,
+    /// Ollama NDJSON 行 → OpenAI Chat chunks
+    OllamaToOpenAIChat,
+    /// OpenAI Chat chunks → Ollama NDJSON 行
+    OpenAIChatToOllama,
 }
 
 /// State tracker for multi-event protocol conversions.
@@ -52,7 +58,108 @@ pub fn transform_sse_line(
         StreamDirection::OpenAIChatToResponses => openai_chat_to_responses(line, state),
         StreamDirection::ResponsesToOpenAIChat => responses_to_openai_chat(line, state),
         StreamDirection::GeminiToOpenAIChat => gemini_to_openai_chat(line, state),
+        StreamDirection::OpenAIChatToGemini => openai_chat_to_gemini(line, state),
+        StreamDirection::OllamaToOpenAIChat => ollama_to_openai_chat(line, state),
+        StreamDirection::OpenAIChatToOllama => openai_chat_to_ollama(line, state),
     }
+}
+
+// ── OpenAI Chat → Gemini ─────────────────────────────────────
+
+/// OpenAI chunk → Gemini 流式 chunk（SSE data 行）。[DONE] 无对应物，跳过。
+fn openai_chat_to_gemini(line: &str, state: &mut StreamState) -> Vec<String> {
+    let data = match extract_data_field(line) {
+        Some(d) => d,
+        None => return vec![],
+    };
+    if data.is_empty() || data == "[DONE]" {
+        return vec![];
+    }
+    let chunk: Value = match serde_json::from_str(data) {
+        Ok(v) => v,
+        Err(_) => return vec![],
+    };
+    if state.model.is_empty() {
+        state.model = chunk
+            .get("model")
+            .and_then(|m| m.as_str())
+            .unwrap_or("")
+            .to_string();
+    }
+    let mut out = Vec::new();
+
+    // usage 独立 chunk（choices 为空）→ 只带 usageMetadata 的行
+    let usage_meta = chunk
+        .get("usage")
+        .map(|u| {
+            json!({
+                "promptTokenCount": u.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                "candidatesTokenCount": u.get("completion_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                "totalTokenCount": u.get("total_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+            })
+        });
+
+    let choices_empty = chunk
+        .get("choices")
+        .and_then(|c| c.as_array())
+        .map(|a| a.is_empty())
+        .unwrap_or(true);
+    if choices_empty {
+        if let Some(um) = usage_meta {
+            out.push(format!("data: {}", json!({ "usageMetadata": um })));
+            out.push(String::new());
+        }
+        return out;
+    }
+
+    let text = chunk
+        .pointer("/choices/0/delta/content")
+        .and_then(|t| t.as_str())
+        .unwrap_or("");
+    let finish = chunk
+        .pointer("/choices/0/finish_reason")
+        .and_then(|f| f.as_str())
+        .map(|f| match f {
+            "length" => "MAX_TOKENS",
+            "content_filter" => "SAFETY",
+            _ => "STOP",
+        });
+
+    if !text.is_empty() {
+        let g = json!({
+            "candidates": [{
+                "content": { "role": "model", "parts": [{ "text": text }] },
+                "index": 0,
+            }],
+        });
+        out.push(format!("data: {g}"));
+        out.push(String::new());
+    }
+    if let Some(fr) = finish {
+        let mut g = json!({
+            "candidates": [{
+                "content": { "role": "model", "parts": [{}] },
+                "finishReason": fr,
+                "index": 0,
+            }],
+        });
+        if let Some(um) = usage_meta {
+            g["usageMetadata"] = um;
+        }
+        out.push(format!("data: {g}"));
+        out.push(String::new());
+    }
+    out
+}
+
+// ── Ollama ↔ OpenAI Chat ────────────────────────────────────
+
+fn ollama_to_openai_chat(line: &str, state: &mut StreamState) -> Vec<String> {
+    super::ollama::ollama_chunk_to_openai_lines(line, &state.model, &mut state.started)
+}
+
+fn openai_chat_to_ollama(line: &str, state: &mut StreamState) -> Vec<String> {
+    super::ollama::openai_chunk_to_ollama_lines(line, &state.model, &mut state.started)
 }
 
 // ── OpenAI Chat → Anthropic ──────────────────────────────────
@@ -676,5 +783,39 @@ mod tests {
             "message_delta must carry stop_reason, got: {}",
             delta_payloads[0]
         );
+    }
+}
+
+#[cfg(test)]
+mod gemini_dir_tests {
+    use super::*;
+
+    #[test]
+    fn test_openai_to_gemini_stream_chunks() {
+        let mut state = StreamState {
+            model: "mock-gpt".into(),
+            ..Default::default()
+        };
+        let l1 = r#"data: {"id":"c1","object":"chat.completion.chunk","model":"mock-gpt","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}"#;
+        let out1 = transform_sse_line(StreamDirection::OpenAIChatToGemini, l1, &mut state);
+        assert!(out1.is_empty(), "空内容首块不应输出: {out1:?}");
+
+        let l2 = r#"data: {"id":"c1","object":"chat.completion.chunk","model":"mock-gpt","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}"#;
+        let out2 = transform_sse_line(StreamDirection::OpenAIChatToGemini, l2, &mut state);
+        assert!(
+            out2[0].contains("\"parts\":[{\"text\":\"Hello\"}]"),
+            "{out2:?}"
+        );
+
+        let l3 = r#"data: {"id":"c1","object":"chat.completion.chunk","model":"mock-gpt","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#;
+        let out3 = transform_sse_line(StreamDirection::OpenAIChatToGemini, l3, &mut state);
+        assert!(out3[0].contains("\"finishReason\":\"STOP\""), "{out3:?}");
+
+        assert!(transform_sse_line(
+            StreamDirection::OpenAIChatToGemini,
+            "data: [DONE]",
+            &mut state
+        )
+        .is_empty());
     }
 }

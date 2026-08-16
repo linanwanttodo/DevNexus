@@ -156,6 +156,14 @@ fn apply_auth_headers(
             .header("x-api-key", &provider.api_key)
             .header("anthropic-version", "2023-06-01"),
         ApiProtocol::Gemini => req_builder.header("x-goog-api-key", &provider.api_key),
+        // Ollama 本地服务默认无认证；配置了 key 则按 Bearer 透传（兼容网关型部署）
+        ApiProtocol::Ollama => {
+            if provider.api_key.is_empty() {
+                req_builder
+            } else {
+                req_builder.header("Authorization", format!("Bearer {}", provider.api_key))
+            }
+        }
         ApiProtocol::OpenAIChat | ApiProtocol::OpenAIResponses => {
             if !provider.api_key.is_empty() {
                 req_builder.header("Authorization", format!("Bearer {}", provider.api_key))
@@ -249,6 +257,14 @@ fn extract_tokens(resp: &serde_json::Value, protocol: &ApiProtocol) -> (u64, u64
                 .and_then(|u| u.get("output_tokens"))
                 .and_then(|t| t.as_u64())
                 .unwrap_or(0);
+            (input, output)
+        }
+        super::types::TokenScheme::OllamaCounts => {
+            let input = resp
+                .get("prompt_eval_count")
+                .and_then(|t| t.as_u64())
+                .unwrap_or(0);
+            let output = resp.get("eval_count").and_then(|t| t.as_u64()).unwrap_or(0);
             (input, output)
         }
         super::types::TokenScheme::GeminiMetadata => {

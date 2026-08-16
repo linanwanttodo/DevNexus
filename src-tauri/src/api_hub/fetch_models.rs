@@ -14,7 +14,60 @@ pub async fn fetch_models_from_provider(
         }
         ApiProtocol::Anthropic => fetch_openai_style_models(client, base_url, api_key, true).await,
         ApiProtocol::Gemini => fetch_gemini_models(client, base_url, api_key).await,
+        ApiProtocol::Ollama => fetch_ollama_models(client, base_url).await,
     }
+}
+
+/// Ollama 模型列表：GET /api/tags，models[].name 形如 "llama3:8b"（无需认证）
+async fn fetch_ollama_models(
+    client: &reqwest::Client,
+    base_url: &str,
+) -> Result<Vec<FetchedModel>, String> {
+    let url = format!("{}/api/tags", base_url.trim_end_matches('/'));
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+    if !resp.status().is_success() {
+        let _error = resp.text().await.unwrap_or_default();
+        return Ok(vec![]);
+    }
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    let mut models = Vec::new();
+    if let Some(arr) = body.get("models").and_then(|m| m.as_array()) {
+        for item in arr {
+            let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            if name.is_empty() {
+                continue;
+            }
+            let display = item
+                .get("details")
+                .and_then(|d| d.get("family"))
+                .and_then(|f| f.as_str())
+                .unwrap_or(name)
+                .to_string();
+            let size_gb = item.get("size").and_then(|v| v.as_u64()).unwrap_or(0) as f64
+                / 1024.0
+                / 1024.0
+                / 1024.0;
+            let mut m = FetchedModel {
+                id: name.to_string(),
+                name: format!("{display} ({size_gb:.1}GB)"),
+                owned_by: Some("ollama".to_string()),
+                enabled: true,
+            };
+            if size_gb <= 0.0 {
+                m.name = display;
+            }
+            models.push(m);
+        }
+    }
+    models.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(models)
 }
 
 /// Gemini 模型列表：GET /v1beta/models，models[].name 形如 "models/gemini-2.5-flash"

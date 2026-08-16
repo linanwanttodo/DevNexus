@@ -79,6 +79,13 @@ const protocolOptions = computed(() => [
     endpoint: "/v1beta/models/{model}:generateContent",
     desc: t("apiHub.protocol.gemini.desc"),
   },
+  {
+    id: "ollama",
+    label: t("apiHub.protocol.ollama.label"),
+    defaultUrl: "http://localhost:11434",
+    endpoint: "/api/chat",
+    desc: t("apiHub.protocol.ollama.desc"),
+  },
 ]);
 
 let pollTimer = null;
@@ -292,6 +299,8 @@ const endpoints = computed(() =>
         `http://localhost:${status.value.port}/v1/chat/completions`,
         `http://localhost:${status.value.port}/v1/responses`,
         `http://localhost:${status.value.port}/v1/messages`,
+        `http://localhost:${status.value.port}/v1beta/models/{model}:generateContent`,
+        `http://localhost:${status.value.port}/api/chat`,
       ]
     : []
 );
