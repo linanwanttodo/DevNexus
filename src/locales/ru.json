@@ -145,6 +145,7 @@
     "timeout": "Тайм-аут",
     "use": "Исп.",
     "refresh": "Обновить",
+    "all": "Все",
     "npm": "NPM Реестр",
     "pypi": "PyPI",
     "docker": "Docker Hub",

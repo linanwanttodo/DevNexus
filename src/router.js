@@ -20,6 +20,23 @@ const routes = [
     path: "/mirrors",
     component: () => import("./views/MirrorSettings.vue"),
   },
+  // 镜像源子导航：按包管理器过滤（同一页面，路由驱动）
+  {
+    path: "/mirrors/npm",
+    component: () => import("./views/MirrorSettings.vue"),
+  },
+  {
+    path: "/mirrors/pypi",
+    component: () => import("./views/MirrorSettings.vue"),
+  },
+  {
+    path: "/mirrors/docker",
+    component: () => import("./views/MirrorSettings.vue"),
+  },
+  {
+    path: "/mirrors/cargo",
+    component: () => import("./views/MirrorSettings.vue"),
+  },
   {
     path: "/processes",
     component: () => import("./views/ProcessManager.vue"),
@@ -51,6 +68,15 @@ const routes = [
   },
   {
     path: "/api-hub",
+    component: () => import("./views/ApiHub.vue"),
+  },
+  // API Hub 子导航：统计/Provider/日志（同一页面，路由驱动原标签页）
+  {
+    path: "/api-hub/providers",
+    component: () => import("./views/ApiHub.vue"),
+  },
+  {
+    path: "/api-hub/logs",
     component: () => import("./views/ApiHub.vue"),
   },
   {

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
+import { useRoute } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
@@ -22,6 +23,14 @@ import {
 } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+
+const route = useRoute();
+
+// 当前子导航分组（/mirrors/npm → "npm"；/mirrors → null = 全部）
+const routeGroup = computed(() => {
+  const seg = route.path.split("/")[2];
+  return seg || null;
+});
 
 const groups = ref([]);
 const loading = ref(true);
@@ -130,12 +139,15 @@ function getCountryFlag(code) {
 }
 
 const filteredGroups = computed(() =>
-  groups.value.map((g) => ({
-    ...g,
-    mirrors: g.mirrors.filter(
-      (m) => selectedCountry.value === "all" || m.country === selectedCountry.value
-    ),
-  }))
+  groups.value
+    // 侧边栏子导航：/mirrors/npm 之类只显示对应包管理器分组
+    .filter((g) => !routeGroup.value || g.id === routeGroup.value)
+    .map((g) => ({
+      ...g,
+      mirrors: g.mirrors.filter(
+        (m) => selectedCountry.value === "all" || m.country === selectedCountry.value
+      ),
+    }))
 );
 
 function latencyLabel(mirror) {

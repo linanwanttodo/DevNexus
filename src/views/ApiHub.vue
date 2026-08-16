@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { useRoute } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "../lib/toast.js";
 import { showConfirm } from "../lib/confirm.js";
@@ -29,15 +30,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import ProviderForm from "../components/hub/ProviderForm.vue";
 
-const activeTab = ref("stats");
+const route = useRoute();
+
+// 子导航由路由驱动（侧边栏 /api-hub、/api-hub/providers、/api-hub/logs）
+const activeTab = computed(() => {
+  const seg = route.path.split("/")[2];
+  return seg === "providers" || seg === "logs" ? seg : "stats";
+});
 const providers = ref([]);
 const logs = ref([]);
 const stats = ref(null);
@@ -305,12 +307,6 @@ async function copyToken() {
   }
 }
 
-const tabs = computed(() => [
-  { id: "stats", label: t("apiHub.tabs.stats") },
-  { id: "providers", label: t("apiHub.tabs.providers") },
-  { id: "logs", label: t("apiHub.tabs.logs") },
-]);
-
 const metricCards = computed(() =>
   stats.value
     ? [
@@ -410,14 +406,8 @@ const logColumns = computed(() => [
       </CardContent>
     </Card>
 
-    <!-- ════ Tabs ════ -->
-    <Tabs v-model="activeTab" class="apihub-tabs">
-      <TabsList class="mb-4">
-        <TabsTrigger v-for="tab in tabs" :key="tab.id" :value="tab.id">
-          {{ tab.label }}
-        </TabsTrigger>
-      </TabsList>
-
+    <!-- ════ 内容区：子导航由侧边栏路由驱动 ════ -->
+    <Tabs :model-value="activeTab" class="apihub-tabs">
       <!-- ════ STATS ════ -->
       <TabsContent value="stats">
         <Alert v-if="error" variant="destructive" class="mb-4">
