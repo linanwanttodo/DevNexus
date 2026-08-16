@@ -748,6 +748,14 @@
     "secret_required": "凭据必填：保存会覆盖旧凭据",
     "testing": "测试中…",
     "term_empty_hint": "从下方选择连接，打开终端会话",
-    "connecting": "连接中…"
+    "connecting": "连接中…",
+    "size": "大小",
+    "modified": "修改时间",
+    "disconnect": "断开",
+    "not_connected": "未连接",
+    "sftp_hint": "选择连接并点击「连接」，浏览远程文件",
+    "empty_dir": "空目录",
+    "uploading": "上传中",
+    "downloading": "下载中"
   }
 }

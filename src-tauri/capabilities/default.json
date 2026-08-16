@@ -1,7 +1,11 @@
 {
   "identifier": "default",
   "description": "Default capability set for DevNexus",
-  "windows": ["main", "island", "island-*"],
+  "windows": [
+    "main",
+    "island",
+    "island-*"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
@@ -19,13 +23,25 @@
     "core:window:allow-set-skip-taskbar",
     {
       "identifier": "shell:allow-open",
-      "allow": [{ "url": "https://github.com/linanwanttodo/DevNexus/**" }]
+      "allow": [
+        {
+          "url": "https://github.com/linanwanttodo/DevNexus/**"
+        }
+      ]
     },
     "dialog:default",
     "updater:default",
     "updater:allow-check",
     "updater:allow-download-and-install",
     "process:default",
-    "process:allow-restart"
+    "process:allow-restart",
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    }
   ]
 }

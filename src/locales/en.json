@@ -748,6 +748,14 @@
     "secret_required": "Credential required — saving overwrites the existing one",
     "testing": "Testing…",
     "term_empty_hint": "Pick a connection below to open a terminal session",
-    "connecting": "Connecting…"
+    "connecting": "Connecting…",
+    "size": "Size",
+    "modified": "Modified",
+    "disconnect": "Disconnect",
+    "not_connected": "Not connected",
+    "sftp_hint": "Pick a connection and hit Connect to browse remote files",
+    "empty_dir": "Empty directory",
+    "uploading": "Uploading",
+    "downloading": "Downloading"
   }
 }
