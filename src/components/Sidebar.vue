@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import AppIcon from "./AppIcon.vue";
 import { t } from "../lib/i18n.js";
 import { APP_VERSION } from "../lib/version.js";
+import { navItems, navForPath } from "../lib/nav-config.js";
 
 const route = useRoute();
 const router = useRouter();
@@ -38,27 +39,9 @@ async function loadResourceUsage() {
   }
 }
 
-const navItems = [
-  { route: "/dashboard", label: () => t("nav.dashboard"), icon: "dashboard" },
-  { route: "/environments", label: () => t("nav.environments"), icon: "code" },
-  { route: "/migration", label: () => t("nav.migration"), icon: "swap" },
-  { route: "/software", label: () => t("nav.software"), icon: "apps" },
-  { route: "/containers", label: () => t("nav.containers"), icon: "command" },
-  { route: "/mirrors", label: () => t("nav.mirrors"), icon: "sync" },
-  { route: "/processes", label: () => t("nav.processes"), icon: "thunderbolt" },
-  { route: "/passwords", label: () => t("nav.passwords"), icon: "lock" },
-  { route: "/cookies", label: () => t("nav.cookies"), icon: "idcard" },
-  { route: "/uninstall", label: () => t("nav.uninstall"), icon: "delete" },
-  { route: "/api-hub", label: () => t("nav.api_hub"), icon: "branch" },
-  { route: "/island", label: () => t("nav.island"), icon: "island" },
-  { route: "/settings", label: () => t("nav.settings"), icon: "settings" },
-];
-
-const selectedKey = computed(() => {
-  const p = route.path;
-  if (p === "/ports") return "/processes";
-  return p;
-});
+const active = computed(() =>
+  navForPath(route.path === "/ports" ? "/processes" : route.path)
+);
 
 const cpuPercent = computed(() =>
   resourceUsage.value ? resourceUsage.value.cpu_usage.toFixed(0) : null
@@ -73,8 +56,12 @@ const memBar = computed(() =>
   resourceUsage.value ? Math.min(resourceUsage.value.memory_percent, 100) : 0
 );
 
-function handleClick(routePath) {
-  router.push(routePath);
+function handleNavClick(item) {
+  router.push(item.route);
+}
+
+function handleSubClick(sub) {
+  router.push(sub.route);
 }
 </script>
 
@@ -101,19 +88,38 @@ function handleClick(routePath) {
     </div>
 
     <!-- Navigation -->
-    <nav class="nav-menu">
-      <button
-        v-for="item in navItems"
-        :key="item.route"
-        type="button"
-        class="nav-item"
-        :class="{ active: selectedKey === item.route }"
-        @click="handleClick(item.route)"
-      >
-        <AppIcon :name="item.icon" class="nav-item-icon" />
-        <span>{{ item.label() }}</span>
-      </button>
-    </nav>
+    <div class="sidebar-body">
+      <!-- 左：图标轨 -->
+      <nav class="icon-rail" aria-label="Main navigation">
+        <button
+          v-for="item in navItems"
+          :key="item.id"
+          type="button"
+          class="rail-item"
+          :class="{ active: active.nav && active.nav.id === item.id }"
+          :title="t(item.labelKey)"
+          @click="handleNavClick(item)"
+        >
+          <AppIcon :name="item.icon" class="rail-icon" />
+        </button>
+      </nav>
+
+      <!-- 右：上下文面板 -->
+      <nav v-if="active.nav && active.nav.context" class="context-panel">
+        <div class="context-title">{{ t(active.nav.context.titleKey) }}</div>
+        <button
+          v-for="sub in active.nav.context.items"
+          :key="sub.route"
+          type="button"
+          class="context-item"
+          :class="{ active: active.sub && active.sub.route === sub.route }"
+          @click="handleSubClick(sub)"
+        >
+          <AppIcon :name="sub.icon" class="context-icon" />
+          <span>{{ t(sub.labelKey) }}</span>
+        </button>
+      </nav>
+    </div>
 
     <!-- Status Bar -->
     <div v-if="resourceUsage" class="status-bar">
@@ -167,7 +173,8 @@ function handleClick(routePath) {
 .sidebar {
   display: flex;
   flex-direction: column;
-  width: 240px;
+  width: auto;
+  min-width: 52px;
   flex-shrink: 0;
   height: 100%;
   border-right: 1px solid var(--color-border);
@@ -195,22 +202,78 @@ function handleClick(routePath) {
   color: var(--color-sidebar-foreground);
 }
 
-.nav-menu {
+.sidebar-body {
+  display: flex;
   flex: 1;
-  overflow-y: auto;
-  padding: 8px;
+  min-height: 0;
+}
+
+.icon-rail {
+  width: 52px;
+  flex-shrink: 0;
+  padding: 8px 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  overflow-x: hidden;
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
 }
 
-.nav-item {
+.rail-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  height: 34px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-sidebar-foreground);
+  opacity: 0.72;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.rail-item:hover {
+  background-color: var(--color-sidebar-accent);
+  opacity: 1;
+}
+
+.rail-item.active {
+  background-color: var(--color-sidebar-accent);
+  opacity: 1;
+}
+
+.rail-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.context-panel {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.context-title {
+  padding: 4px 10px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+  letter-spacing: 0.02em;
+}
+
+.context-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  padding: 7px 12px;
+  padding: 6px 10px;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -224,21 +287,20 @@ function handleClick(routePath) {
     opacity 0.12s ease;
 }
 
-.nav-item:hover {
+.context-item:hover {
   background-color: var(--color-sidebar-accent);
   opacity: 1;
 }
 
-.nav-item.active {
+.context-item.active {
   background-color: var(--color-sidebar-accent);
-  color: var(--color-sidebar-foreground);
   opacity: 1;
   font-weight: 500;
 }
 
-.nav-item-icon {
-  width: 16px;
-  height: 16px;
+.context-icon {
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
 }
 
