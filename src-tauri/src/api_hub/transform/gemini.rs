@@ -183,6 +183,106 @@ pub fn gemini_chunk_to_openai_lines(
     out
 }
 
+/// Gemini generateContent 请求 → 内部 OpenAIChat 请求（客户端方向）：
+/// contents → messages，systemInstruction → system 消息，generationConfig → 采样参数
+pub fn gemini_to_openai_req(body: &Value) -> Result<OpenAIChatRequest, String> {
+    let contents = body
+        .get("contents")
+        .and_then(|c| c.as_array())
+        .ok_or("Gemini request missing 'contents' array")?;
+    if contents.is_empty() {
+        return Err("Gemini request has empty 'contents'".to_string());
+    }
+
+    let mut messages: Vec<Value> = Vec::new();
+    if let Some(sys) = body
+        .pointer("/systemInstruction/parts")
+        .and_then(|p| p.as_array())
+    {
+        let text: String = sys
+            .iter()
+            .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join("");
+        if !text.is_empty() {
+            messages.push(json!({ "role": "system", "content": text }));
+        }
+    }
+    for c in contents {
+        let role = match c.get("role").and_then(|r| r.as_str()) {
+            Some("model") => "assistant",
+            _ => "user",
+        };
+        let text = c
+            .get("parts")
+            .and_then(|p| p.as_array())
+            .map(|parts| {
+                parts
+                    .iter()
+                    .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
+            .unwrap_or_default();
+        messages.push(json!({ "role": role, "content": text }));
+    }
+
+    let cfg = body.get("generationConfig");
+    let num = |key: &str| -> Option<f32> {
+        cfg.and_then(|o| o.get(key))
+            .and_then(|v| v.as_f64())
+            .map(|v| v as f32)
+    };
+    Ok(OpenAIChatRequest {
+        model: String::new(), // 由 server 用路径中的模型名回填
+        messages: serde_json::from_value(Value::Array(messages))
+            .map_err(|e| format!("Invalid contents: {e}"))?,
+        temperature: num("temperature"),
+        max_tokens: num("maxOutputTokens").map(|v| v as u32),
+        stream: None, // 流式与否由路径（:streamGenerateContent）决定
+        stop: cfg
+            .and_then(|c| c.get("stopSequences"))
+            .and_then(|s| s.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            }),
+        top_p: num("topP"),
+        frequency_penalty: None,
+        presence_penalty: None,
+    })
+}
+
+/// 内部 OpenAIChat 响应 → Gemini generateContent 响应（客户端方向）
+pub fn openai_to_gemini_response(resp: &Value) -> Value {
+    let content = resp
+        .pointer("/choices/0/message/content")
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
+    let finish = match resp
+        .pointer("/choices/0/finish_reason")
+        .and_then(|f| f.as_str())
+    {
+        Some("length") => "MAX_TOKENS",
+        Some("content_filter") => "SAFETY",
+        _ => "STOP",
+    };
+    json!({
+        "candidates": [{
+            "content": { "role": "model", "parts": [{ "text": content }] },
+            "finishReason": finish,
+            "index": 0,
+        }],
+        "usageMetadata": {
+            "promptTokenCount": resp.pointer("/usage/prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+            "candidatesTokenCount": resp.pointer("/usage/completion_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+            "totalTokenCount": resp.pointer("/usage/total_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+        },
+        "modelVersion": resp.get("model").and_then(|m| m.as_str()).unwrap_or(""),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -6,7 +6,6 @@ use super::server::build_router;
 use super::types::{ApiProtocol, AppState, Provider};
 use axum::{
     extract::Path,
-    http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -117,6 +116,29 @@ async fn mock_openai_responses(Json(body): Json<serde_json::Value>) -> impl Into
         .and_then(|m| m.as_str())
         .unwrap_or("mock-resp")
         .to_string();
+
+    // 如果是流式请求，返回 SSE Responses 格式
+    if body
+        .get("stream")
+        .and_then(|s| s.as_bool())
+        .unwrap_or(false)
+    {
+        let sse = format!(
+            "data: {}\n\ndata: {}\n\ndata: {}\n\ndata: {}\n\ndata: {}\n\n",
+            serde_json::json!({"type":"response.created","response":{"id":"resp_sse","model":model,"status":"in_progress"}}),
+            serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","content":[]}}),
+            serde_json::json!({"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"Hello"}),
+            serde_json::json!({"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":" responses"}),
+            serde_json::json!({"type":"response.completed","response":{"id":"resp_sse","model":model,"status":"completed","usage":{"input_tokens":2,"output_tokens":3,"total_tokens":5}}}),
+        );
+        let body = axum::body::Body::from(sse);
+        return axum::response::Response::builder()
+            .header("content-type", "text/event-stream")
+            .body(body)
+            .unwrap()
+            .into_response();
+    }
+
     Json(serde_json::json!({
         "id": "resp_mock",
         "object": "response",
@@ -130,6 +152,59 @@ async fn mock_openai_responses(Json(body): Json<serde_json::Value>) -> impl Into
         }],
         "usage": {"input_tokens": 1, "output_tokens": 2, "total_tokens": 3}
     }))
+    .into_response()
+}
+
+// ── Ollama mock：/api/chat（NDJSON 流式）+ /api/tags ──
+async fn mock_ollama_chat(Json(body): Json<serde_json::Value>) -> Response {
+    let model = body
+        .get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or("mock-llama")
+        .to_string();
+    assert!(
+        body.get("messages").and_then(|m| m.as_array()).is_some(),
+        "ollama mock expected messages field, got {}",
+        body
+    );
+
+    if body
+        .get("stream")
+        .and_then(|s| s.as_bool())
+        .unwrap_or(false)
+    {
+        let ndjson = format!(
+            "{}\n{}\n{}\n",
+            serde_json::json!({"model":model,"message":{"role":"assistant","content":"Hel"},"done":false}),
+            serde_json::json!({"model":model,"message":{"role":"assistant","content":"lo"},"done":false}),
+            serde_json::json!({"model":model,"message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","prompt_eval_count":6,"eval_count":2}),
+        );
+        let body = axum::body::Body::from(ndjson);
+        return axum::response::Response::builder()
+            .header("content-type", "application/x-ndjson")
+            .body(body)
+            .unwrap();
+    }
+
+    Json(serde_json::json!({
+        "model": model,
+        "created_at": "2026-01-01T00:00:00Z",
+        "message": {"role": "assistant", "content": "hello-from-ollama-mock"},
+        "done": true,
+        "prompt_eval_count": 8,
+        "eval_count": 5
+    }))
+    .into_response()
+}
+
+async fn mock_ollama_tags() -> Response {
+    Json(serde_json::json!({
+        "models": [
+            {"name": "mock-llama", "model": "mock-llama", "size": 1024,
+             "details": {"family": "llama", "parameter_size": "8B", "quantization_level": "Q4_0"}}
+        ]
+    }))
+    .into_response()
 }
 
 // ── Gemini mock：验证请求转换形态，返回可断言的响应 ──
@@ -190,6 +265,8 @@ async fn spawn_mock_upstream() -> (SocketAddr, tokio::task::JoinHandle<()>) {
         .route("/v1/messages", post(mock_anthropic_messages))
         .route("/v1/responses", post(mock_openai_responses))
         .route("/v1beta/models/*model_action", post(mock_gemini))
+        .route("/api/chat", post(mock_ollama_chat))
+        .route("/api/tags", get(mock_ollama_tags))
         .route("/health", get(|| async { "ok" }));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -224,6 +301,18 @@ fn test_state(upstream: &str) -> AppState {
             base_url: format!("http://{}", upstream),
             api_key: "anth-test".into(),
             models: vec!["mock-claude".into()],
+            model_aliases: Default::default(),
+            model_context_lengths: Default::default(),
+            enabled: true,
+            created_at: 0,
+        },
+        Provider {
+            id: "p-ollama".into(),
+            name: "Mock Ollama".into(),
+            protocol: ApiProtocol::Ollama,
+            base_url: format!("http://{}", upstream),
+            api_key: String::new(),
+            models: vec!["mock-llama".into()],
             model_aliases: Default::default(),
             model_context_lengths: Default::default(),
             enabled: true,
@@ -595,62 +684,65 @@ async fn e2e_streaming_cross_protocol_openai_to_anthropic() {
 }
 
 #[tokio::test]
-async fn e2e_streaming_cross_protocol_anthropic_to_responses_unsupported() {
-    // 回归测试（C3）：Anthropic 上游 → Responses 客户端 的流式级联转换未实现，
-    // 必须显式返回 422，而不是静默降级成 OpenAI Chat 流（chat.completion.chunk）。
+async fn e2e_streaming_chained_anthropic_to_responses() {
+    // 两段式管线：Anthropic 上游 → 内部 OpenAIChat → Responses 客户端（流式级联）
     let (up_addr, _up) = spawn_mock_upstream().await;
     let state = test_state(&up_addr.to_string());
     let (hub, _h) = spawn_hub(state).await;
 
-    let (status, body) = post_json(
-        &format!("http://{}/v1/responses", hub),
-        serde_json::json!({
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://{}/v1/responses", hub))
+        .header("X-DevNexus-Token", TEST_TOKEN)
+        .json(&serde_json::json!({
             "model": "mock-claude",
             "input": "hi",
             "stream": true
-        }),
-    )
-    .await;
-
-    assert_eq!(status, 422, "expected 422, body: {:?}", body);
-    let msg = body["error"]["message"].as_str().unwrap_or("").to_string();
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 200);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("response.created"), "body: {body}");
+    assert!(body.contains("response.output_text.delta"), "body: {body}");
+    // Anthropic mock 流式输出 "Hello" + " anthropic"
     assert!(
-        msg.contains("is not supported")
-            && msg.contains("anthropic")
-            && msg.contains("openai_responses"),
-        "error message should mention the unsupported conversion, got: {}",
-        msg
+        body.contains("Hello") && body.contains(" anthropic"),
+        "body: {body}"
     );
 }
 
 #[tokio::test]
-async fn e2e_streaming_cross_protocol_responses_to_anthropic_unsupported() {
-    // 回归测试（C3）：Responses 上游 → Anthropic 客户端 的流式级联转换未实现，
-    // 必须显式返回 422，而不是静默降级成 OpenAI Chat 流（chat.completion.chunk）。
+async fn e2e_streaming_chained_responses_to_anthropic() {
+    // 两段式管线：Responses 上游 → 内部 OpenAIChat → Anthropic 客户端（流式级联）
     let (up_addr, _up) = spawn_mock_upstream().await;
     let state = test_state(&up_addr.to_string());
     let (hub, _h) = spawn_hub(state).await;
 
-    let (status, body) = post_json(
-        &format!("http://{}/v1/messages", hub),
-        serde_json::json!({
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://{}/v1/messages", hub))
+        .header("X-DevNexus-Token", TEST_TOKEN)
+        .json(&serde_json::json!({
             "model": "mock-resp",
             "max_tokens": 32,
             "messages": [{"role": "user", "content": "hello"}],
             "stream": true
-        }),
-    )
-    .await;
-
-    assert_eq!(status, 422, "expected 422, body: {:?}", body);
-    let msg = body["error"]["message"].as_str().unwrap_or("").to_string();
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 200);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("message_start"), "body: {body}");
+    assert!(body.contains("content_block_delta"), "body: {body}");
+    // Responses mock 流式输出 "Hello" + " responses"
     assert!(
-        msg.contains("is not supported")
-            && msg.contains("openai_responses")
-            && msg.contains("anthropic"),
-        "error message should mention the unsupported conversion, got: {}",
-        msg
+        body.contains("Hello") && body.contains(" responses"),
+        "body: {body}"
     );
+    assert!(body.contains("message_stop"), "body: {body}");
 }
 
 #[tokio::test]
@@ -1112,8 +1204,8 @@ async fn e2e_gemini_upstream_streaming_to_openai_client() {
 }
 
 #[tokio::test]
-async fn e2e_gemini_streaming_to_anthropic_client_rejected() {
-    // 级联流式转换（Gemini → OpenAI Chat → Anthropic）未实现：必须显式 422
+async fn e2e_gemini_streaming_chained_to_anthropic_client() {
+    // 两段式管线：Gemini 上游 → 内部 OpenAIChat → Anthropic 客户端（流式级联）
     let (up_addr, _up) = spawn_mock_upstream().await;
     let state = test_state(&up_addr.to_string());
     let (hub, _h) = spawn_hub(state).await;
@@ -1131,7 +1223,13 @@ async fn e2e_gemini_streaming_to_anthropic_client_rejected() {
         .send()
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(resp.status().as_u16(), 200);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("message_start"), "body: {body}");
+    assert!(body.contains("content_block_delta"), "body: {body}");
+    // Gemini mock 流输出 "Hel" + "lo"
+    assert!(body.contains("Hel") && body.contains("lo"), "body: {body}");
+    assert!(body.contains("message_stop"), "body: {body}");
 }
 
 #[tokio::test]
@@ -1154,4 +1252,197 @@ async fn e2e_anthropic_client_to_gemini_upstream_nonstream() {
     assert_eq!(status, 200, "{:?}", body);
     assert_eq!(body["type"], "message");
     assert_eq!(body["content"][0]["text"], "hello-from-gemini-mock");
+}
+
+// ── Ollama 客户端端点 e2e ────────────────────────────────────
+
+#[tokio::test]
+async fn e2e_ollama_client_chat_no_auth() {
+    // Ollama 客户端默认不带凭据：/api/chat 免认证（服务仅绑 127.0.0.1）
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("http://{}/api/chat", hub))
+        .json(&serde_json::json!({
+            "model": "mock-gpt",
+            "stream": false,
+            "messages": [{"role": "user", "content": "hello"}]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["done"], true);
+    assert_eq!(body["message"]["role"], "assistant");
+    assert_eq!(body["message"]["content"], "hello-from-openai-mock");
+    assert_eq!(body["prompt_eval_count"], 3);
+    assert_eq!(body["eval_count"], 5);
+}
+
+#[tokio::test]
+async fn e2e_ollama_tags_lists_all_providers() {
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let resp = reqwest::Client::new()
+        .get(format!("http://{}/api/tags", hub))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let names: Vec<&str> = body["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|m| m["name"].as_str())
+        .collect();
+    assert!(names.contains(&"mock-gpt"), "names: {names:?}");
+    assert!(names.contains(&"mock-claude"), "names: {names:?}");
+    assert!(names.contains(&"mock-llama"), "names: {names:?}");
+}
+
+#[tokio::test]
+async fn e2e_ollama_client_streaming_from_openai_upstream() {
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let resp = reqwest::Client::new()
+        .post(format!("http://{}/api/chat", hub))
+        .json(&serde_json::json!({
+            "model": "mock-gpt",
+            "stream": true,
+            "messages": [{"role": "user", "content": "hello"}]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 200);
+    let body = resp.text().await.unwrap();
+    // NDJSON：内容增量 + done 行
+    assert!(body.contains("\"content\":\"Hello\""), "body: {body}");
+    assert!(body.contains("\"content\":\" world\""), "body: {body}");
+    assert!(body.contains("\"done\":true"), "body: {body}");
+    assert!(!body.contains("data:"), "ollama 输出不应是 SSE: {body}");
+}
+
+#[tokio::test]
+async fn e2e_openai_client_to_ollama_upstream() {
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let (status, body) = post_json(
+        &format!("http://{}/v1/chat/completions", hub),
+        serde_json::json!({
+            "model": "mock-llama",
+            "messages": [{"role": "user", "content": "hello"}]
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{:?}", body);
+    assert_eq!(
+        body["choices"][0]["message"]["content"], "hello-from-ollama-mock",
+        "body: {:?}",
+        body
+    );
+    assert_eq!(body["usage"]["prompt_tokens"], 8);
+    assert_eq!(body["usage"]["completion_tokens"], 5);
+}
+
+#[tokio::test]
+async fn e2e_ollama_upstream_streaming_to_openai_client() {
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let resp = reqwest::Client::new()
+        .post(format!("http://{}/v1/chat/completions", hub))
+        .header("X-DevNexus-Token", TEST_TOKEN)
+        .json(&serde_json::json!({
+            "model": "mock-llama",
+            "stream": true,
+            "messages": [{"role": "user", "content": "hello"}]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 200);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("chat.completion.chunk"), "body: {body}");
+    assert!(body.contains("\"content\":\"Hel\""), "body: {body}");
+    assert!(body.contains("\"content\":\"lo\""), "body: {body}");
+    assert!(body.contains("\"prompt_tokens\":6"), "body: {body}");
+    assert!(body.contains("data: [DONE]"), "body: {body}");
+}
+
+// ── Gemini 客户端端点 e2e ────────────────────────────────────
+
+#[tokio::test]
+async fn e2e_gemini_client_endpoint_nonstream() {
+    // Gemini SDK 直连：x-goog-api-key 作为令牌别名；模型名在路径中
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let resp = reqwest::Client::new()
+        .post(format!(
+            "http://{}/v1beta/models/mock-gpt:generateContent",
+            hub
+        ))
+        .header("x-goog-api-key", TEST_TOKEN)
+        .json(&serde_json::json!({
+            "contents": [{"role": "user", "parts": [{"text": "hello"}]}],
+            "systemInstruction": {"parts": [{"text": "be brief"}]}
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(
+        body["candidates"][0]["content"]["parts"][0]["text"], "hello-from-openai-mock",
+        "body: {:?}",
+        body
+    );
+    assert_eq!(body["candidates"][0]["finishReason"], "STOP");
+    assert_eq!(body["usageMetadata"]["promptTokenCount"], 3);
+    assert_eq!(body["usageMetadata"]["candidatesTokenCount"], 5);
+}
+
+#[tokio::test]
+async fn e2e_gemini_client_endpoint_streaming() {
+    let (up_addr, _up) = spawn_mock_upstream().await;
+    let state = test_state(&up_addr.to_string());
+    let (hub, _h) = spawn_hub(state).await;
+
+    let resp = reqwest::Client::new()
+        .post(format!(
+            "http://{}/v1beta/models/mock-gpt:streamGenerateContent?alt=sse",
+            hub
+        ))
+        .header("x-goog-api-key", TEST_TOKEN)
+        .json(&serde_json::json!({
+            "contents": [{"role": "user", "parts": [{"text": "hello"}]}]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status().as_u16(), 200);
+    let body = resp.text().await.unwrap();
+    assert!(
+        body.contains("\"parts\":[{\"text\":\"Hello\"}]"),
+        "body: {body}"
+    );
+    assert!(
+        body.contains("\"parts\":[{\"text\":\" world\"}]"),
+        "body: {body}"
+    );
+    assert!(body.contains("\"finishReason\":\"STOP\""), "body: {body}");
 }

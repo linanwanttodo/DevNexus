@@ -20,6 +20,8 @@ enum ClientFormat {
     OpenAIChat,
     OpenAIResponses,
     Anthropic,
+    Gemini,
+    Ollama,
 }
 
 /// 启动 API Hub HTTP 服务（绑定 localhost:3456）
@@ -64,6 +66,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             HeaderName::from_static("content-type"),
             HeaderName::from_static("authorization"),
             HeaderName::from_static("x-devnexus-token"),
+            HeaderName::from_static("x-goog-api-key"),
         ]);
 
     // 代理端点必须携带访问令牌（H1 安全修复）；/health 保持匿名可探活。
@@ -71,34 +74,60 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/v1/chat/completions", post(chat_completions_handler))
         .route("/v1/responses", post(responses_handler))
         .route("/v1/messages", post(anthropic_messages_handler))
+        .route(
+            "/v1beta/models/:model_action",
+            post(gemini_generate_handler),
+        )
         .route("/v1/models", get(list_models_handler))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_auth,
         ));
 
+    // Ollama 客户端端点：Ollama 生态客户端默认不带凭据，
+    // 服务只绑 127.0.0.1 且 CORS 已白名单化，沿用 Ollama 本身的免认证模型。
+    let ollama_open = Router::new()
+        .route("/api/chat", post(ollama_chat_handler))
+        .route("/api/tags", get(ollama_tags_handler));
+
     Router::new()
         .route("/health", get(health_handler))
         .merge(protected)
+        .merge(ollama_open)
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10 MB
         .layer(cors)
         .with_state(state)
 }
 
-/// 认证中间件：校验 `X-DevNexus-Token` 或 `Authorization: Bearer <token>`。
+/// 认证中间件：校验 `X-DevNexus-Token`、`Authorization: Bearer <token>`，
+/// 并兼容 Gemini 客户端凭据风格（`x-goog-api-key` 头或 `?key=` 查询参数）。
 /// 防止本机任意进程/浏览器页面盗用已配置的 API Key 调用上游（消耗用户额度）。
 async fn require_auth(State(state): State<Arc<AppState>>, req: Request, next: Next) -> Response {
+    let token = state.auth_token.as_str();
     let ok = req
         .headers()
         .get(HeaderName::from_static("x-devnexus-token"))
         .and_then(|v| v.to_str().ok())
-        .map(|v| v == state.auth_token)
+        .map(|v| v == token)
         .or_else(|| {
             req.headers()
                 .get(HeaderName::from_static("authorization"))
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.strip_prefix("Bearer "))
-                .map(|v| v.trim() == state.auth_token)
+                .map(|v| v.trim() == token)
+        })
+        .or_else(|| {
+            req.headers()
+                .get(HeaderName::from_static("x-goog-api-key"))
+                .and_then(|v| v.to_str().ok())
+                .map(|v| v == token)
+        })
+        .or_else(|| {
+            req.uri()
+                .query()
+                .and_then(|q| q.split('&').find(|p| p.strip_prefix("key=").is_some()))
+                .and_then(|p| p.strip_prefix("key="))
+                .map(|v| v == token)
         })
         .unwrap_or(false);
 
@@ -144,6 +173,66 @@ async fn anthropic_messages_handler(
     Json(body): Json<serde_json::Value>,
 ) -> Response {
     handle_unified(state, body, ClientFormat::Anthropic).await
+}
+
+/// Gemini 客户端端点：/v1beta/models/{model}:generateContent（流式为
+/// :streamGenerateContent）。模型名在路径中，注入请求体后走统一管线。
+async fn gemini_generate_handler(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(model_action): axum::extract::Path<String>,
+    Json(mut body): Json<serde_json::Value>,
+) -> Response {
+    let Some((model, action)) = model_action.split_once(':') else {
+        return error_response(
+            404,
+            "Invalid Gemini endpoint, expected /v1beta/models/{model}:generateContent",
+        );
+    };
+    if action != "generateContent" && action != "streamGenerateContent" {
+        return error_response(404, &format!("Unsupported Gemini method: {action}"));
+    }
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("model".into(), serde_json::json!(model));
+        obj.insert(
+            "stream".into(),
+            serde_json::json!(action == "streamGenerateContent"),
+        );
+    }
+    handle_unified(state, body, ClientFormat::Gemini).await
+}
+
+/// Ollama 客户端端点：/api/chat（NDJSON 流式）。
+async fn ollama_chat_handler(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    handle_unified(state, body, ClientFormat::Ollama).await
+}
+
+/// Ollama 模型发现端点：/api/tags，聚合全部启用 Provider 的模型。
+async fn ollama_tags_handler(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let providers = state.providers.read().await;
+    let models: Vec<serde_json::Value> = providers
+        .iter()
+        .filter(|p| p.enabled)
+        .flat_map(|p| {
+            p.models.iter().map(move |m| {
+                serde_json::json!({
+                    "name": m,
+                    "model": m,
+                    "size": 0,
+                    "digest": "",
+                    "modified_at": "",
+                    "details": {
+                        "family": p.protocol.as_str(),
+                        "parameter_size": "",
+                        "quantization_level": "",
+                    },
+                })
+            })
+        })
+        .collect();
+    Json(serde_json::json!({ "models": models }))
 }
 
 /// 统一的请求处理流程：
@@ -277,6 +366,17 @@ fn client_request_to_internal(
             let oai = super::transform::anthropic::anthropic_to_openai_req(&req);
             serde_json::to_value(oai).map_err(|e| format!("Serialization error: {}", e))
         }
+        ClientFormat::Gemini => {
+            let mut req = super::transform::gemini::gemini_to_openai_req(body)?;
+            // 流式与否由路径（:streamGenerateContent）决定，转换器不感知；
+            // gemini_generate_handler 已注入 body.stream，这里带回内部请求
+            req.stream = body.get("stream").and_then(|s| s.as_bool());
+            serde_json::to_value(req).map_err(|e| format!("Serialization error: {}", e))
+        }
+        ClientFormat::Ollama => {
+            let req = super::transform::ollama::ollama_to_openai_req(body)?;
+            serde_json::to_value(req).map_err(|e| format!("Serialization error: {}", e))
+        }
     }
 }
 
@@ -300,6 +400,11 @@ fn internal_request_to_provider(
             let oai: super::types::OpenAIChatRequest = serde_json::from_value(internal.clone())
                 .map_err(|e| format!("Invalid OpenAI request: {}", e))?;
             Ok(super::transform::gemini::openai_to_gemini(&oai))
+        }
+        ApiProtocol::Ollama => {
+            let oai: super::types::OpenAIChatRequest = serde_json::from_value(internal.clone())
+                .map_err(|e| format!("Invalid OpenAI request: {}", e))?;
+            Ok(super::transform::ollama::openai_to_ollama_req(&oai))
         }
     }
 }
@@ -326,6 +431,10 @@ fn provider_response_to_internal(
             &route.model,
             resp,
         )),
+        ApiProtocol::Ollama => Ok(super::transform::ollama::ollama_to_openai(
+            &format!("chatcmpl-{}", uuid::Uuid::new_v4().simple()),
+            resp,
+        )),
     }
 }
 
@@ -342,6 +451,12 @@ fn internal_response_to_client(
         )),
         ClientFormat::Anthropic => Ok(super::transform::anthropic::openai_response_to_anthropic(
             internal, model,
+        )),
+        ClientFormat::Gemini => Ok(super::transform::gemini::openai_to_gemini_response(
+            internal,
+        )),
+        ClientFormat::Ollama => Ok(super::transform::ollama::openai_to_ollama_response(
+            internal,
         )),
     }
 }
@@ -368,19 +483,16 @@ async fn handle_streaming(
         .unwrap_or(axum::http::StatusCode::OK);
     let headers = resp.headers().clone();
 
-    // Determine if we need format conversion
-    // 跨协议流式转换不受支持属于「请求无法处理」→ 422，而非 5xx
-    let direction = match determine_stream_direction(client, route.provider.protocol) {
-        Ok(d) => d,
-        Err(e) => return error_response(422, &e),
-    };
+    // 两段式转换管线：供应商格式 → 内部 OpenAIChat → 客户端格式。
+    // 任一段与内部同格式则该段直通；两段都直通（同协议）则字节级透传。
+    let (dir_in, dir_out) = determine_stream_pipeline(route.provider.protocol, client);
 
     // 在上游字节流上包一层 usage 捕获：流结束后回填 token 用量到日志
     let byte_stream = capture_usage_stream(resp.bytes_stream(), state.clone(), log_id);
 
-    if let Some(dir) = direction {
-        // Cross-protocol: transform each SSE line
-        let transformed = transform_byte_stream(byte_stream, dir, route.model.clone());
+    if dir_in.is_some() || dir_out.is_some() {
+        // Cross-protocol: transform each line through the two-stage pipeline
+        let transformed = transform_byte_stream(byte_stream, dir_in, dir_out, route.model.clone());
         let body = axum::body::Body::from_stream(transformed);
 
         let content_type = match client {
@@ -415,76 +527,42 @@ async fn handle_streaming(
     }
 }
 
-/// Determine if cross-protocol stream conversion is needed.
-/// Returns Ok(None) if same protocol (passthrough), Ok(Some(direction)) if conversion needed,
-/// Err(reason) if the requested cross-protocol streaming conversion is not supported
-/// (explicit error instead of silent degradation).
-fn determine_stream_direction(
-    client: ClientFormat,
+/// 两段式流式管线：返回 (供应商→内部, 内部→客户端) 两个方向。
+/// 任一段为 None 表示该段直通（该侧本身就是内部 OpenAIChat 格式）。
+/// 两侧都 None（同协议）由调用方走字节级透传。
+fn determine_stream_pipeline(
     provider_protocol: ApiProtocol,
-) -> Result<Option<StreamDirection>, String> {
+    client: ClientFormat,
+) -> (Option<StreamDirection>, Option<StreamDirection>) {
     let client_protocol = match client {
         ClientFormat::OpenAIChat => ApiProtocol::OpenAIChat,
         ClientFormat::OpenAIResponses => ApiProtocol::OpenAIResponses,
         ClientFormat::Anthropic => ApiProtocol::Anthropic,
+        ClientFormat::Gemini => ApiProtocol::Gemini,
+        ClientFormat::Ollama => ApiProtocol::Ollama,
     };
 
     if client_protocol == provider_protocol {
-        return Ok(None); // Same protocol, passthrough
+        return (None, None); // 同协议：字节级透传
     }
 
-    // Provider produces in its protocol format; we need to convert to client format.
-    // The stream from provider is in provider_protocol format.
-    // We need to convert it to client_protocol format.
-    // Since our internal format is OpenAI Chat, conversion paths:
-    match (provider_protocol, client_protocol) {
-        // Provider is OpenAI Chat, Client wants Anthropic
-        (ApiProtocol::OpenAIChat, ApiProtocol::Anthropic) => {
-            Ok(Some(StreamDirection::OpenAIChatToAnthropic))
-        }
-        // Provider is OpenAI Chat, Client wants Responses
-        (ApiProtocol::OpenAIChat, ApiProtocol::OpenAIResponses) => {
-            Ok(Some(StreamDirection::OpenAIChatToResponses))
-        }
-        // Provider is Anthropic, Client wants OpenAI Chat
-        (ApiProtocol::Anthropic, ApiProtocol::OpenAIChat) => {
-            Ok(Some(StreamDirection::AnthropicToOpenAIChat))
-        }
-        // Provider is Anthropic, Client wants Responses
-        // 需要的级联转换（Anthropic → OpenAI Chat → Responses）未实现；此前降级为
-        // Anthropic → OpenAI Chat 会让客户端收到 chat.completion.chunk 流，破坏
-        // Responses 协议契约，因此显式报错而不是静默降级。
-        (ApiProtocol::Anthropic, ApiProtocol::OpenAIResponses) => Err(format!(
-            "Streaming conversion {} -> {} is not supported",
-            provider_protocol.as_str(),
-            client_protocol.as_str()
-        )),
-        // Provider is Responses, Client wants OpenAI Chat
-        (ApiProtocol::OpenAIResponses, ApiProtocol::OpenAIChat) => {
-            Ok(Some(StreamDirection::ResponsesToOpenAIChat))
-        }
-        // Provider is Responses, Client wants Anthropic
-        // 需要的级联转换（Responses → OpenAI Chat → Anthropic）未实现；此前降级为
-        // Responses → OpenAI Chat 会让客户端收到 chat.completion.chunk 流，破坏
-        // Anthropic 协议契约，因此显式报错而不是静默降级。
-        (ApiProtocol::OpenAIResponses, ApiProtocol::Anthropic) => Err(format!(
-            "Streaming conversion {} -> {} is not supported",
-            provider_protocol.as_str(),
-            client_protocol.as_str()
-        )),
-        // Provider is Gemini, Client wants OpenAI Chat
-        (ApiProtocol::Gemini, ApiProtocol::OpenAIChat) => {
-            Ok(Some(StreamDirection::GeminiToOpenAIChat))
-        }
-        // Provider is Gemini, Client wants Anthropic / Responses
-        // 级联转换（Gemini → OpenAI Chat → Anthropic/Responses）未实现，显式报错
-        (ApiProtocol::Gemini, _) => Err(format!(
-            "Streaming conversion {} -> {} is not supported",
-            provider_protocol.as_str(),
-            client_protocol.as_str()
-        )),
-        _ => Ok(None),
-    }
+    // 阶段一：供应商流 → 内部 OpenAIChat 流
+    let dir_in = match provider_protocol {
+        ApiProtocol::OpenAIChat => None,
+        ApiProtocol::Anthropic => Some(StreamDirection::AnthropicToOpenAIChat),
+        ApiProtocol::OpenAIResponses => Some(StreamDirection::ResponsesToOpenAIChat),
+        ApiProtocol::Gemini => Some(StreamDirection::GeminiToOpenAIChat),
+        ApiProtocol::Ollama => Some(StreamDirection::OllamaToOpenAIChat),
+    };
+    // 阶段二：内部 OpenAIChat 流 → 客户端格式
+    let dir_out = match client_protocol {
+        ApiProtocol::OpenAIChat => None,
+        ApiProtocol::Anthropic => Some(StreamDirection::OpenAIChatToAnthropic),
+        ApiProtocol::OpenAIResponses => Some(StreamDirection::OpenAIChatToResponses),
+        ApiProtocol::Gemini => Some(StreamDirection::OpenAIChatToGemini),
+        ApiProtocol::Ollama => Some(StreamDirection::OpenAIChatToOllama),
+    };
+    (dir_in, dir_out)
 }
 
 /// 包装上游字节流：数据原样透传，同时扫描 SSE 行提取 usage token 用量，
@@ -529,14 +607,21 @@ fn capture_usage_stream(
     }
 }
 
-/// 从单行 SSE data 中提取 usage 字段（兼容 OpenAI Chat / Responses / Anthropic 三种格式）
+/// 从单行中提取 usage 字段。兼容：
+/// - SSE data: 行（OpenAI Chat / Responses / Anthropic / Gemini）
+/// - 裸 JSON 行（Ollama NDJSON：prompt_eval_count / eval_count）
 fn extract_usage_from_sse_line(line: &str, input: &mut u64, output: &mut u64) {
     let data = match line.strip_prefix("data:") {
         Some(d) => d.trim(),
-        None => return,
+        None => line.trim(),
     };
-    // 快速路径：不含 usage 字样的行直接跳过，避免逐 chunk 反序列化
-    if data.is_empty() || data == "[DONE]" || !data.contains("\"usage\"") {
+    // 快速路径：不含任何用量字段特征的行直接跳过，避免逐 chunk 反序列化
+    if data.is_empty()
+        || data == "[DONE]"
+        || !(data.contains("\"usage\"")
+            || data.contains("usageMetadata")
+            || data.contains("prompt_eval_count"))
+    {
         return;
     }
     let json: serde_json::Value = match serde_json::from_str(data) {
@@ -545,8 +630,17 @@ fn extract_usage_from_sse_line(line: &str, input: &mut u64, output: &mut u64) {
     };
     // usage 可能位于顶层（OpenAI Chat / Anthropic message_delta）、
     // message 下（Anthropic message_start）或 response 下（Responses response.completed）
+    // Ollama：计数在顶层
+    if let Some(v) = json.get("prompt_eval_count").and_then(|v| v.as_u64()) {
+        *input = (*input).max(v);
+    }
+    if let Some(v) = json.get("eval_count").and_then(|v| v.as_u64()) {
+        *output = (*output).max(v);
+    }
+
     let usage = json
         .get("usage")
+        .or_else(|| json.get("usageMetadata"))
         .or_else(|| json.get("message").and_then(|m| m.get("usage")))
         .or_else(|| json.get("response").and_then(|r| r.get("usage")));
     let Some(usage) = usage else { return };
@@ -554,10 +648,12 @@ fn extract_usage_from_sse_line(line: &str, input: &mut u64, output: &mut u64) {
     let in_val = usage
         .get("prompt_tokens")
         .or_else(|| usage.get("input_tokens"))
+        .or_else(|| usage.get("promptTokenCount"))
         .and_then(|v| v.as_u64());
     let out_val = usage
         .get("completion_tokens")
         .or_else(|| usage.get("output_tokens"))
+        .or_else(|| usage.get("candidatesTokenCount"))
         .and_then(|v| v.as_u64());
     if let Some(v) = in_val {
         *input = (*input).max(v);
@@ -567,19 +663,23 @@ fn extract_usage_from_sse_line(line: &str, input: &mut u64, output: &mut u64) {
     }
 }
 
-/// Transform a byte stream using SSE line-by-line conversion.
+/// 两段式行转换流：供应商行先经 dir_in 转为内部 OpenAIChat 行，
+/// 再经 dir_out 转为客户端格式；任一段 None 表示直通该段。
 fn transform_byte_stream(
     byte_stream: impl futures_util::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + 'static,
-    direction: StreamDirection,
+    dir_in: Option<StreamDirection>,
+    dir_out: Option<StreamDirection>,
     model: String,
 ) -> impl futures_util::Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send + 'static {
     async_stream::stream! {
         use futures_util::StreamExt;
-        let mut state = StreamState::default();
-        // Gemini 流式 chunk 不携带模型名/响应 id，预填路由模型与生成 id
-        if direction == StreamDirection::GeminiToOpenAIChat {
-            state.model = model;
-            state.id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
+        let mut state_in = StreamState::default();
+        let mut state_out = StreamState::default();
+        // Gemini/Ollama 流不携带模型名或字段不同，预填路由模型
+        state_in.model = model.clone();
+        state_out.model = model;
+        if dir_in == Some(StreamDirection::GeminiToOpenAIChat) && state_in.id.is_empty() {
+            state_in.id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
         }
         let mut buffer = String::new();
         let mut consumed = 0usize; // 已处理字节偏移，避免每次重建剩余缓冲区（O(n²)→O(n)）
@@ -595,46 +695,51 @@ fn transform_byte_stream(
                 }
             };
 
-            // Append chunk bytes to buffer
             let text = String::from_utf8_lossy(&chunk);
             buffer.push_str(&text);
 
-            // Process complete lines（从已消费偏移处查找换行）
-            while let Some(rel_pos) = buffer[consumed..].find('\n') {
-                let newline_pos = consumed + rel_pos;
-                let line = buffer[consumed..newline_pos].trim_end_matches('\r');
-                consumed = newline_pos + 1;
+            // 按行喂入两段管线
+            while let Some(pos) = buffer.find('\n') {
+                let line: String = buffer[..pos].trim_end_matches('\n').to_string();
+                buffer.drain(..=pos);
+                consumed += pos + 1;
+                let _ = consumed;
 
-                if line.is_empty() {
-                    // Empty line = SSE event separator, skip
-                    continue;
+                // 阶段一：供应商 → 内部（None 直通）
+                let internal_lines: Vec<String> = match dir_in {
+                    Some(d) => transform_sse_line(d, &line, &mut state_in),
+                    None => vec![line],
+                };
+                // 阶段二：内部 → 客户端（None 直通）
+                for l in internal_lines {
+                    let out_lines: Vec<String> = match dir_out {
+                        Some(d) => transform_sse_line(d, &l, &mut state_out),
+                        None => vec![l],
+                    };
+                    for mut ol in out_lines {
+                        ol.push('\n');
+                        yield Ok(bytes::Bytes::from(ol));
+                    }
                 }
-
-                // Skip event: lines (we handle them via data: parsing)
-                if line.starts_with("event:") {
-                    continue;
-                }
-
-                let output_lines = transform_sse_line(direction, line, &mut state);
-                for out_line in output_lines {
-                    let formatted = format!("{}\n", out_line);
-                    yield Ok(bytes::Bytes::from(formatted));
-                }
-            }
-
-            // 丢弃已消费的前缀，避免缓冲区无界增长（每个字节只移动一次，摊还 O(n)）
-            if consumed > 0 {
-                buffer.drain(..consumed);
-                consumed = 0;
             }
         }
 
-        // Process any remaining buffer
-        if !buffer.trim().is_empty() {
-            let output_lines = transform_sse_line(direction, buffer.trim(), &mut state);
-            for out_line in output_lines {
-                let formatted = format!("{}\n", out_line);
-                yield Ok(bytes::Bytes::from(formatted));
+        // 处理最后一行（无换行结尾的残行）
+        let tail = buffer.trim_end_matches('\n').to_string();
+        if !tail.is_empty() {
+            let internal_lines: Vec<String> = match dir_in {
+                Some(d) => transform_sse_line(d, &tail, &mut state_in),
+                None => vec![tail],
+            };
+            for l in internal_lines {
+                let out_lines: Vec<String> = match dir_out {
+                    Some(d) => transform_sse_line(d, &l, &mut state_out),
+                    None => vec![l],
+                };
+                for mut ol in out_lines {
+                    ol.push('\n');
+                    yield Ok(bytes::Bytes::from(ol));
+                }
             }
         }
     }

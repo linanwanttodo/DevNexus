@@ -48,6 +48,9 @@ pub enum ApiProtocol {
     /// 实际上游端点由 server 侧按模型生成）
     #[serde(rename = "gemini")]
     Gemini,
+    /// Ollama 原生 /api/chat（NDJSON 流式）
+    #[serde(rename = "ollama")]
+    Ollama,
 }
 
 /// token 用量字段风格
@@ -59,6 +62,8 @@ pub enum TokenScheme {
     InputOutput,
     /// usageMetadata.promptTokenCount + candidatesTokenCount (Gemini)
     GeminiMetadata,
+    /// prompt_eval_count + eval_count (Ollama)
+    OllamaCounts,
 }
 
 impl ApiProtocol {
@@ -68,6 +73,7 @@ impl ApiProtocol {
             ApiProtocol::OpenAIResponses => "openai_responses",
             ApiProtocol::Anthropic => "anthropic",
             ApiProtocol::Gemini => "gemini",
+            ApiProtocol::Ollama => "ollama",
         }
     }
 
@@ -77,6 +83,7 @@ impl ApiProtocol {
             "openai_responses" | "responses" => Some(ApiProtocol::OpenAIResponses),
             "anthropic" => Some(ApiProtocol::Anthropic),
             "gemini" | "google_gemini" => Some(ApiProtocol::Gemini),
+            "ollama" => Some(ApiProtocol::Ollama),
             _ => None,
         }
     }
@@ -90,6 +97,7 @@ impl ApiProtocol {
             ApiProtocol::OpenAIResponses => "/v1/responses",
             ApiProtocol::Anthropic => "/v1/messages",
             ApiProtocol::Gemini => "/v1beta/models/{model}:generateContent",
+            ApiProtocol::Ollama => "/api/chat",
         }
     }
 
@@ -99,6 +107,7 @@ impl ApiProtocol {
             ApiProtocol::OpenAIChat => TokenScheme::PromptCompletion,
             ApiProtocol::OpenAIResponses | ApiProtocol::Anthropic => TokenScheme::InputOutput,
             ApiProtocol::Gemini => TokenScheme::GeminiMetadata,
+            ApiProtocol::Ollama => TokenScheme::OllamaCounts,
         }
     }
 }

@@ -618,6 +618,10 @@
       "gemini": {
         "label": "Google Gemini",
         "desc": "Native Gemini format, auto-converted to OpenAI-compatible output"
+      },
+      "ollama": {
+        "label": "Ollama",
+        "desc": "Native local-model format, NDJSON streaming"
       }
     },
     "models": {
