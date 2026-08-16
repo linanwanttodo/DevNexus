@@ -47,6 +47,8 @@ pub fn run() {
         .manage(password_manager)
         .manage(version_cache)
         .manage(api_hub_state)
+        .manage(commands::ssh::connections::SshStore::new())
+        .manage(commands::ssh::session::SshSessionManager::new())
         .setup(move |app| {
             // 开发模式下硬刷新一次主窗口，确保显示最新前端代码。
             // 注意：不能调用 clear_all_browsing_data()——它会清空 localStorage，
@@ -284,6 +286,25 @@ pub fn run() {
             commands::password_manager::update_password,
             commands::password_manager::export_chrome_csv,
             commands::password_manager::import_chrome_csv,
+            commands::ssh::connections::ssh_list_connections,
+            commands::ssh::connections::ssh_save_connection,
+            commands::ssh::connections::ssh_delete_connection,
+            commands::ssh::session::ssh_hostkey_accept,
+            commands::ssh::session::ssh_hostkey_reject,
+            commands::ssh::session::ssh_close,
+            commands::ssh::session::ssh_test_connection,
+            commands::ssh::terminal::ssh_terminal_open,
+            commands::ssh::terminal::ssh_terminal_input,
+            commands::ssh::terminal::ssh_terminal_resize,
+            commands::ssh::terminal::ssh_terminal_close,
+            commands::ssh::sftp::ssh_sftp_open,
+            commands::ssh::sftp::ssh_sftp_list_dir,
+            commands::ssh::sftp::ssh_sftp_read_file,
+            commands::ssh::sftp::ssh_sftp_write_file,
+            commands::ssh::sftp::ssh_sftp_mkdir,
+            commands::ssh::sftp::ssh_sftp_rename,
+            commands::ssh::sftp::ssh_sftp_delete,
+            commands::ssh::sftp::ssh_sftp_stat,
             commands::cookie_extractor::get_supported_browsers,
             commands::cookie_extractor::extract_cookies,
             commands::cookie_extractor::export_as_netscape,
