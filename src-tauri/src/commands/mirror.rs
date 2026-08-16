@@ -156,7 +156,12 @@ pub async fn test_mirror_latency(url: String) -> Result<i64, String> {
     };
 
     let status_ok = |s: u16| matches!(s, 200..=299 | 401 | 403 | 405);
-    let latency = match client.get(&url).send().await {
+    // cargo sparse 镜像带 sparse+ 协议前缀，HTTP 探测时剥掉
+    let probe_url = url
+        .strip_prefix("sparse+")
+        .unwrap_or(url.as_str())
+        .to_string();
+    let latency = match client.get(&probe_url).send().await {
         Ok(resp) if status_ok(resp.status().as_u16()) => {
             let ms = start.elapsed().as_millis() as i64;
             if ms <= 0 {
