@@ -23,6 +23,8 @@ import { t, tFormat } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
 import AppIcon from "../components/AppIcon.vue";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +46,7 @@ const route = useRoute();
 const conns = ref([]);
 const tabs = ref([]);
 const activeKey = ref(null);
+const newConnId = ref("");
 const hostkeyPrompt = ref(null);
 
 const els = new Map(); // key -> DOM 容器（v-for 的 ref 回调维护）
@@ -146,12 +149,6 @@ function reconnect(tab) {
   openTab(connectionId);
 }
 
-function statusLabel(status) {
-  if (status === "connecting") return t("ssh.connecting");
-  if (status === "disconnected") return t("ssh.disconnected");
-  return "";
-}
-
 onMounted(async () => {
   unlisteners = [
     await onTerminalOutput(({ sessionId, data }) => {
@@ -226,6 +223,30 @@ async function onHostkeyReject() {
 
 <template>
   <div class="page page-terminal">
+    <!-- 页头：随时可以从右上角开新终端 -->
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">{{ t("ssh.sessions") }}</h1>
+        <p class="page-desc">{{ t("nav.ssh") }}</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <Select v-model="newConnId">
+          <SelectTrigger class="w-[180px]">
+            <SelectValue :placeholder="t('ssh.connections')" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem v-for="c in conns" :key="c.id" :value="c.id">
+              {{ c.name }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <Button :disabled="!newConnId" @click="openTab(newConnId)">
+          <AppIcon name="plus" class="size-4" />
+          {{ t("ssh.open_terminal") }}
+        </Button>
+      </div>
+    </div>
+
     <!-- 标签栏 -->
     <div v-if="tabs.length" class="tabbar">
       <button
@@ -236,10 +257,13 @@ async function onHostkeyReject() {
         :class="{ active: tab.key === activeKey, dead: tab.status === 'disconnected' }"
         @click="activeKey = tab.key"
       >
-        <AppIcon name="terminal" class="tab-icon" />
+        <span v-if="tab.status === 'connecting'" class="tab-spinner">
+          <Spinner class="size-3" />
+        </span>
+        <AppIcon v-else name="terminal" class="tab-icon" />
         <span class="tab-name">{{ tab.name }}</span>
-        <span v-if="tab.status !== 'live'" class="tab-status">
-          {{ statusLabel(tab.status) }}
+        <span v-if="tab.status === 'disconnected'" class="tab-status">
+          {{ t("ssh.disconnected") }}
         </span>
         <span
           v-if="tab.status === 'disconnected'"
@@ -331,37 +355,66 @@ async function onHostkeyReject() {
   overflow-x: auto;
   flex-shrink: 0;
   padding-bottom: 8px;
+  scrollbar-width: thin;
 }
 
 .tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  background-color: var(--color-muted);
+  background-color: transparent;
   color: var(--color-muted-foreground);
   font-size: 12px;
-  padding: 5px 8px 5px 10px;
+  padding: 6px 8px 6px 10px;
   cursor: pointer;
   white-space: nowrap;
   transition:
     background-color 0.12s ease,
-    color 0.12s ease;
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.tab::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 9999px;
+  background-color: transparent;
+  transition: background-color 0.12s ease;
 }
 
 .tab:hover {
-  background-color: var(--color-accent);
+  background-color: var(--color-muted);
+  color: var(--color-foreground);
 }
 
 .tab.active {
+  background-color: var(--color-muted);
+  border-color: var(--color-border);
+  color: var(--color-foreground);
+  font-weight: 500;
+}
+
+.tab.active::before {
   background-color: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-primary-foreground);
 }
 
 .tab.dead {
   opacity: 0.75;
+}
+
+.tab-spinner {
+  display: inline-flex;
+  align-items: center;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
 }
 
 .tab-icon {
@@ -390,6 +443,13 @@ async function onHostkeyReject() {
   height: 16px;
   border-radius: 4px;
   flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.tab:hover .tab-close,
+.tab:hover .tab-reconnect,
+.tab.active .tab-close {
   opacity: 0.7;
 }
 
@@ -404,6 +464,8 @@ async function onHostkeyReject() {
   min-height: 0;
   border-radius: 8px;
   overflow: hidden;
+  border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.25);
   background-color: #1e1e2e;
 }
 

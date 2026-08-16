@@ -761,6 +761,8 @@
     "sftp_hint": "选择连接并点击「连接」，浏览远程文件",
     "empty_dir": "空目录",
     "uploading": "上传中",
-    "downloading": "下载中"
+    "downloading": "下载中",
+    "import_key": "从文件导入",
+    "key_file_empty": "所选文件为空"
   }
 }
