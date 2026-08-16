@@ -31,7 +31,8 @@
     "island": "Dynamic Island",
     "island_on": "Island: On",
     "island_off": "Island: Off",
-    "ssh": "SSH"
+    "ssh": "SSH",
+    "back": "Back"
   },
   "settings": {
     "title": "Settings",

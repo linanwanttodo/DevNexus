@@ -25,10 +25,13 @@ export const navItems = [
   { id: "settings", route: "/settings", icon: "settings", labelKey: "nav.settings" },
 ];
 
-/** 由当前路径推导激活的主导航与上下文子项 */
+/** 由当前路径推导激活的主导航与上下文子项（精确匹配，避免 /ssh* 之类前缀误命中） */
 export function navForPath(path) {
   for (const nav of navItems) {
-    if (path === nav.route || (nav.context && path.startsWith(nav.route))) {
+    const hit =
+      path === nav.route ||
+      (nav.context && nav.context.items.some((i) => i.route === path));
+    if (hit) {
       const sub = nav.context
         ? nav.context.items.find((i) => i.route === path) || null
         : null;
@@ -36,9 +39,4 @@ export function navForPath(path) {
     }
   }
   return { nav: null, sub: null };
-}
-
-/** 取带上下文的导航项（供图标轨点击判断） */
-export function navWithContext(id) {
-  return navItems.find((n) => n.id === id && n.context) || null;
 }

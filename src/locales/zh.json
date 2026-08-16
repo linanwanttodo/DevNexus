@@ -31,7 +31,8 @@
     "island": "灵动岛",
     "island_on": "灵动岛：开",
     "island_off": "灵动岛：关",
-    "ssh": "SSH"
+    "ssh": "SSH",
+    "back": "返回"
   },
   "settings": {
     "title": "设置",
