@@ -348,7 +348,8 @@ onBeforeUnmount(() => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow v-for="record in sorted" :key="record.name">
+              <template v-for="record in sorted" :key="record.name">
+                <TableRow class="proc-row" :class="{ open: expanded.has(record.name) }">
                 <TableCell class="col-name" style="width: 100%">
                   <div class="proc-name-row" @click="toggleExpand(record.name)">
                     <AppIcon
@@ -422,43 +423,45 @@ onBeforeUnmount(() => {
                     {{ t("process.kill_all") }}
                   </Button>
                 </TableCell>
-              </TableRow>
+                </TableRow>
+
+                <!-- 展开的子进程详情：表格内插入行，紧贴所属分组 -->
+                <TableRow v-if="expanded.has(record.name)" class="child-tr">
+                  <TableCell colspan="7" class="child-cell">
+                    <div class="child-panel">
+                      <div v-for="entry in record.entries" :key="entry.pid" class="child-row">
+                        <span class="child-pid">PID {{ entry.pid }}</span>
+                        <span class="child-cpu">{{ entry.cpu_usage.toFixed(1) }}%</span>
+                        <span class="child-mem">{{ formatMemory(entry.memory_bytes) }}</span>
+                        <span class="child-time">{{ formatTime(entry.start_time_secs) }}</span>
+                        <div class="child-actions">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            :disabled="killing === entry.pid"
+                            @click="terminateProcess(entry.pid)"
+                          >
+                            <Spinner v-if="killing === entry.pid" class="size-3.5" />
+                            {{ t("process.kill") }}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            :disabled="killing === entry.pid"
+                            @click="killProcess(entry.pid)"
+                          >
+                            <Spinner v-if="killing === entry.pid" class="size-3.5" />
+                            {{ t("process.kill_force") }}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              </template>
             </TableBody>
           </Table>
         </TooltipProvider>
-
-        <!-- 展开的子进程详情 -->
-        <template v-for="group in sorted" :key="group.name">
-          <div v-if="expanded.has(group.name)" class="child-panel">
-            <div class="child-head">{{ group.name }}</div>
-            <div v-for="entry in group.entries" :key="entry.pid" class="child-row">
-              <span class="child-pid">PID {{ entry.pid }}</span>
-              <span class="child-cpu">{{ entry.cpu_usage.toFixed(1) }}%</span>
-              <span class="child-mem">{{ formatMemory(entry.memory_bytes) }}</span>
-              <span class="child-time">{{ formatTime(entry.start_time_secs) }}</span>
-              <div class="child-actions">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  :disabled="killing === entry.pid"
-                  @click="terminateProcess(entry.pid)"
-                >
-                  <Spinner v-if="killing === entry.pid" class="size-3.5" />
-                  {{ t("process.kill") }}
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  :disabled="killing === entry.pid"
-                  @click="killProcess(entry.pid)"
-                >
-                  <Spinner v-if="killing === entry.pid" class="size-3.5" />
-                  {{ t("process.kill_force") }}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </template>
 
         <!-- 表格底部 -->
         <div class="table-footer">
@@ -507,13 +510,54 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   cursor: pointer;
+  user-select: none;
 }
+
+.proc-name-row:hover .proc-name {
+  color: var(--color-primary);
+}
+
 .chevron {
-  transition: transform 0.2s ease;
+  transition: transform 0.15s ease;
 }
+
 .proc-name {
   font-weight: 500;
   color: var(--color-foreground);
+}
+
+.proc-row.open {
+  background-color: var(--color-muted);
+}
+
+/* 展开详情行：去掉单元格内边距与行边框，整体作为父行的延伸 */
+.child-tr :deep(td) {
+  padding: 0;
+  border-bottom-width: 0;
+  background-color: var(--color-muted);
+}
+
+.child-tr:hover {
+  background-color: transparent;
+}
+
+.child-panel {
+  padding: 4px 16px 10px 40px;
+}
+
+.child-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 5px 0;
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+  font-family: "JetBrains Mono", monospace;
+  border-top: 1px dashed var(--color-border);
+}
+
+.child-row:first-child {
+  border-top: none;
 }
 .num {
   font-family: "JetBrains Mono", monospace;
@@ -542,27 +586,7 @@ onBeforeUnmount(() => {
   color: var(--color-muted-foreground);
   font-size: 12px;
 }
-.child-panel {
-  border-top: 1px solid var(--color-border);
-  background-color: var(--color-muted);
-  padding: 8px 16px;
-}
-.child-head {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-muted-foreground);
-  margin-bottom: 6px;
-}
-.child-row {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 4px 0;
-  font-size: 12px;
-  color: var(--color-muted-foreground);
-  font-family: "JetBrains Mono", monospace;
-}
+
 .child-pid {
   width: 120px;
 }
