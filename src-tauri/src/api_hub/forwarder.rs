@@ -119,8 +119,9 @@ pub async fn forward_streaming(
     let status = resp.status().as_u16();
     if status >= 400 {
         let elapsed = start.elapsed().as_millis() as u64;
-        log_error(state, provider, &model, elapsed, status, None).await;
-        return Err(format!("Upstream error: {}", resp.status()));
+        let error_body = resp.text().await.unwrap_or_default();
+        log_error(state, provider, &model, elapsed, status, Some(&error_body)).await;
+        return Err(format!("Upstream error ({}): {}", status, error_body));
     }
 
     // Log streaming start; token 用量在流结束后由上层通过 update_log_tokens 回填

@@ -1,6 +1,7 @@
 use crate::commands::ssh::connections::SshStore;
-use crate::commands::ssh::session::{open, SessionEntry, SshSessionManager};
+use crate::commands::ssh::session::{open, SessionEntry, SshSessionManager, TerminalHandle};
 use russh::ChannelMsg;
+use std::sync::Arc;
 use tauri::Emitter;
 
 fn b64(data: &[u8]) -> String {
@@ -18,38 +19,37 @@ pub async fn ssh_terminal_open(
     rows: u32,
 ) -> Result<String, String> {
     // 复用已存在的连接会话；否则新建
-    let session_id = {
+    let entry = {
         let sessions = manager.sessions.lock().await;
         sessions
-            .iter()
-            .find(|(_, s)| s.connection_id == connection_id)
-            .map(|(sid, _)| sid.clone())
+            .values()
+            .find(|s| s.connection_id == connection_id)
+            .cloned()
     };
-    let sid = match session_id {
-        Some(id) => {
-            // 该连接已有会话，取它的 client 直接开通道
-            let mut sessions = manager.sessions.lock().await;
-            let entry = sessions.get_mut(&id).ok_or("NO_SESSION")?;
-            open_channel(&app, entry, cols, rows).await?
-        }
+    let entry = match entry {
+        Some(e) => e,
         None => {
             let sid = open(&app, &store, &manager, &connection_id).await?;
-            let mut sessions = manager.sessions.lock().await;
-            let entry = sessions.get_mut(&sid).ok_or("NO_SESSION")?;
-            open_channel(&app, entry, cols, rows).await?
+            manager
+                .sessions
+                .lock()
+                .await
+                .get(&sid)
+                .cloned()
+                .ok_or("NO_SESSION")?
         }
     };
-    Ok(sid)
+    open_channel(&app, entry, cols, rows).await
 }
 
 async fn open_channel(
     app: &tauri::AppHandle,
-    entry: &mut SessionEntry,
+    entry: Arc<SessionEntry>,
     cols: u32,
     rows: u32,
 ) -> Result<String, String> {
-    let channel = entry
-        .client
+    let client = entry.client.lock().await;
+    let channel = client
         .channel_open_session()
         .await
         .map_err(|e| format!("OPEN_FAILED: {e}"))?;
@@ -106,7 +106,9 @@ async fn open_channel(
 
     entry.terminals.lock().await.insert(
         term_id.clone(),
-        crate::commands::ssh::session::TerminalHandle { write: write_half },
+        Arc::new(TerminalHandle {
+            write: tokio::sync::Mutex::new(write_half),
+        }),
     );
     Ok(term_id)
 }
@@ -121,18 +123,15 @@ pub async fn ssh_terminal_input(
     let bytes = general_purpose::STANDARD
         .decode(data.as_bytes())
         .map_err(|e| format!("INVALID_B64: {e}"))?;
-    let sessions = state.sessions.lock().await;
-    for entry in sessions.values() {
-        let terms = entry.terminals.lock().await;
-        if let Some(t) = terms.get(&session_id) {
-            t.write
-                .data_bytes(bytes)
-                .await
-                .map_err(|e| format!("WRITE_FAILED: {e}"))?;
-            return Ok(());
-        }
-    }
-    Err(format!("NO_TERMINAL: {session_id}"))
+    let term = state
+        .find_terminal(&session_id)
+        .await
+        .ok_or_else(|| format!("NO_TERMINAL: {session_id}"))?;
+    let write = term.write.lock().await;
+    write
+        .data_bytes(bytes)
+        .await
+        .map_err(|e| format!("WRITE_FAILED: {e}"))
 }
 
 #[tauri::command]
@@ -142,18 +141,15 @@ pub async fn ssh_terminal_resize(
     cols: u32,
     rows: u32,
 ) -> Result<(), String> {
-    let sessions = state.sessions.lock().await;
-    for entry in sessions.values() {
-        let terms = entry.terminals.lock().await;
-        if let Some(t) = terms.get(&session_id) {
-            t.write
-                .window_change(cols, rows, 0, 0)
-                .await
-                .map_err(|e| format!("RESIZE_FAILED: {e}"))?;
-            return Ok(());
-        }
-    }
-    Err(format!("NO_TERMINAL: {session_id}"))
+    let term = state
+        .find_terminal(&session_id)
+        .await
+        .ok_or_else(|| format!("NO_TERMINAL: {session_id}"))?;
+    let write = term.write.lock().await;
+    write
+        .window_change(cols, rows, 0, 0)
+        .await
+        .map_err(|e| format!("RESIZE_FAILED: {e}"))
 }
 
 #[tauri::command]
@@ -161,14 +157,22 @@ pub async fn ssh_terminal_close(
     state: tauri::State<'_, SshSessionManager>,
     session_id: String,
 ) -> Result<(), String> {
-    let sessions = state.sessions.lock().await;
-    for entry in sessions.values() {
-        let mut terms = entry.terminals.lock().await;
-        if let Some(t) = terms.remove(&session_id) {
-            let _ = t.write.eof().await;
-            let _ = t.write.close().await;
-            return Ok(());
+    // 先在锁内摘除句柄，EOF/close 的网络 I/O 在锁外执行
+    let handle = {
+        let sessions = state.sessions.lock().await;
+        let mut found = None;
+        for entry in sessions.values() {
+            if let Some(t) = entry.terminals.lock().await.remove(&session_id) {
+                found = Some(t);
+                break;
+            }
         }
+        found
+    };
+    if let Some(t) = handle {
+        let write = t.write.lock().await;
+        let _ = write.eof().await;
+        let _ = write.close().await;
     }
     Ok(())
 }

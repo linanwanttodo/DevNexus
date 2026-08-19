@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 
 pub struct SshSessionManager {
-    pub sessions: tokio::sync::Mutex<HashMap<String, SessionEntry>>,
+    pub sessions: tokio::sync::Mutex<HashMap<String, Arc<SessionEntry>>>,
     pub known_hosts: Mutex<HashMap<String, String>>, // host:port -> fingerprint
     pub pending_keys: Mutex<HashMap<String, PendingKey>>, // session_id -> pending server key
 }
@@ -20,21 +20,25 @@ pub struct PendingKey {
     pub approved: bool,
 }
 
+/// 单个 SSH 会话。句柄全部 `Arc` 化，调用方取出句柄后即可释放会话表锁，
+/// 使不同会话（及同会话的终端/SFTP 通道）的远程 I/O 互不阻塞。
+/// `client` 不可 Clone 且 `channel_open_session` 需要 `&mut`，
+/// 仅开通道时短暂持锁；已建立通道的读写不再经过它。
 pub struct SessionEntry {
-    pub client: russh::client::Handle<SshHandler>,
+    pub client: tokio::sync::Mutex<russh::client::Handle<SshHandler>>,
     pub connection_id: String,
-    pub terminals: tokio::sync::Mutex<HashMap<String, TerminalHandle>>,
-    pub sftp_sessions: tokio::sync::Mutex<HashMap<String, SftpHandle>>,
+    pub terminals: tokio::sync::Mutex<HashMap<String, Arc<TerminalHandle>>>,
+    pub sftp_sessions: tokio::sync::Mutex<HashMap<String, Arc<SftpHandle>>>,
 }
 
 // TerminalHandle 持有可写的 write half（读 half 已移入后台 task）
 pub struct TerminalHandle {
-    pub write: russh::ChannelWriteHalf<russh::client::Msg>,
+    pub write: tokio::sync::Mutex<russh::ChannelWriteHalf<russh::client::Msg>>,
 }
 
 // SftpHandle 持有 sftp 会话
 pub struct SftpHandle {
-    pub sftp: SftpSession,
+    pub sftp: tokio::sync::Mutex<SftpSession>,
 }
 
 pub struct SshHandler {
@@ -166,6 +170,30 @@ impl SshSessionManager {
             let _ = save_known_hosts(&kh);
         }
     }
+
+    /// 按 terminal id 取写句柄（取出即释放会话表锁，I/O 不阻塞其他会话）
+    pub async fn find_terminal(&self, term_id: &str) -> Option<Arc<TerminalHandle>> {
+        let sessions = self.sessions.lock().await;
+        for entry in sessions.values() {
+            let terms = entry.terminals.lock().await;
+            if let Some(t) = terms.get(term_id) {
+                return Some(t.clone());
+            }
+        }
+        None
+    }
+
+    /// 按 sftp id 取 SFTP 句柄（取出即释放会话表锁，I/O 不阻塞其他会话）
+    pub async fn find_sftp(&self, sftp_id: &str) -> Option<Arc<SftpHandle>> {
+        let sessions = self.sessions.lock().await;
+        for entry in sessions.values() {
+            let map = entry.sftp_sessions.lock().await;
+            if let Some(h) = map.get(sftp_id) {
+                return Some(h.clone());
+            }
+        }
+        None
+    }
 }
 
 pub async fn open(
@@ -268,12 +296,12 @@ pub async fn open(
     let session_id = uuid::Uuid::new_v4().to_string();
     manager.sessions.lock().await.insert(
         session_id.clone(),
-        SessionEntry {
-            client,
+        Arc::new(SessionEntry {
+            client: tokio::sync::Mutex::new(client),
             connection_id: conn.id.clone(),
             terminals: tokio::sync::Mutex::new(HashMap::new()),
             sftp_sessions: tokio::sync::Mutex::new(HashMap::new()),
-        },
+        }),
     );
     Ok(session_id)
 }

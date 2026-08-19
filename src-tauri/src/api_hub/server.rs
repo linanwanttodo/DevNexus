@@ -108,26 +108,26 @@ async fn require_auth(State(state): State<Arc<AppState>>, req: Request, next: Ne
         .headers()
         .get(HeaderName::from_static("x-devnexus-token"))
         .and_then(|v| v.to_str().ok())
-        .map(|v| v == token)
+        .map(|v| ct_eq(v, token))
         .or_else(|| {
             req.headers()
                 .get(HeaderName::from_static("authorization"))
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.strip_prefix("Bearer "))
-                .map(|v| v.trim() == token)
+                .map(|v| ct_eq(v.trim(), token))
         })
         .or_else(|| {
             req.headers()
                 .get(HeaderName::from_static("x-goog-api-key"))
                 .and_then(|v| v.to_str().ok())
-                .map(|v| v == token)
+                .map(|v| ct_eq(v, token))
         })
         .or_else(|| {
             req.uri()
                 .query()
                 .and_then(|q| q.split('&').find(|p| p.strip_prefix("key=").is_some()))
                 .and_then(|p| p.strip_prefix("key="))
-                .map(|v| v == token)
+                .map(|v| ct_eq(v, token))
         })
         .unwrap_or(false);
 
@@ -495,10 +495,7 @@ async fn handle_streaming(
         let transformed = transform_byte_stream(byte_stream, dir_in, dir_out, route.model.clone());
         let body = axum::body::Body::from_stream(transformed);
 
-        let content_type = match client {
-            ClientFormat::Anthropic => "text/event-stream",
-            _ => "text/event-stream",
-        };
+        let content_type = "text/event-stream";
 
         Response::builder()
             .status(status)
@@ -682,7 +679,6 @@ fn transform_byte_stream(
             state_in.id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
         }
         let mut buffer = String::new();
-        let mut consumed = 0usize; // 已处理字节偏移，避免每次重建剩余缓冲区（O(n²)→O(n)）
 
         futures_util::pin_mut!(byte_stream);
 
@@ -700,10 +696,8 @@ fn transform_byte_stream(
 
             // 按行喂入两段管线
             while let Some(pos) = buffer.find('\n') {
-                let line: String = buffer[..pos].trim_end_matches('\n').to_string();
+                let line: String = buffer[..pos].trim_end_matches(['\r', '\n']).to_string();
                 buffer.drain(..=pos);
-                consumed += pos + 1;
-                let _ = consumed;
 
                 // 阶段一：供应商 → 内部（None 直通）
                 let internal_lines: Vec<String> = match dir_in {
@@ -746,6 +740,13 @@ fn transform_byte_stream(
 }
 
 // ── Helpers ───────────────────────────────────────────────────
+
+/// 常量时间字符串比较，缓解针对本地服务访问令牌的时序侧信道。
+/// 令牌为固定长度且仅本机可见，长度提前返回可接受。
+fn ct_eq(a: &str, b: &str) -> bool {
+    let (ab, bb) = (a.as_bytes(), b.as_bytes());
+    ab.len() == bb.len() && ab.iter().zip(bb).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
 
 fn error_response(status: u16, message: &str) -> Response {
     let body = serde_json::json!({
