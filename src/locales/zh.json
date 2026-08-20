@@ -563,6 +563,7 @@
     "tabs": {
       "stats": "使用统计",
       "providers": "Provider",
+      "endpoints": "端点",
       "logs": "请求日志"
     },
     "gateway": {

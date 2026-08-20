@@ -35,10 +35,10 @@ import ProviderForm from "../components/hub/ProviderForm.vue";
 
 const route = useRoute();
 
-// 子导航由路由驱动（侧边栏 /api-hub、/api-hub/providers、/api-hub/logs）
+// 子导航由路由驱动（侧边栏 /api-hub、/api-hub/providers、/api-hub/endpoints、/api-hub/logs）
 const activeTab = computed(() => {
   const seg = route.path.split("/")[2];
-  return seg === "providers" || seg === "logs" ? seg : "stats";
+  return seg === "providers" || seg === "endpoints" || seg === "logs" ? seg : "stats";
 });
 const providers = ref([]);
 const logs = ref([]);
@@ -231,11 +231,13 @@ function heatmapCells() {
   return cells;
 }
 
-// 每列（周）的周三代表该周，月份变化时在顶部标注
-function heatmapMonths(cells) {
-  const labels = Array(HEATMAP_WEEKS).fill("");
+// 每列（周）的周三代表该周，月份变化时在顶部标注。
+// 数量与列数一一对应（与 heatmap-months 的 gridTemplateColumns 对齐），
+// 超出列数的留空，避免错位。
+function heatmapMonths(cells, cols) {
+  const labels = Array(cols).fill("");
   let prev = "";
-  for (let w = 0; w < HEATMAP_WEEKS; w++) {
+  for (let w = 0; w < cols; w++) {
     const idx = w * 7 + 3;
     if (idx >= cells.length) break;
     const wed = new Date(cells[idx].ms);
@@ -252,7 +254,8 @@ function heatmapMax(cells) {
   return cells.length ? Math.max(...cells.map((c) => c.count), 1) : 1;
 }
 
-// GitHub 式 5 档配色：0 → 底色，其余按量分 4 级
+// GitHub 式 5 档配色：0 → 底色（浅色模式下也可见），其余按量分 4 级。
+// 用 color-mix 在 primary 与 accent 间取色；无数据格子退化为 accent（略深于卡片背景）。
 function heatmapColor(count, max) {
   if (!count) return "var(--color-accent)";
   const pct = count / Math.max(max, 1);
@@ -274,11 +277,12 @@ const heatmapTotal = computed(() => {
 // 一次计算整张热力图：格子、月份标注、最大值
 const heatmap = computed(() => {
   const cells = heatmapCells();
+  const cols = Math.ceil(cells.length / 7);
   return {
     cells,
-    months: heatmapMonths(cells),
+    months: heatmapMonths(cells, cols),
     max: heatmapMax(cells),
-    cols: Math.ceil(cells.length / 7),
+    cols,
   };
 });
 
@@ -375,70 +379,23 @@ const logColumns = computed(() => [
       </div>
     </div>
 
-    <!-- ════ 聚合网关 (Gateway) ════ -->
-    <Card class="gateway-card">
-      <CardContent>
-        <div class="gateway-head">
-          <div class="gateway-title-row">
-            <span class="status-dot" :class="status?.running ? 'on' : 'off'"></span>
-            <h2 class="gateway-title">{{ t("apiHub.gateway.title") }}</h2>
-            <Badge class="bg-primary/10 text-primary">localhost:{{ status?.port }}</Badge>
-            <Badge
-              v-if="status?.running && status?.auth_token"
-              class="bg-success/10 text-success dark:text-success"
-            >
-              {{ t("apiHub.gateway.authEnabled") }}
-            </Badge>
-          </div>
-          <p class="gateway-desc">{{ t("apiHub.gateway.desc") }}</p>
-        </div>
-
-        <div class="endpoint-grid">
-          <button
-            v-for="ep in endpoints"
-            :key="ep"
-            type="button"
-            class="endpoint-btn"
-            :title="t('apiHub.gateway.copyTooltip')"
-            @click="copyEndpoint(ep)"
-          >
-            <AppIcon name="copy" class="endpoint-icon size-4" />
-            <span class="endpoint-text">{{ ep }}</span>
-          </button>
-        </div>
-
-        <!-- Auth token display -->
-        <div v-if="status?.running && status?.auth_token" class="token-row">
-          <div class="token-info">
-            <AppIcon name="lock" class="token-icon size-4" />
-            <span class="token-label">X-DevNexus-Token</span>
-            <code class="token-value">{{ status.auth_token }}</code>
-          </div>
-          <Button size="sm" variant="outline" @click="copyToken">
-            <AppIcon name="copy" class="size-3.5" />
-            {{ t("apiHub.gateway.copyTooltip") }}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-
     <!-- ════ 内容区：子导航由侧边栏路由驱动 ════ -->
     <Tabs :model-value="activeTab" class="apihub-tabs">
       <!-- ════ STATS ════ -->
       <TabsContent value="stats">
-        <Alert v-if="error" variant="destructive" class="mb-4">
-          <AppIcon name="close-circle-fill" class="size-4" />
-          <AlertTitle>{{ t("error.title") }}</AlertTitle>
-          <AlertDescription>{{ error }}</AlertDescription>
-        </Alert>
+          <Alert v-if="error" variant="destructive" class="mb-4">
+            <AppIcon name="close-circle-fill" class="size-4" />
+            <AlertTitle>{{ t("error.title") }}</AlertTitle>
+            <AlertDescription>{{ error }}</AlertDescription>
+          </Alert>
 
-        <div v-if="loading && !providers.length" class="loading-block">
-          <div class="space-y-3 py-2">
-            <Skeleton v-for="i in 6" :key="i" class="h-4 w-full" />
+          <div v-if="loading && !providers.length" class="loading-block">
+            <div class="space-y-3 py-2">
+              <Skeleton v-for="i in 6" :key="i" class="h-4 w-full" />
+            </div>
           </div>
-        </div>
 
-        <template v-else-if="stats">
+          <template v-else-if="stats">
           <!-- Metric cards -->
           <div class="mb-3 grid grid-cols-2 gap-4 lg:grid-cols-4">
             <Card v-for="card in metricCards" :key="card.label" class="metric-card">
@@ -475,43 +432,38 @@ const logColumns = computed(() => [
                 <p class="heatmap-summary">
                   {{ tFormat("apiHub.heatmap.summary", { count: heatmapTotal }) }}
                 </p>
-                <div class="heatmap-wrap">
-                  <!-- 左列：星期标签 -->
-                  <div class="heatmap-days">
-                    <span class="heatmap-day-label"></span>
-                    <span class="heatmap-day-label">Mon</span>
-                    <span class="heatmap-day-label"></span>
-                    <span class="heatmap-day-label">Wed</span>
-                    <span class="heatmap-day-label"></span>
-                    <span class="heatmap-day-label">Fri</span>
-                    <span class="heatmap-day-label"></span>
+              </template>
+              <div class="heatmap-wrap">
+                <!-- 左列：星期标签 -->
+                <div class="heatmap-days">
+                  <span class="heatmap-day-label"></span>
+                  <span class="heatmap-day-label">Mon</span>
+                  <span class="heatmap-day-label"></span>
+                  <span class="heatmap-day-label">Wed</span>
+                  <span class="heatmap-day-label"></span>
+                  <span class="heatmap-day-label">Fri</span>
+                  <span class="heatmap-day-label"></span>
+                </div>
+                <div class="heatmap-body">
+                  <div
+                    class="heatmap-months"
+                    :style="{ gridTemplateColumns: `repeat(${heatmap.cols}, 12px)` }"
+                  >
+                    <span v-for="(m, i) in heatmap.months" :key="i" class="heatmap-month">
+                      {{ m }}
+                    </span>
                   </div>
-                  <div class="heatmap-body">
-                    <div class="heatmap-months" :style="{ gridTemplateColumns: `repeat(${heatmap.cols}, 12px)` }">
-                      <span v-for="(m, i) in heatmap.months" :key="i" class="heatmap-month">
-                        {{ m }}
-                      </span>
-                    </div>
-                    <div class="heatmap-grid">
-                      <div
-                        v-for="cell in heatmap.cells"
-                        :key="cell.ms"
-                        class="heatmap-cell"
-                        :style="{ background: heatmapColor(cell.count, heatmap.max) }"
-                        :title="heatmapTooltip(cell)"
-                      ></div>
-                    </div>
+                  <div class="heatmap-grid">
+                    <div
+                      v-for="cell in heatmap.cells"
+                      :key="cell.ms"
+                      class="heatmap-cell"
+                      :style="{ background: heatmapColor(cell.count, heatmap.max) }"
+                      :title="heatmapTooltip(cell)"
+                    ></div>
                   </div>
                 </div>
-              </template>
-              <Empty v-else class="py-4">
-                <EmptyMedia>
-                  <AppIcon name="bar-chart" class="logs-empty-icon size-5" />
-                </EmptyMedia>
-                <EmptyContent>
-                  <EmptyDescription>{{ t("apiHub.empty.noData") }}</EmptyDescription>
-                </EmptyContent>
-              </Empty>
+              </div>
             </CardContent>
           </Card>
 
@@ -656,6 +608,55 @@ const logColumns = computed(() => [
         </Card>
       </TabsContent>
 
+      <!-- ════ ENDPOINTS ════ -->
+      <TabsContent value="endpoints">
+        <Card class="gateway-card">
+          <CardContent>
+            <div class="gateway-head">
+              <div class="gateway-title-row">
+                <span class="status-dot" :class="status?.running ? 'on' : 'off'"></span>
+                <h2 class="gateway-title">{{ t("apiHub.gateway.title") }}</h2>
+                <Badge class="bg-primary/10 text-primary">localhost:{{ status?.port }}</Badge>
+                <Badge
+                  v-if="status?.running && status?.auth_token"
+                  class="bg-success/10 text-success dark:text-success"
+                >
+                  {{ t("apiHub.gateway.authEnabled") }}
+                </Badge>
+              </div>
+              <p class="gateway-desc">{{ t("apiHub.gateway.desc") }}</p>
+            </div>
+
+            <div class="endpoint-grid">
+              <button
+                v-for="ep in endpoints"
+                :key="ep"
+                type="button"
+                class="endpoint-btn"
+                :title="t('apiHub.gateway.copyTooltip')"
+                @click="copyEndpoint(ep)"
+              >
+                <AppIcon name="copy" class="endpoint-icon size-4" />
+                <span class="endpoint-text">{{ ep }}</span>
+              </button>
+            </div>
+
+            <!-- Auth token display -->
+            <div v-if="status?.running && status?.auth_token" class="token-row">
+              <div class="token-info">
+                <AppIcon name="lock" class="token-icon size-4" />
+                <span class="token-label">X-DevNexus-Token</span>
+                <code class="token-value">{{ status.auth_token }}</code>
+              </div>
+              <Button size="sm" variant="outline" @click="copyToken">
+                <AppIcon name="copy" class="size-3.5" />
+                {{ t("apiHub.gateway.copyTooltip") }}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
       <!-- ════ LOGS ════ -->
       <TabsContent value="logs">
         <Card>
@@ -738,7 +739,7 @@ const logColumns = computed(() => [
 
 <style scoped>
 .gateway-card {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 .gateway-head {
   display: flex;
@@ -746,17 +747,20 @@ const logColumns = computed(() => [
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 .gateway-title-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   display: inline-block;
+  flex-shrink: 0;
 }
 .status-dot.on {
   background-color: var(--color-success);
@@ -779,7 +783,6 @@ const logColumns = computed(() => [
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  margin-top: 12px;
 }
 .endpoint-btn {
   display: flex;
