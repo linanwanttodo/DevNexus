@@ -76,6 +76,10 @@ const routes = [
     component: () => import("./views/ApiHub.vue"),
   },
   {
+    path: "/api-hub/endpoints",
+    component: () => import("./views/ApiHub.vue"),
+  },
+  {
     path: "/api-hub/logs",
     component: () => import("./views/ApiHub.vue"),
   },

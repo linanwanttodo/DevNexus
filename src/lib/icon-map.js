@@ -14,6 +14,7 @@ export const iconMap = {
   folder: "Folder",
   file: "FileText",
   shortcut: "Link2",
+  link: "Link2",
   tool: "Wrench",
   database: "Database",
   settings: "Settings",

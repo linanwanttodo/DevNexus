@@ -27,6 +27,7 @@ export const navItems = [
       items: [
         { route: "/api-hub", icon: "bar-chart", labelKey: "apiHub.tabs.stats" },
         { route: "/api-hub/providers", icon: "database", labelKey: "apiHub.tabs.providers" },
+        { route: "/api-hub/endpoints", icon: "link", labelKey: "apiHub.tabs.endpoints" },
         { route: "/api-hub/logs", icon: "history", labelKey: "apiHub.tabs.logs" },
       ],
     },

@@ -563,6 +563,7 @@
     "tabs": {
       "stats": "Usage Stats",
       "providers": "Providers",
+      "endpoints": "Endpoints",
       "logs": "Request Logs"
     },
     "gateway": {
