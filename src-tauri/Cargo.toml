@@ -27,7 +27,7 @@ async-stream = "0.3"
 bytes = "1"
 russh = "0.62"
 russh-sftp = "2.4"
-reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls", "blocking"] }
 thiserror = "1"
 chrono = { version = "0.4", features = ["serde"] }
 aes-gcm = "0.10"

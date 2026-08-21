@@ -31,6 +31,20 @@ pub fn run() {
             "[DevNexus] GDK_BACKEND = {}",
             std::env::var("GDK_BACKEND").unwrap_or_default()
         );
+
+        // WebKitGTK 2.46+ 在部分 AMD/Intel GPU 上启用 DMABUF 渲染器后，
+        // 渲染进程（WebKitWebProcess）会随机挂死：窗口首帧正常渲染，
+        // 但之后不再处理输入、不再重绘（整个界面"点不动、移不动"）。
+        // 参见 tauri-apps/tauri#13498。
+        // 设置 WEBKIT_DISABLE_DMABUF_RENDERER=1 强制回退到共享内存渲染路径，
+        // 牺牲少量合成性能换取稳定性。必须在 WebKitGTK 初始化前设置。
+        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+        eprintln!(
+            "[DevNexus] WEBKIT_DISABLE_DMABUF_RENDERER = {}",
+            std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").unwrap_or_default()
+        );
     }
 
     let password_manager = commands::password_manager::PasswordManager::new();
@@ -355,6 +369,11 @@ pub fn run() {
             commands::island_bridge::deepseek_get_balance,
             commands::island_bridge::deepseek_set_key,
             commands::island_bridge::deepseek_get_key,
+            // SSH AI 助手（复用 API Hub 的 LLM Provider 配置）
+            commands::ssh::ai::ssh_ai_list_models,
+            commands::ssh::ai::ssh_ai_chat,
+            commands::ssh::ai::ssh_ai_execute,
+            commands::ssh::ai::ssh_ai_get_buffer,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevNexus");

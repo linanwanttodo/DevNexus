@@ -65,9 +65,10 @@ async fn open_channel(
     let term_id = uuid::Uuid::new_v4().to_string();
     let (read_half, write_half) = channel.split();
 
-    // 读任务：ChannelMsg -> emit
+    // 读任务：ChannelMsg -> emit + 缓冲（AI 读屏）
     let app_clone = app.clone();
     let tid = term_id.clone();
+    let entry_clone = entry.clone();
     tokio::spawn(async move {
         let mut read = read_half;
         let mut closed = false;
@@ -80,6 +81,7 @@ async fn open_channel(
                             "session_id": tid, "data": b64(&data),
                         }),
                     );
+                    append_buffer(&entry_clone, &tid, &data).await;
                 }
                 ChannelMsg::ExtendedData { data, ext: _ } => {
                     let _ = app_clone.emit(
@@ -88,6 +90,7 @@ async fn open_channel(
                             "session_id": tid, "data": b64(&data),
                         }),
                     );
+                    append_buffer(&entry_clone, &tid, &data).await;
                 }
                 ChannelMsg::Close | ChannelMsg::Eof => {
                     closed = true;
@@ -108,9 +111,22 @@ async fn open_channel(
         term_id.clone(),
         Arc::new(TerminalHandle {
             write: tokio::sync::Mutex::new(write_half),
+            output_buffer: tokio::sync::Mutex::new(
+                crate::commands::ssh::session::TerminalBuffer::new(2000),
+            ),
         }),
     );
     Ok(term_id)
+}
+
+/// 把远端输出追加到终端环形缓冲（AI 读屏上下文）。失败静默忽略。
+async fn append_buffer(entry: &Arc<SessionEntry>, term_id: &str, data: &[u8]) {
+    let term = entry.terminals.lock().await.get(term_id).cloned();
+    if let Some(term) = term {
+        let text = String::from_utf8_lossy(data);
+        let mut buf = term.output_buffer.lock().await;
+        buf.append(&text);
+    }
 }
 
 #[tauri::command]

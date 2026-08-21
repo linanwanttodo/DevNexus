@@ -68,6 +68,9 @@ import {
   X,
   XCircle,
   Zap,
+  Send,
+  PanelRightClose,
+  PanelRightOpen,
 } from "@lucide/vue";
 import { iconMap, FALLBACK_ICON } from "../lib/icon-map.js";
 
@@ -144,6 +147,9 @@ const IconComp = {
   X,
   XCircle,
   Zap,
+  Send,
+  PanelRightClose,
+  PanelRightOpen,
 };
 
 const attrs = useAttrs();

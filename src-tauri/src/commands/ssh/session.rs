@@ -1,8 +1,10 @@
-use crate::commands::ssh::connections::{SshConnection, SshStore};
+use crate::commands::ssh::connections::SshConnection;
+use crate::commands::ssh::connections::SshStore;
 use russh::client::Handler;
 use russh::keys::PrivateKeyWithHashAlg;
 use russh_sftp::client::SftpSession;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::fs;
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
@@ -34,6 +36,72 @@ pub struct SessionEntry {
 // TerminalHandle 持有可写的 write half（读 half 已移入后台 task）
 pub struct TerminalHandle {
     pub write: tokio::sync::Mutex<russh::ChannelWriteHalf<russh::client::Msg>>,
+    /// 最近输出环形缓冲（AI 读屏用）。容量固定，超出丢弃最旧。
+    /// 仅存原始字节（UTF-8 无损解码），不解析 ANSI，保持低开销。
+    pub output_buffer: tokio::sync::Mutex<TerminalBuffer>,
+}
+
+/// 终端环形输出缓冲：保留最近 N 行（按换行切分），供 AI 读取当前屏幕上下文。
+/// 行以原始字符串存储，调用方按需去除 ANSI 转义。
+pub struct TerminalBuffer {
+    pub lines: VecDeque<String>,
+    pub capacity: usize,
+}
+
+impl TerminalBuffer {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            lines: VecDeque::with_capacity(capacity.min(64)),
+            capacity,
+        }
+    }
+
+    /// 追加一段输出：按换行切分；保留正在进行的末行（无结尾换行）以便连续拼接。
+    pub fn append(&mut self, text: &str) {
+        // 先在末尾片段上拼接（上次未换行的残留）
+        let carry: String = self.lines.pop_back().unwrap_or_default();
+        let mut current = carry;
+        for (i, part) in text.split('\n').enumerate() {
+            if i == 0 {
+                // 与残留拼接成完整首行
+                current.push_str(part);
+                self.push_line(current.clone());
+                current = String::new();
+            } else {
+                self.push_line(part.to_string());
+            }
+        }
+        // 若原始文本不以 '\n' 结尾，最后一行是进行中片段，作为残留保留但不单独成行
+        if !text.ends_with('\n') {
+            // 上一 push_line 已把 current+part 推入；需要把最后一行弹回作为 carry
+            if let Some(last) = self.lines.pop_back() {
+                // 末行重新作为残留；下一 append 会再与之拼接
+                self.lines.push_back(last);
+            }
+        }
+    }
+
+    fn push_line(&mut self, line: String) {
+        self.lines.push_back(line);
+        while self.lines.len() > self.capacity {
+            self.lines.pop_front();
+        }
+    }
+
+    /// 返回最近 `n` 行拼接（不带 ANSI 清理，由调用方处理）
+    pub fn recent(&self, n: usize) -> String {
+        let start = self.lines.len().saturating_sub(n);
+        self.lines
+            .iter()
+            .skip(start)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    pub fn all(&self) -> String {
+        self.lines.iter().cloned().collect::<Vec<_>>().join("\n")
+    }
 }
 
 // SftpHandle 持有 sftp 会话

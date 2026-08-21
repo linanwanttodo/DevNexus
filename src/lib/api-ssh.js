@@ -46,6 +46,19 @@ export const deleteSftp = (sftpId, path, isDir) =>
 export const statSftp = (sftpId, path) =>
   invoke("ssh_sftp_stat", { sftpId, path });
 
+// ---- AI 助手（复用 API Hub 的 LLM Provider 配置）----
+// 列出可用模型（来自 API Hub 启用的 Provider）
+export const aiListModels = () => invoke("ssh_ai_list_models");
+// 发送一条消息，返回 { reply, commands, dangerous, model, provider }
+export const aiChat = (params) =>
+  invoke("ssh_ai_chat", params);
+// 在指定终端执行一条命令
+export const aiExecute = (termId, command) =>
+  invoke("ssh_ai_execute", { termId, command });
+// 读取终端最近输出（调试/上下文查看）
+export const aiGetBuffer = (termId, lines) =>
+  invoke("ssh_ai_get_buffer", { termId, lines });
+
 // ---- 事件（Rust 侧 payload 为 snake_case，这里归一为 camelCase）----
 export function onTerminalOutput(cb) {
   return listen("ssh-terminal-output", (ev) =>
