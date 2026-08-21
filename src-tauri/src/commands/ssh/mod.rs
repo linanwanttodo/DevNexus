@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod connections;
 pub mod session;
 pub mod sftp;

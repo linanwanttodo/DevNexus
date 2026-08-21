@@ -17,6 +17,10 @@ import {
   rejectHostkey,
   toBase64,
   fromBase64,
+  aiListModels,
+  aiChat,
+  aiExecute,
+  aiGetBuffer,
 } from "../lib/api-ssh.js";
 import { showToast } from "../lib/toast.js";
 import { t, tFormat } from "../lib/i18n.js";
@@ -25,6 +29,7 @@ import AppIcon from "../components/AppIcon.vue";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +54,16 @@ const activeKey = ref(null);
 const newConnId = ref("");
 const hostkeyPrompt = ref(null);
 
+// ── AI 助手状态 ──
+const aiOpen = ref(true);
+const aiModels = ref([]);
+const aiSelectedModel = ref("");
+const aiMessages = ref([]); // { role: 'user'|'assistant', content, commands?, dangerous? }
+const aiInput = ref("");
+const aiBusy = ref(false);
+const aiTermContext = ref(true); // 是否把终端最近输出作为上下文
+const pendingDanger = ref(null); // { command, reply } 待确认的危险命令
+
 const els = new Map(); // key -> DOM 容器（v-for 的 ref 回调维护）
 let unlisteners = [];
 let seq = 0;
@@ -60,6 +75,111 @@ function setEl(tab, el) {
 
 function findTabBySession(sessionId) {
   return tabs.value.find((tb) => tb.sessionId === sessionId);
+}
+
+function activeTermId() {
+  const tab = tabs.value.find((tb) => tb.key === activeKey.value);
+  return tab?.sessionId || null;
+}
+
+async function loadAiModels() {
+  try {
+    const models = await aiListModels();
+    aiModels.value = models || [];
+    if (!aiSelectedModel.value && aiModels.value.length) {
+      aiSelectedModel.value = aiModels.value[0].model;
+    }
+  } catch (err) {
+    // 不阻塞终端使用；仅在 AI 面板提示
+    showToast(friendlyError(err), "error");
+  }
+}
+
+async function sendAiMessage() {
+  const text = aiInput.value.trim();
+  if (!text || aiBusy.value) return;
+  if (!aiModels.value.length) {
+    showToast(t("ssh.ai.noProvider"), "error");
+    return;
+  }
+  aiBusy.value = true;
+  aiInput.value = "";
+  aiMessages.value.push({ role: "user", content: text });
+  await nextTick();
+  scrollAiToBottom();
+
+  const history = aiMessages.value
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({ role: m.role, content: m.content }));
+
+  try {
+    const res = await aiChat({
+      termId: aiTermContext.value ? activeTermId() : null,
+      history,
+      message: text,
+      model: aiSelectedModel.value || null,
+    });
+    aiMessages.value.push({
+      role: "assistant",
+      content: res.reply,
+      commands: res.commands || [],
+      dangerous: !!res.dangerous,
+      model: res.model,
+      provider: res.provider,
+    });
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+    aiMessages.value.push({
+      role: "assistant",
+      content: `⚠️ ${friendlyError(err)}`,
+      commands: [],
+      dangerous: false,
+    });
+  } finally {
+    aiBusy.value = false;
+    await nextTick();
+    scrollAiToBottom();
+  }
+}
+
+function scrollAiToBottom() {
+  const box = document.querySelector(".ai-messages");
+  if (box) box.scrollTop = box.scrollHeight;
+}
+
+async function runAiCommand(cmd, dangerous) {
+  const tid = activeTermId();
+  if (!tid) {
+    showToast(t("ssh.ai.noTerminal"), "error");
+    return;
+  }
+  if (dangerous) {
+    pendingDanger.value = { command: cmd, reply: null };
+    return;
+  }
+  await execCommand(cmd);
+}
+
+async function execCommand(cmd) {
+  const tid = activeTermId();
+  if (!tid) return;
+  try {
+    await aiExecute(tid, cmd);
+    showToast(t("ssh.ai.executed"));
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  }
+}
+
+function confirmDanger() {
+  if (pendingDanger.value) {
+    const cmd = pendingDanger.value.command;
+    pendingDanger.value = null;
+    execCommand(cmd);
+  }
+}
+function cancelDanger() {
+  pendingDanger.value = null;
 }
 
 async function fitActive() {
@@ -99,7 +219,29 @@ async function openTab(connectionId) {
     cursorBlink: true,
     fontFamily: '"JetBrains Mono", Menlo, monospace',
     fontSize: 13,
-    theme: { background: "#1e1e2e" },
+    lineHeight: 1.2,
+    theme: {
+      background: "#0d1117",
+      foreground: "#e6edf3",
+      cursor: "#58a6ff",
+      selectionBackground: "#264f78",
+      black: "#484f58",
+      red: "#ff7b72",
+      green: "#3fb950",
+      yellow: "#d29922",
+      blue: "#58a6ff",
+      magenta: "#bc8cff",
+      cyan: "#39c5cf",
+      white: "#b1bac4",
+      brightBlack: "#6e7681",
+      brightRed: "#ffa198",
+      brightGreen: "#56d364",
+      brightYellow: "#e3b341",
+      brightBlue: "#79c0ff",
+      brightMagenta: "#d2a8ff",
+      brightCyan: "#56d4dd",
+      brightWhite: "#f0f6fc",
+    },
   });
   const fit = new FitAddon();
   term.loadAddon(fit);
@@ -171,6 +313,8 @@ onMounted(async () => {
   } catch (err) {
     showToast(friendlyError(err), "error");
   }
+
+  loadAiModels();
 
   // 连接页「打开终端」跳转：/ssh/sessions?open=<id>
   const toOpen = route.query.open;
@@ -279,43 +423,114 @@ async function onHostkeyReject() {
       </button>
     </div>
 
-    <!-- 终端区：每个标签一个常驻容器，v-show 切换保住 xterm 布局 -->
-    <div class="term-holder">
-      <div
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="term-container"
-        :class="{ visible: tab.key === activeKey }"
-        :ref="(el) => setEl(tab, el)"
-      ></div>
+    <!-- 终端 + AI 助手：左右布局 -->
+    <div class="term-layout">
+      <div class="term-col">
+        <!-- 终端区：每个标签一个常驻容器，v-show 切换保住 xterm 布局 -->
+        <div class="term-holder" v-if="tabs.length">
+          <div
+            v-for="tab in tabs"
+            :key="tab.key"
+            class="term-container"
+            :class="{ visible: tab.key === activeKey }"
+            :ref="(el) => setEl(tab, el)"
+          ></div>
+        </div>
+
+      </div>
+
+      <!-- AI 助手面板 -->
+      <aside class="ai-panel" :class="{ collapsed: !aiOpen }">
+        <div class="ai-head">
+          <div class="ai-title">
+            <AppIcon name="sparkles" class="size-4" />
+            <span>{{ t("ssh.ai.title") }}</span>
+          </div>
+          <button class="ai-toggle" :title="aiOpen ? t('ssh.ai.collapse') : t('ssh.ai.expand')" @click="aiOpen = !aiOpen">
+            <AppIcon :name="aiOpen ? 'panel-right-close' : 'panel-right-open'" class="size-4" />
+          </button>
+        </div>
+
+        <div v-if="aiOpen" class="ai-body">
+          <div class="ai-models">
+            <Select v-model="aiSelectedModel">
+              <SelectTrigger class="w-full">
+                <SelectValue :placeholder="t('ssh.ai.pickModel')" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="m in aiModels" :key="m.model + m.provider" :value="m.model">
+                  {{ m.model }} · {{ m.provider }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <label class="ai-ctx">
+              <input type="checkbox" v-model="aiTermContext" />
+              {{ t("ssh.ai.useContext") }}
+            </label>
+          </div>
+
+          <div class="ai-messages" ref="aiMsgBox">
+            <div v-if="!aiMessages.length" class="ai-empty">
+              {{ t("ssh.ai.emptyHint") }}
+            </div>
+            <div
+              v-for="(m, i) in aiMessages"
+              :key="i"
+              class="ai-msg"
+              :class="m.role"
+            >
+              <div class="ai-msg-role">{{ m.role === 'user' ? t('ssh.ai.you') : t('ssh.ai.assistant') }}</div>
+              <div class="ai-msg-text">{{ m.content }}</div>
+              <div v-if="m.commands && m.commands.length" class="ai-cmds">
+                <div
+                  v-for="(cmd, ci) in m.commands"
+                  :key="ci"
+                  class="ai-cmd"
+                  :class="{ danger: m.dangerous }"
+                >
+                  <code>{{ cmd }}</code>
+                  <Button size="sm" variant="outline" @click="runAiCommand(cmd, m.dangerous)">
+                    <AppIcon name="play" class="size-3.5" />
+                    {{ t("ssh.ai.run") }}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ai-input">
+            <Textarea
+              v-model="aiInput"
+              :placeholder="t('ssh.ai.inputPlaceholder')"
+              rows="3"
+              @keydown.enter.exact.prevent="sendAiMessage"
+            />
+            <Button :disabled="aiBusy || !aiInput.trim()" @click="sendAiMessage">
+              <Spinner v-if="aiBusy" class="size-3.5" />
+              <AppIcon v-else name="send" class="size-4" />
+              {{ t("ssh.ai.send") }}
+            </Button>
+          </div>
+        </div>
+      </aside>
     </div>
 
-    <!-- 无标签：快捷打开连接 -->
-    <div v-if="!tabs.length" class="term-empty">
-      <Empty class="py-10">
-        <EmptyMedia>
-          <AppIcon name="terminal" class="size-10 text-muted-foreground/60" />
-        </EmptyMedia>
-        <EmptyContent>
-          <EmptyDescription>
-            <div>{{ t("ssh.term_empty_hint") }}</div>
-          </EmptyDescription>
-        </EmptyContent>
-      </Empty>
-      <div v-if="conns.length" class="quick-list">
-        <Button
-          v-for="c in conns"
-          :key="c.id"
-          variant="outline"
-          size="sm"
-          @click="openTab(c.id)"
-        >
-          <AppIcon name="server" class="size-4" />
-          {{ c.name }}
-          <span class="quick-host">{{ c.username }}@{{ c.host }}</span>
-        </Button>
-      </div>
-    </div>
+    <!-- 危险命令二次确认 -->
+    <Dialog :open="pendingDanger !== null" @update:open="(v) => !v && cancelDanger()">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{{ t("ssh.ai.dangerTitle") }}</DialogTitle>
+        </DialogHeader>
+        <p class="text-sm text-muted-foreground break-all">
+          <code class="danger-cmd">{{ pendingDanger?.command }}</code>
+        </p>
+        <p class="text-xs text-muted-foreground">{{ t("ssh.ai.dangerHint") }}</p>
+        <DialogFooter>
+          <Button variant="outline" @click="cancelDanger">{{ t("common.cancel") }}</Button>
+          <Button variant="destructive" @click="confirmDanger">{{ t("ssh.ai.runAnyway") }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <!-- host key 首连确认 -->
     <Dialog :open="hostkeyPrompt !== null" @update:open="(v) => !v && onHostkeyReject()">
@@ -464,14 +679,13 @@ async function onHostkeyReject() {
   min-height: 0;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--color-border);
-  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.25);
-  background-color: #1e1e2e;
+  border: 1px solid rgba(48, 54, 61, 0.8);
+  background-color: #0d1117;
 }
 
 .term-container {
   height: 100%;
-  padding: 6px 8px;
+  padding: 4px 2px 4px 6px;
   display: none;
 }
 
@@ -500,5 +714,175 @@ async function onHostkeyReject() {
   font-size: 11px;
   opacity: 0.6;
   font-family: "JetBrains Mono", monospace;
+}
+
+/* ── AI 助手面板 ─────────────────────────────────────────────── */
+.term-layout {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.term-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.term-col .term-holder,
+.term-col .term-empty {
+  flex: 1;
+  min-height: 0;
+}
+
+.ai-panel {
+  width: 360px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background-color: var(--color-card);
+  overflow: hidden;
+}
+.ai-panel.collapsed {
+  width: 44px;
+}
+.ai-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-muted);
+}
+.ai-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+.ai-toggle {
+  border: none;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: inline-flex;
+}
+.ai-toggle:hover {
+  background-color: var(--color-border);
+  color: var(--color-foreground);
+}
+.ai-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.ai-models {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.ai-ctx {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+}
+.ai-ctx input {
+  accent-color: var(--color-primary);
+}
+.ai-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+}
+.ai-empty {
+  margin: auto;
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+  padding: 20px;
+}
+.ai-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ai-msg.user .ai-msg-role {
+  color: var(--color-primary);
+}
+.ai-msg.assistant .ai-msg-role {
+  color: var(--color-success);
+}
+.ai-msg-role {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ai-msg-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--color-foreground);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-cmds {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.ai-cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-muted);
+}
+.ai-cmd.danger {
+  border-color: var(--color-danger, #ef4444);
+}
+.ai-cmd code {
+  flex: 1;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--color-foreground);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.ai-input {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-border);
+  align-items: flex-end;
+}
+.ai-input :deep(textarea) {
+  resize: none;
+  font-size: 12px;
+}
+.danger-cmd {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--color-danger, #ef4444);
+  word-break: break-all;
 }
 </style>

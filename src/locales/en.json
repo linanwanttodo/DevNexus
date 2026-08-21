@@ -768,6 +768,25 @@
     "uploading": "Uploading",
     "downloading": "Downloading",
     "import_key": "Import from File",
-    "key_file_empty": "Selected file is empty"
+    "key_file_empty": "Selected file is empty",
+    "ai": {
+      "title": "AI Assistant",
+      "collapse": "Collapse panel",
+      "expand": "Expand panel",
+      "pickModel": "Select model",
+      "useContext": "Include terminal context",
+      "emptyHint": "Describe what you want in natural language, e.g. \"find the process using the most memory and kill it\", \"show nginx error logs\". AI generates commands; dangerous ones need your confirmation.",
+      "you": "You",
+      "assistant": "AI",
+      "inputPlaceholder": "Describe a task, or ask a question… (Enter to send)",
+      "send": "Send",
+      "run": "Run",
+      "runAnyway": "Run anyway",
+      "dangerTitle": "Dangerous command confirmation",
+      "dangerHint": "This command may have irreversible consequences. Confirm you understand what it does.",
+      "noProvider": "No AI model configured: add an LLM Provider in API Hub first",
+      "noTerminal": "No active terminal session",
+      "executed": "Sent to terminal"
+    }
   }
 }

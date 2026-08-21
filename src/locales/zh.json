@@ -574,6 +574,13 @@
       "copyFailed": "复制失败",
       "authEnabled": "Auth Token 已启用"
     },
+    "quickstart": {
+      "title": "快速接入",
+      "desc": "网关已就绪，将任意 OpenAI SDK 指向本地 Base URL 即可使用。",
+      "hint": "使用 model=\"auto\" 可让路由器自动选择最合适的模型。",
+      "copySnippet": "复制代码",
+      "copied": "已复制代码片段"
+    },
     "addProvider": "添加 Provider",
     "addFirstProvider": "添加第一个 Provider",
     "editProvider": "编辑 Provider",
@@ -768,6 +775,25 @@
     "uploading": "上传中",
     "downloading": "下载中",
     "import_key": "从文件导入",
-    "key_file_empty": "所选文件为空"
+    "key_file_empty": "所选文件为空",
+    "ai": {
+      "title": "AI 助手",
+      "collapse": "收起面板",
+      "expand": "展开面板",
+      "pickModel": "选择模型",
+      "useContext": "包含终端上下文",
+      "emptyHint": "用自然语言描述你想做的事情，例如「找出占用内存最高的进程并杀掉」、「查看 nginx 错误日志」。AI 会生成命令，危险操作需你确认。",
+      "you": "你",
+      "assistant": "AI",
+      "inputPlaceholder": "描述任务，或问一个问题…（Enter 发送）",
+      "send": "发送",
+      "run": "执行",
+      "runAnyway": "仍要执行",
+      "dangerTitle": "危险命令确认",
+      "dangerHint": "该命令可能造成不可逆后果，请确认你了解它的作用。",
+      "noProvider": "未配置 AI 模型：请先在 API Hub 添加一个 LLM Provider",
+      "noTerminal": "没有活动的终端会话",
+      "executed": "已发送到终端"
+    }
   }
 }

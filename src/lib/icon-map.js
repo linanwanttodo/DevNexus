@@ -74,6 +74,13 @@ export const iconMap = {
   server: "Server",
   list: "List",
   terminal: "Terminal",
+
+  // SSH AI 助手
+  sparkles: "Sparkles",
+  play: "Play",
+  send: "Send",
+  "panel-right-close": "PanelRightClose",
+  "panel-right-open": "PanelRightOpen",
 };
 
 export const FALLBACK_ICON = "CircleAlert";
