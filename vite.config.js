@@ -42,6 +42,14 @@ export default defineConfig({
           if (m.includes("/node_modules/codemirror") || m.includes("/node_modules/@codemirror")) {
             return "editor-vendor";
           }
+          // shadcn/ui 组件池：被多个路由视图共享，单独立块避免重复打包
+          if (m.includes("/components/ui/")) {
+            return "shadcn-vendor";
+          }
+          // vue-sonner 被 toast.js 和 Sonner.vue 引用，拆分后可独立缓存
+          if (m.includes("/node_modules/vue-sonner")) {
+            return "sonner-vendor";
+          }
         },
       },
     },

@@ -1,13 +1,15 @@
 <script setup>
-import { onMounted } from "vue";
+import { defineAsyncComponent, onMounted } from "vue";
 import TitleBar from "./components/TitleBar.vue";
 import Sidebar from "./components/Sidebar.vue";
 import ErrorBoundary from "./components/ErrorBoundary.vue";
-import ConfirmDialog from "./components/ConfirmDialog.vue";
-import Sonner from "./components/ui/sonner/Sonner.vue";
 import { getTheme, setIslandEnabled } from "./lib/stores.js";
 import { applyIslandState } from "./lib/island.js";
 import { router } from "./router.js";
+
+// 首屏只渲染主布局；ConfirmDialog / Sonner 为运行时交互组件，按需懒加载
+const ConfirmDialog = defineAsyncComponent(() => import("./components/ConfirmDialog.vue"));
+const Sonner = defineAsyncComponent(() => import("./components/ui/sonner/Sonner.vue"));
 
 const theme = getTheme();
 
