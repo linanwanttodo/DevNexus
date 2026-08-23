@@ -30,17 +30,18 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { t } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
+import { useResourceUsage } from "../composables/useResourceUsage.js";
 
 const router = useRouter();
 
 const systemInfo = ref(null);
-const resourceUsage = ref(null);
+// 资源用量由共享单例提供，生命周期与 Dashboard 挂钩（start/stop）
+const { resourceUsage, start: startResourceUsage, stop: stopResourceUsage } =
+  useResourceUsage();
 const hardwareStatus = ref(null);
 const loading = ref(true);
 const error = ref(null);
 const environments = ref([]);
-
-let timer = null;
 
 function formatUptime(seconds) {
   const days = Math.floor(seconds / 86400);
@@ -54,7 +55,6 @@ async function loadSystemInfo() {
     loading.value = true;
     error.value = null;
     systemInfo.value = await invoke("get_system_info");
-    resourceUsage.value = await invoke("get_resource_usage");
     await loadHardwareStatus();
   } catch (err) {
     error.value = friendlyError(err);
@@ -72,13 +72,11 @@ async function loadHardwareStatus() {
   }
 }
 
-async function refreshResourceUsage() {
+async function refreshHardwareStatus() {
+  // 资源数据由共享单例 useResourceUsage 轮询，这里只刷新硬件状态
   try {
-    resourceUsage.value = await invoke("get_resource_usage");
-  } catch (err) {
-    console.error("Failed to refresh resource usage:", err);
-  }
-  loadHardwareStatus();
+    await loadHardwareStatus();
+  } catch {}
 }
 
 async function loadEnvironments() {
@@ -208,31 +206,15 @@ const recentEnvs = computed(() =>
   }))
 );
 
-function startPolling() {
-  if (timer) clearInterval(timer);
-  timer = setInterval(() => {
-    if (document.hidden) return;
-    refreshResourceUsage();
-  }, 15000);
-}
-function stopPolling() {
-  if (timer) { clearInterval(timer); timer = null; }
-}
-function handleVisibility() {
-  if (document.hidden) return;
-  refreshResourceUsage();
-}
-
 onMounted(() => {
   loadSystemInfo();
   loadEnvironments();
-  startPolling();
-  document.addEventListener("visibilitychange", handleVisibility);
+  // 资源用量轮询由共享单例接管（30s，隐藏暂停），启动计数 +1
+  startResourceUsage();
 });
 
 onBeforeUnmount(() => {
-  stopPolling();
-  document.removeEventListener("visibilitychange", handleVisibility);
+  stopResourceUsage();
 });
 </script>
 

@@ -2,18 +2,18 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { getVersion } from "@tauri-apps/api/app";
-import { invoke } from "@tauri-apps/api/core";
 import AppIcon from "./AppIcon.vue";
 import { t } from "../lib/i18n.js";
 import { APP_VERSION } from "../lib/version.js";
 import { navItems, navForPath } from "../lib/nav-config.js";
+import { useResourceUsage } from "../composables/useResourceUsage.js";
 
 const route = useRoute();
 const router = useRouter();
 
 const appVersion = ref(APP_VERSION);
-const resourceUsage = ref(null);
-let timer = null;
+// 资源用量由共享单例提供（Dashboard 复用同一数据源，30s 轮询，隐藏暂停）
+const { resourceUsage, start: startResUsage, stop: stopResUsage } = useResourceUsage();
 
 onMounted(() => {
   (async () => {
@@ -22,32 +22,14 @@ onMounted(() => {
     } catch {
       // non-Tauri env fallback
     }
-    loadResourceUsage();
   })();
-  // 节流至 15s 并在页面隐藏时暂停，避免与 Dashboard 重复高频挤压 sysinfo 锁
-  timer = setInterval(() => {
-    if (document.hidden) return;
-    loadResourceUsage();
-  }, 15000);
-  document.addEventListener("visibilitychange", onVisibility);
+  // 资源用量由共享单例轮询（30s、隐藏暂停），避免与 Dashboard 重复挤压 sysinfo 锁
+  startResUsage();
 });
 
 onBeforeUnmount(() => {
-  if (timer) clearInterval(timer);
-  document.removeEventListener("visibilitychange", onVisibility);
+  stopResUsage();
 });
-
-async function onVisibility() {
-  if (!document.hidden) loadResourceUsage();
-}
-
-async function loadResourceUsage() {
-  try {
-    resourceUsage.value = await invoke("get_resource_usage");
-  } catch {
-    // silently fail
-  }
-}
 
 // /ports 与 /processes 共用进程页，导航高亮统一落到 /processes
 const active = computed(() =>

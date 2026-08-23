@@ -354,7 +354,7 @@ pub fn get_hardware_status() -> Result<HardwareStatus, String> {
     let cache = CACHE.get_or_init(|| Mutex::new(None));
     if let Ok(guard) = cache.lock() {
         if let Some((at, cached)) = guard.as_ref() {
-            if at.elapsed().as_secs() < 5 {
+            if at.elapsed().as_secs() < 30 {
                 // 克隆缓存中的状态（HardwareStatus 需 Clone）
                 return Ok(HardwareStatus {
                     cpu_temp_c: cached.cpu_temp_c,
