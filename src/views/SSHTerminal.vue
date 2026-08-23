@@ -73,6 +73,13 @@ const aiBusy = ref(false);
 const aiTermContext = ref(true); // 是否把终端最近输出作为上下文
 const pendingDanger = ref(null); // { command, reply } 待确认的危险命令
 
+// 快捷命令 chips：点按直接在活动终端执行
+const QUICK_COMMANDS = ["top", "htop", "df -h", "free -m", "ls -lah", "ps aux | head -20", "uptime", "ip addr", "pwd"];
+
+function quickExec(cmd) {
+  execCommand(cmd);
+}
+
 const els = new Map(); // key -> DOM 容器（v-for 的 ref 回调维护）
 let unlisteners = [];
 let seq = 0;
@@ -128,14 +135,28 @@ async function sendAiMessage() {
       message: text,
       model: aiSelectedModel.value || null,
     });
-    aiMessages.value.push({
+    const reply = res.reply || "";
+    const assistantMsg = {
       role: "assistant",
-      content: res.reply,
+      content: "",
       commands: res.commands || [],
       dangerous: !!res.dangerous,
       model: res.model,
       provider: res.provider,
-    });
+    };
+    aiMessages.value.push(assistantMsg);
+    // 流式打字：字符逐段填充，模拟流式输出
+    const words = reply.match(/\S+\s*/g) || [reply];
+    for (let si = 0; si < words.length; si++) {
+      assistantMsg.content += words[si];
+      if (si % 3 === 0 || si === words.length - 1) {
+        await nextTick();
+        scrollAiToBottom();
+        await new Promise((r) => setTimeout(r, 12));
+      }
+    }
+    await nextTick();
+    scrollAiToBottom();
   } catch (err) {
     showToast(friendlyError(err), "error");
     aiMessages.value.push({
@@ -831,6 +852,18 @@ async function removeSocks(id) {
           </div>
 
           <div class="ai-input">
+            <div class="ai-chips">
+              <button
+                v-for="chip in QUICK_COMMANDS"
+                :key="chip"
+                type="button"
+                class="ai-chip"
+                :disabled="aiBusy"
+                @click="quickExec(chip)"
+              >
+                {{ chip }}
+              </button>
+            </div>
             <Textarea
               v-model="aiInput"
               :placeholder="t('ssh.ai.inputPlaceholder')"
@@ -1365,6 +1398,37 @@ async function removeSocks(id) {
 .ai-input :deep(textarea) {
   resize: none;
   font-size: 12px;
+}
+.ai-chips {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 12px;
+  right: 12px;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+.ai-chip {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: "JetBrains Mono", monospace;
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  background: var(--color-card);
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.ai-chip:hover {
+  background-color: var(--color-sidebar-accent);
+  color: var(--color-foreground);
+}
+.ai-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .danger-cmd {
   font-family: "JetBrains Mono", monospace;
