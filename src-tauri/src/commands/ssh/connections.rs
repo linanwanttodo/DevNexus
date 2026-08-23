@@ -74,18 +74,33 @@ pub struct SshStore {
     pub vault: CryptoVault,
     pub conns: Arc<Mutex<Vec<SshConnection>>>,
     pub next_id: Arc<Mutex<u64>>,
+    /// 是否已从磁盘加载过（惰性加载用）
+    loaded: std::sync::atomic::AtomicBool,
 }
 
 #[allow(clippy::new_without_default)]
 impl SshStore {
     pub fn new() -> Self {
-        let store = Self {
+        // 惰性加载：构造时不再 read 磁盘，首次访问命令时通过 ensure_loaded() 加载，
+        // 未使用 SSH 功能的应用启动不再读入 ssh_connections.json，省去磁盘/内存开销。
+        Self {
             vault: CryptoVault::new(),
             conns: Arc::new(Mutex::new(Vec::new())),
             next_id: Arc::new(Mutex::new(1)),
-        };
-        let _ = store.load();
-        store
+            loaded: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// 确保连接列表已加载（惰性初始化入口）。所有需要读取/修改 conns 的命令应先行调用。
+    /// 用 CAS 保证并发下只加载一次。
+    pub fn ensure_loaded(&self) -> Result<(), String> {
+        use std::sync::atomic::Ordering;
+        if self.loaded.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        self.load()?;
+        self.loaded.store(true, Ordering::Release);
+        Ok(())
     }
 
     fn load(&self) -> Result<(), String> {
@@ -190,6 +205,7 @@ fn now_ts() -> i64 {
 pub fn ssh_list_connections(
     state: tauri::State<SshStore>,
 ) -> Result<Vec<SshConnectionInfo>, String> {
+    state.ensure_loaded()?;
     let conns = state.conns.lock().map_err(|e| e.to_string())?;
     Ok(conns.iter().map(SshStore::to_info).collect())
 }
@@ -199,6 +215,7 @@ pub fn ssh_save_connection(
     state: tauri::State<SshStore>,
     connection: SshConnectionInput,
 ) -> Result<SshConnectionInfo, String> {
+    state.ensure_loaded()?;
     let (enc, pass) = state.encrypt_secret(&connection)?;
     let ts = now_ts();
     let mut conns = state.conns.lock().map_err(|e| e.to_string())?;
@@ -252,6 +269,7 @@ pub fn ssh_save_connection(
 /// 标记连接成功建立的时间戳（session 打开成功后调用）
 #[tauri::command]
 pub fn ssh_touch_connection(state: tauri::State<SshStore>, id: String) -> Result<(), String> {
+    state.ensure_loaded()?;
     let ts = now_ts();
     let mut conns = state.conns.lock().map_err(|e| e.to_string())?;
     if let Some(c) = conns.iter_mut().find(|c| c.id == id) {
@@ -359,6 +377,7 @@ pub fn ssh_export_openssh_config(
     conn_ids: Vec<String>,
     state: tauri::State<SshStore>,
 ) -> Result<String, String> {
+    state.ensure_loaded()?;
     let conns = state.conns.lock().map_err(|e| e.to_string())?;
     let mut lines = Vec::new();
     for c in conns.iter().filter(|c| conn_ids.contains(&c.id)) {
@@ -378,6 +397,7 @@ pub fn ssh_export_openssh_config(
 
 #[tauri::command]
 pub fn ssh_delete_connection(state: tauri::State<SshStore>, id: String) -> Result<(), String> {
+    state.ensure_loaded()?;
     let mut conns = state.conns.lock().map_err(|e| e.to_string())?;
     conns.retain(|c| c.id != id);
     drop(conns);
@@ -393,6 +413,7 @@ mod tests {
             vault: CryptoVault::for_test(),
             conns: Arc::new(Mutex::new(Vec::new())),
             next_id: Arc::new(Mutex::new(1)),
+            loaded: std::sync::atomic::AtomicBool::new(false),
         }
     }
 

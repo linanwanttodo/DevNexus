@@ -389,6 +389,7 @@ pub async fn open(
     manager: &SshSessionManager,
     connection_id: &str,
 ) -> Result<String, String> {
+    store.ensure_loaded()?;
     let conn = store
         .find(connection_id)
         .ok_or_else(|| format!("NOT_FOUND: connection {connection_id}"))?;
