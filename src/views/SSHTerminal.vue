@@ -25,6 +25,9 @@ import {
   listForwards,
   closeForward,
   forwardAgent,
+  startSocksProxy,
+  closeSocks,
+  listSocks,
 } from "../lib/api-ssh.js";
 import { Input } from "@/components/ui/input";
 import { showToast } from "../lib/toast.js";
@@ -375,6 +378,11 @@ const forwardList = ref([]);
 const fwd = ref({ bindHost: "127.0.0.1", bindPort: null, destHost: "", destPort: null });
 const fwdBusy = ref(false);
 
+// ── 动态 SOCKS5 代理（-D）面板 ──
+const socksList = ref([]);
+const socks = ref({ bindHost: "127.0.0.1", bindPort: 1080 });
+const socksBusy = ref(false);
+
 async function refreshForwards() {
   const sid = activeTermId();
   if (!sid) return;
@@ -382,6 +390,11 @@ async function refreshForwards() {
     forwardList.value = await listForwards(sid);
   } catch (err) {
     forwardList.value = [];
+  }
+  try {
+    socksList.value = await listSocks(sid);
+  } catch (err) {
+    socksList.value = [];
   }
 }
 
@@ -429,6 +442,38 @@ async function enableAgentForward() {
   try {
     const sock = await forwardAgent(sid);
     showToast(t("ssh.forward.agentOn") + " " + sock, "success");
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  }
+}
+
+async function addSocks() {
+  const sid = activeTermId();
+  if (!sid) return;
+  const { bindHost, bindPort } = socks.value;
+  if (!bindPort) {
+    showToast(t("ssh.forward.socksFillRequired"), "error");
+    return;
+  }
+  socksBusy.value = true;
+  try {
+    await startSocksProxy(sid, bindHost, Number(bindPort));
+    showToast(t("ssh.forward.socksAdded"), "success");
+    await refreshForwards();
+    socks.value = { bindHost: "127.0.0.1", bindPort: 1080 };
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  } finally {
+    socksBusy.value = false;
+  }
+}
+
+async function removeSocks(id) {
+  const sid = activeTermId();
+  if (!sid) return;
+  try {
+    await closeSocks(sid, id);
+    await refreshForwards();
   } catch (err) {
     showToast(friendlyError(err), "error");
   }
@@ -676,6 +721,52 @@ async function enableAgentForward() {
           >
             <span class="font-mono">{{ f.bindHost }}:{{ f.bindPort }} → {{ f.destHost }}:{{ f.destPort }}</span>
             <Button v-if="f.active" size="sm" variant="ghost" @click="removeForward(f.id)">
+              <AppIcon name="close" class="size-3.5" />
+              {{ t("ssh.forward.close") }}
+            </Button>
+          </div>
+        </div>
+
+        <div class="fwd-divider" />
+
+        <!-- 动态 SOCKS5 代理（-D） -->
+        <div class="fwd-form grid grid-cols-2 gap-2">
+          <label class="text-xs text-muted-foreground">
+            {{ t("ssh.forward.socksBindHost") }}
+            <Input v-model="socks.bindHost" placeholder="127.0.0.1" />
+          </label>
+          <label class="text-xs text-muted-foreground">
+            {{ t("ssh.forward.socksBindPort") }}
+            <Input v-model="socks.bindPort" type="number" placeholder="1080" />
+          </label>
+        </div>
+        <div class="flex items-center gap-2 mt-2">
+          <Button :disabled="socksBusy" @click="addSocks">
+            <Spinner v-if="socksBusy" class="size-3.5" />
+            <AppIcon v-else name="network" class="size-3.5" />
+            {{ t("ssh.forward.socksAdd") }}
+          </Button>
+        </div>
+        <p class="text-xs text-muted-foreground mt-2">
+          {{
+            tFormat("ssh.forward.socksHint", {
+              host: socks.bindHost,
+              port: socks.bindPort,
+            })
+          }}
+        </p>
+        <div class="fwd-list mt-3 space-y-1">
+          <div v-if="!socksList.length" class="text-xs text-muted-foreground">
+            {{ t("ssh.forward.socksEmpty") }}
+          </div>
+          <div
+            v-for="s in socksList"
+            :key="s.id"
+            class="flex items-center justify-between rounded border px-2 py-1 text-sm"
+            :class="{ 'opacity-50': !s.active }"
+          >
+            <span class="font-mono">SOCKS5 {{ s.bindHost }}:{{ s.bindPort }}</span>
+            <Button v-if="s.active" size="sm" variant="ghost" @click="removeSocks(s.id)">
               <AppIcon name="close" class="size-3.5" />
               {{ t("ssh.forward.close") }}
             </Button>
@@ -1015,5 +1106,11 @@ async function enableAgentForward() {
   font-family: "JetBrains Mono", monospace;
   color: var(--color-danger, #ef4444);
   word-break: break-all;
+}
+
+.fwd-divider {
+  height: 1px;
+  background-color: var(--color-border);
+  margin: 16px 0 12px;
 }
 </style>

@@ -39,6 +39,8 @@ pub struct SessionEntry {
     pub sftp_sessions: tokio::sync::Mutex<HashMap<String, Arc<SftpHandle>>>,
     /// 本地端口转发列表（已激活的 -L 转发）
     pub local_forwards: tokio::sync::Mutex<Vec<ForwardEntry>>,
+    /// 动态 SOCKS5 代理转发列表（已激活的 -D 转发）
+    pub socks_forwards: tokio::sync::Mutex<Vec<SocksEntry>>,
     /// Keepalive 配置（秒）
     pub keepalive_secs: u64,
     /// 上次成功写入时间（用于 Keepalive 检测）
@@ -52,6 +54,16 @@ pub struct ForwardEntry {
     pub bind_port: u16,
     pub dest_host: String,
     pub dest_port: u16,
+    pub active: bool,
+}
+
+/// 动态 SOCKS5 代理转发（-D）记录。每个条目在本地绑定一个 SOCKS5 监听端口，
+/// 由客户端在连接时动态指定目标地址（经 SSH direct-tcpip 逐连接建立隧道）。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SocksEntry {
+    pub id: String,
+    pub bind_host: String,
+    pub bind_port: u16,
     pub active: bool,
 }
 
@@ -485,6 +497,7 @@ pub async fn open(
             terminals: tokio::sync::Mutex::new(HashMap::new()),
             sftp_sessions: tokio::sync::Mutex::new(HashMap::new()),
             local_forwards: tokio::sync::Mutex::new(Vec::new()),
+            socks_forwards: tokio::sync::Mutex::new(Vec::new()),
             keepalive_secs: conn.keepalive_secs,
             last_activity: tokio::sync::Mutex::new(std::time::Instant::now()),
         }),
@@ -670,6 +683,226 @@ pub async fn ssh_forward_agent(
         .map_err(|_| "SSH_AUTH_SOCK not set — no agent available on this system")?;
     // Agent 转发由 russh 协议层自动处理；此处仅验证环境变量存在
     Ok(auth_sock)
+}
+
+/// 启动动态 SOCKS5 代理（-D）：在本地 bind_host:bind_port 监听，
+/// 每个客户端连接经一次 SOCKS5 握手取得目标地址，再通过 SSH direct-tcpip 建立隧道转发。
+#[tauri::command]
+pub async fn ssh_socks_proxy(
+    state: tauri::State<'_, SshSessionManager>,
+    session_id: String,
+    bind_host: String,
+    bind_port: u16,
+) -> Result<SocksEntry, String> {
+    use std::net::SocketAddr;
+    use tokio::net::TcpListener;
+
+    let sessions = state.sessions.lock().await;
+    let entry = sessions.get(&session_id).ok_or("SESSION_NOT_FOUND")?;
+    let entry_arc = Arc::clone(entry);
+    drop(sessions);
+
+    let bind_a: SocketAddr = format!("{}:{}", bind_host, bind_port)
+        .parse()
+        .map_err(|_| "INVALID_BIND_ADDRESS")?;
+
+    let listener = TcpListener::bind(bind_a)
+        .await
+        .map_err(|e| format!("BIND_FAILED: {}", e))?;
+
+    let fid = uuid::Uuid::new_v4().to_string();
+    let sentry = SocksEntry {
+        id: fid.clone(),
+        bind_host: bind_host.clone(),
+        bind_port,
+        active: true,
+    };
+
+    {
+        let mut sw = entry_arc.socks_forwards.lock().await;
+        sw.push(sentry.clone());
+    }
+
+    tokio::spawn(async move {
+        loop {
+            match listener.accept().await {
+                Ok((inbound, _src)) => {
+                    let entry = Arc::clone(&entry_arc);
+                    tokio::spawn(async move {
+                        if let Err(e) = serve_socks(inbound, entry).await {
+                            eprintln!("[socks] proxy error: {}", e);
+                        }
+                    });
+                }
+                Err(e) => {
+                    eprintln!("[socks] accept failed: {}", e);
+                    break;
+                }
+            }
+        }
+    });
+
+    Ok(sentry)
+}
+
+/// 关闭指定 SOCKS5 代理（标记 inactive；监听器随 drop 停止接受）
+#[tauri::command]
+pub async fn ssh_close_socks(
+    state: tauri::State<'_, SshSessionManager>,
+    session_id: String,
+    socks_id: String,
+) -> Result<(), String> {
+    let sessions = state.sessions.lock().await;
+    if let Some(entry) = sessions.get(&session_id) {
+        let mut sw = entry.socks_forwards.lock().await;
+        if let Some(s) = sw.iter_mut().find(|s| s.id == socks_id) {
+            s.active = false;
+        }
+    }
+    Ok(())
+}
+
+/// 查询当前会话已激活的 SOCKS5 代理列表
+#[tauri::command]
+pub async fn ssh_list_socks(
+    state: tauri::State<'_, SshSessionManager>,
+    session_id: String,
+) -> Result<Vec<SocksEntry>, String> {
+    let sessions = state.sessions.lock().await;
+    let entry = sessions.get(&session_id).ok_or("SESSION_NOT_FOUND")?;
+    let sw = entry.socks_forwards.lock().await;
+    Ok(sw.clone())
+}
+
+/// SOCKS5 单连接处理：仅支持无认证（0x00）与 CONNECT 命令（含 IPv4 / 域名 / IPv6）。
+async fn serve_socks(
+    mut inbound: tokio::net::TcpStream,
+    entry: Arc<SessionEntry>,
+) -> Result<(), String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    const SOCKS_VER: u8 = 0x05;
+
+    // 1. 方法协商：客户端发送 VER NMETHODS METHODS；我们仅声明支持 No Authentication (0x00)
+    let mut hdr = [0u8; 2];
+    inbound
+        .read_exact(&mut hdr)
+        .await
+        .map_err(|e| format!("SOCKS_NEGO_READ: {e}"))?;
+    if hdr[0] != SOCKS_VER {
+        return Err(format!("SOCKS_BAD_VER: {}", hdr[0]));
+    }
+    let nmethods = hdr[1] as usize;
+    let mut methods = vec![0u8; nmethods];
+    inbound
+        .read_exact(&mut methods)
+        .await
+        .map_err(|e| format!("SOCKS_METHODS_READ: {e}"))?;
+    if !methods.contains(&0x00) {
+        // 返回无可用方法（0xFF）并断开
+        let _ = inbound.write_all(&[SOCKS_VER, 0xff]).await;
+        return Err("SOCKS_NO_ACCEPTABLE_METHOD".into());
+    }
+    inbound
+        .write_all(&[SOCKS_VER, 0x00])
+        .await
+        .map_err(|e| format!("SOCKS_NEGO_WRITE: {e}"))?;
+
+    // 2. 请求：VER CMD RSV ATYP DST.ADDR DST.PORT
+    let mut req = [0u8; 4];
+    inbound
+        .read_exact(&mut req)
+        .await
+        .map_err(|e| format!("SOCKS_REQ_READ: {e}"))?;
+    if req[0] != SOCKS_VER || req[1] != 0x01 {
+        // 仅支持 CONNECT
+        let _ = inbound
+            .write_all(&[SOCKS_VER, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+            .await;
+        return Err(format!("SOCKS_UNSUPPORTED_CMD: {}", req[1]));
+    }
+
+    let (host, port) = match req[3] {
+        0x01 => {
+            // IPv4: 4 字节
+            let mut b = [0u8; 6];
+            inbound
+                .read_exact(&mut b)
+                .await
+                .map_err(|e| format!("SOCKS_IPV4_READ: {e}"))?;
+            let ip = std::net::Ipv4Addr::new(b[0], b[1], b[2], b[3]);
+            let port = u16::from_be_bytes([b[4], b[5]]);
+            (ip.to_string(), port)
+        }
+        0x03 => {
+            // 域名：1 字节长度 + 域名 + 2 字节端口
+            let mut len = [0u8; 1];
+            inbound
+                .read_exact(&mut len)
+                .await
+                .map_err(|e| format!("SOCKS_DOMAIN_LEN_READ: {e}"))?;
+            let mut dom = vec![0u8; len[0] as usize];
+            inbound
+                .read_exact(&mut dom)
+                .await
+                .map_err(|e| format!("SOCKS_DOMAIN_READ: {e}"))?;
+            let mut p = [0u8; 2];
+            inbound
+                .read_exact(&mut p)
+                .await
+                .map_err(|e| format!("SOCKS_DOMAIN_PORT_READ: {e}"))?;
+            (
+                String::from_utf8_lossy(&dom).to_string(),
+                u16::from_be_bytes(p),
+            )
+        }
+        0x04 => {
+            // IPv6: 16 字节
+            let mut b = [0u8; 18];
+            inbound
+                .read_exact(&mut b)
+                .await
+                .map_err(|e| format!("SOCKS_IPV6_READ: {e}"))?;
+            let mut oct = [0u8; 16];
+            oct.copy_from_slice(&b[0..16]);
+            let ip = std::net::Ipv6Addr::from(oct);
+            let port = u16::from_be_bytes([b[16], b[17]]);
+            (ip.to_string(), port)
+        }
+        other => {
+            let _ = inbound
+                .write_all(&[SOCKS_VER, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+                .await;
+            return Err(format!("SOCKS_BAD_ATYP: {other}"));
+        }
+    };
+
+    // 3. 经 SSH 隧道建立 direct-tcpip 通道到目标
+    let channel = {
+        let client = entry.client.lock().await;
+        client
+            .channel_open_direct_tcpip(host.clone(), port as u32, "127.0.0.1".to_string(), 0)
+            .await
+    };
+    let ch = match channel {
+        Ok(ch) => ch,
+        Err(e) => {
+            // 返回通用失败（0x01）并断开
+            let _ = inbound
+                .write_all(&[SOCKS_VER, 0x01, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+                .await;
+            return Err(format!("SOCKS_TUNNEL_FAIL: {e}"));
+        }
+    };
+
+    // 4. 返回成功响应（绑定地址回显 0），随后双向转发
+    let _ = inbound
+        .write_all(&[SOCKS_VER, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+        .await;
+
+    let mut ch_stream = ch.into_stream();
+    let mut inbound = inbound;
+    let _ = tokio::io::copy_bidirectional(&mut inbound, &mut ch_stream).await;
+    Ok(())
 }
 
 #[cfg(test)]

@@ -811,7 +811,15 @@
       "added": "已添加端口转发",
       "fillRequired": "请填写本地端口、目标主机与目标端口",
       "agent": "Agent 转发",
-      "agentOn": "Agent 转发已启用"
+      "agentOn": "Agent 转发已启用",
+      "socks": "SOCKS5 代理",
+      "socksBindHost": "监听地址",
+      "socksBindPort": "监听端口",
+      "socksAdd": "启动 SOCKS5",
+      "socksAdded": "SOCKS5 代理已启动",
+      "socksEmpty": "暂无活动代理",
+      "socksFillRequired": "请填写监听地址与端口",
+      "socksHint": "客户端（如浏览器）配置 SOCKS5 指向 {host}:{port} 即可经本隧道动态路由流量"
     },
     "ai": {
       "title": "AI 助手",

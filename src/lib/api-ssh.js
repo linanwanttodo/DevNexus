@@ -60,6 +60,14 @@ export const listForwards = (sessionId) =>
 export const forwardAgent = (sessionId) =>
   invoke("ssh_forward_agent", { sessionId });
 
+// ---- 动态 SOCKS5 代理（-D）----
+export const startSocksProxy = (sessionId, bindHost, bindPort) =>
+  invoke("ssh_socks_proxy", { sessionId, bindHost, bindPort });
+export const closeSocks = (sessionId, socksId) =>
+  invoke("ssh_close_socks", { sessionId, socksId });
+export const listSocks = (sessionId) =>
+  invoke("ssh_list_socks", { sessionId });
+
 // ---- AI 助手（复用 API Hub 的 LLM Provider 配置）----
 // 列出可用模型（来自 API Hub 启用的 Provider）
 export const aiListModels = () => invoke("ssh_ai_list_models");

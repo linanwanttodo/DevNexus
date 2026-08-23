@@ -804,7 +804,15 @@
       "added": "Port forward added",
       "fillRequired": "Fill local port, destination host and destination port",
       "agent": "Agent forward",
-      "agentOn": "Agent forwarding enabled"
+      "agentOn": "Agent forwarding enabled",
+      "socks": "SOCKS5 Proxy",
+      "socksBindHost": "Bind address",
+      "socksBindPort": "Bind port",
+      "socksAdd": "Start SOCKS5",
+      "socksAdded": "SOCKS5 proxy started",
+      "socksEmpty": "No active proxy",
+      "socksFillRequired": "Fill bind address and port",
+      "socksHint": "Point a SOCKS5-capable client at {host}:{port} to route traffic through this tunnel"
     },
     "ai": {
       "title": "AI Assistant",
