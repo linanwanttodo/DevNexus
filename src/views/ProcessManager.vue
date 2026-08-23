@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "../lib/toast.js";
 import { showConfirm } from "../lib/confirm.js";
@@ -168,7 +168,10 @@ function toggleSort(field) {
 function toggleAutoRefresh() {
   autoRefresh.value = !autoRefresh.value;
   if (autoRefresh.value) {
-    refreshInterval = setInterval(loadProcesses, 3000);
+    refreshInterval = setInterval(() => {
+      if (document.hidden) return;
+      loadProcesses();
+    }, 5000);
   } else if (refreshInterval) {
     clearInterval(refreshInterval);
     refreshInterval = null;
@@ -197,13 +200,19 @@ function cpuClass(cpu) {
   return "cpu-low";
 }
 
+const debouncedSearch = ref(search.value);
+let searchTimer = null;
+watch(search, (v) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { debouncedSearch.value = v; }, 150);
+});
 const filtered = computed(() =>
-  search.value.trim()
+  debouncedSearch.value.trim()
     ? groups.value.filter(
         (g) =>
-          g.name.toLowerCase().includes(search.value.toLowerCase()) ||
-          g.ports.some((p) => p.toString().includes(search.value)) ||
-          g.entries.some((e) => e.pid.toString().includes(search.value))
+          g.name.toLowerCase().includes(debouncedSearch.value.toLowerCase()) ||
+          g.ports.some((p) => p.toString().includes(debouncedSearch.value)) ||
+          g.entries.some((e) => e.pid.toString().includes(debouncedSearch.value))
       )
     : groups.value
 );
@@ -239,13 +248,24 @@ const sorted = computed(() => {
   return arr.sort(cmp);
 });
 
+const pageSize = 50;
+const visibleCount = ref(pageSize);
+const visibleSorted = computed(() => sorted.value.slice(0, visibleCount.value));
+function loadMoreProcesses() { visibleCount.value += pageSize; }
+
 onMounted(() => {
   loadProcesses();
+  document.addEventListener("visibilitychange", handleVis);
 });
 
 onBeforeUnmount(() => {
   if (refreshInterval) clearInterval(refreshInterval);
+  document.removeEventListener("visibilitychange", handleVis);
 });
+
+function handleVis() {
+  if (!document.hidden && autoRefresh.value) loadProcesses();
+}
 </script>
 
 <template>
@@ -348,7 +368,7 @@ onBeforeUnmount(() => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <template v-for="record in sorted" :key="record.name">
+              <template v-for="record in visibleSorted" :key="record.name">
                 <TableRow class="proc-row" :class="{ open: expanded.has(record.name) }">
                 <TableCell class="col-name" style="width: 100%">
                   <div class="proc-name-row" @click="toggleExpand(record.name)">
@@ -466,11 +486,14 @@ onBeforeUnmount(() => {
         <!-- 表格底部 -->
         <div class="table-footer">
           <span class="footer-text">
-            {{ filtered.length }} {{ t("process.groups") }} · {{ total }} {{ t("process.total_processes") }}
+            {{ filtered.length }} {{ t("process.groups") }} · {{ total }} {{ t("process.total_processes") }} · 显示 {{ visibleSorted.length }}/{{ sorted.length }}
           </span>
-          <Button variant="outline" size="sm" @click="loadProcesses">
-            {{ t("process.refresh") }}
-          </Button>
+          <div class="flex gap-2">
+            <Button v-if="visibleSorted.length < sorted.length" variant="outline" size="sm" @click="loadMoreProcesses">{{ t("common.load_more") || "Load more" }}</Button>
+            <Button variant="outline" size="sm" @click="loadProcesses">
+              {{ t("process.refresh") }}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

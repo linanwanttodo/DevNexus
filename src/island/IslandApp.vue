@@ -75,10 +75,12 @@ let intervalTimer = null;
 
 function startClock() {
   const tick = () => {
+    if (document.hidden) return;
     now.value = new Date();
   };
   tick();
   intervalTimer = setInterval(tick, 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) now.value = new Date(); });
 }
 
 // ═══════════════ 媒体控制（MPRIS）═══════════════
@@ -107,7 +109,16 @@ let mediaTimer = null;
 
 function startMediaPoll() {
   pollMedia();
-  mediaTimer = setInterval(pollMedia, 3000);
+  // 媒体状态变化低频：展开时 5s 刷新，收起时 10s，降低 MPRIS D-Bus 开销
+  const interval = expanded.value ? 5000 : 10000;
+  mediaTimer = setInterval(() => {
+    if (document.hidden) return;
+    pollMedia();
+  }, interval);
+}
+function restartMediaPoll() {
+  if (mediaTimer) clearInterval(mediaTimer);
+  startMediaPoll();
 }
 
 // ═══════════════ 系统 HUD（音量/亮度）═══════════════
@@ -124,7 +135,10 @@ async function pollHud() {
 
 function startHudPoll() {
   pollHud();
-  hudTimer = setInterval(pollHud, 5000);
+  hudTimer = setInterval(() => {
+    if (document.hidden) return;
+    pollHud();
+  }, 10000);
 }
 
 // ═══════════════ 系统状态（CPU/内存）═══════════════
@@ -147,7 +161,10 @@ async function pollSysStatus() {
 
 function startSysPoll() {
   pollSysStatus();
-  sysTimer = setInterval(pollSysStatus, 5000);
+  sysTimer = setInterval(() => {
+    if (document.hidden) return;
+    pollSysStatus();
+  }, 10000);
 }
 
 // ═══════════════ 专注倒计时 ═══════════════
@@ -253,7 +270,9 @@ let keyPollTimer = null;
 function startKeyPoll() {
   lastBalanceKey = "";
   loadBalance();
+  // 余额轮询 5s 足够，2s 过于频繁且每次触发解密 + 网络
   keyPollTimer = setInterval(async () => {
+    if (document.hidden) return;
     let k = "";
     try {
       k = await invoke("deepseek_get_key");
@@ -264,7 +283,7 @@ function startKeyPoll() {
       lastBalanceKey = k;
       loadBalance();
     }
-  }, 2000);
+  }, 5000);
 }
 
 /** 展示用的总余额（优先人民币） */

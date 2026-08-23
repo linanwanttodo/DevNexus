@@ -208,14 +208,31 @@ const recentEnvs = computed(() =>
   }))
 );
 
+function startPolling() {
+  if (timer) clearInterval(timer);
+  timer = setInterval(() => {
+    if (document.hidden) return;
+    refreshResourceUsage();
+  }, 15000);
+}
+function stopPolling() {
+  if (timer) { clearInterval(timer); timer = null; }
+}
+function handleVisibility() {
+  if (document.hidden) return;
+  refreshResourceUsage();
+}
+
 onMounted(() => {
   loadSystemInfo();
   loadEnvironments();
-  timer = setInterval(refreshResourceUsage, 10000);
+  startPolling();
+  document.addEventListener("visibilitychange", handleVisibility);
 });
 
 onBeforeUnmount(() => {
-  if (timer) clearInterval(timer);
+  stopPolling();
+  document.removeEventListener("visibilitychange", handleVisibility);
 });
 </script>
 

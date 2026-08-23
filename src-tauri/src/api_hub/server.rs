@@ -69,7 +69,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             HeaderName::from_static("x-goog-api-key"),
         ]);
 
-    // 代理端点必须携带访问令牌（H1 安全修复）；/health 保持匿名可探活。
+    // 所有代理端点统一需要访问令牌（含 Ollama，避免本机任意进程盗用 Key）
+    // BodyLimit 分级：代理端点 10MB（支持大上下文），health/tags 64KB（轻量）
     let protected = Router::new()
         .route("/v1/chat/completions", post(chat_completions_handler))
         .route("/v1/responses", post(responses_handler))
@@ -79,22 +80,21 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             post(gemini_generate_handler),
         )
         .route("/v1/models", get(list_models_handler))
+        .route("/api/chat", post(ollama_chat_handler))
+        .route("/api/tags", get(ollama_tags_handler))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_auth,
-        ));
+        ))
+        .layer(DefaultBodyLimit::max(10 * 1024 * 1024));
 
-    // Ollama 客户端端点：Ollama 生态客户端默认不带凭据，
-    // 服务只绑 127.0.0.1 且 CORS 已白名单化，沿用 Ollama 本身的免认证模型。
-    let ollama_open = Router::new()
-        .route("/api/chat", post(ollama_chat_handler))
-        .route("/api/tags", get(ollama_tags_handler));
+    let health = Router::new()
+        .route("/health", get(health_handler))
+        .layer(DefaultBodyLimit::max(64 * 1024));
 
     Router::new()
-        .route("/health", get(health_handler))
+        .merge(health)
         .merge(protected)
-        .merge(ollama_open)
-        .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10 MB
         .layer(cors)
         .with_state(state)
 }
@@ -564,6 +564,7 @@ fn determine_stream_pipeline(
 
 /// 包装上游字节流：数据原样透传，同时扫描 SSE 行提取 usage token 用量，
 /// 流结束后异步回填到请求日志（解决流式请求 token 统计为 0 的问题）。
+/// 使用索引游标避免 `drain(..=pos)` 的 O(n) 搬移，按行触发 `extract_usage`。
 fn capture_usage_stream(
     byte_stream: impl futures_util::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + 'static,
     state: AppState,
@@ -573,7 +574,7 @@ fn capture_usage_stream(
         use futures_util::StreamExt;
         // 扫描缓冲上限：防御异常上游把单行撑得过大占用内存
         const MAX_SCAN_BUF: usize = 256 * 1024;
-        let mut scan_buf = String::new();
+        let mut scan_buf: Vec<u8> = Vec::with_capacity(4096);
         let mut input_tokens: u64 = 0;
         let mut output_tokens: u64 = 0;
 
@@ -582,11 +583,18 @@ fn capture_usage_stream(
         while let Some(chunk_result) = byte_stream.next().await {
             if let Ok(ref chunk) = chunk_result {
                 if scan_buf.len() < MAX_SCAN_BUF {
-                    scan_buf.push_str(&String::from_utf8_lossy(chunk));
-                    while let Some(pos) = scan_buf.find('\n') {
-                        let line = scan_buf[..pos].trim_end_matches('\r').to_string();
-                        scan_buf.drain(..=pos);
-                        extract_usage_from_sse_line(&line, &mut input_tokens, &mut output_tokens);
+                    scan_buf.extend_from_slice(chunk);
+                    // 按换行切分，避免 `String::drain` 的重复搬移
+                    let mut start = 0usize;
+                    while let Some(rel) = scan_buf[start..].iter().position(|&b| b == b'\n') {
+                        let end = start + rel;
+                        let line = String::from_utf8_lossy(&scan_buf[start..end]);
+                        let trimmed = line.trim_end_matches('\r');
+                        extract_usage_from_sse_line(trimmed, &mut input_tokens, &mut output_tokens);
+                        start = end + 1;
+                    }
+                    if start > 0 {
+                        scan_buf.drain(0..start);
                     }
                 }
             }
@@ -594,8 +602,10 @@ fn capture_usage_stream(
         }
 
         // 处理残余缓冲，然后回填 token 用量
-        let tail = scan_buf.trim().to_string();
-        extract_usage_from_sse_line(&tail, &mut input_tokens, &mut output_tokens);
+        if !scan_buf.is_empty() {
+            let tail = String::from_utf8_lossy(&scan_buf);
+            extract_usage_from_sse_line(tail.trim(), &mut input_tokens, &mut output_tokens);
+        }
         if input_tokens > 0 || output_tokens > 0 {
             tokio::spawn(async move {
                 super::usage::update_log_tokens(&state, &log_id, input_tokens, output_tokens).await;
@@ -662,6 +672,7 @@ fn extract_usage_from_sse_line(line: &str, input: &mut u64, output: &mut u64) {
 
 /// 两段式行转换流：供应商行先经 dir_in 转为内部 OpenAIChat 行，
 /// 再经 dir_out 转为客户端格式；任一段 None 表示直通该段。
+/// 缓冲按行切分，预分配避免频繁扩容。
 fn transform_byte_stream(
     byte_stream: impl futures_util::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + 'static,
     dir_in: Option<StreamDirection>,
@@ -678,7 +689,7 @@ fn transform_byte_stream(
         if dir_in == Some(StreamDirection::GeminiToOpenAIChat) && state_in.id.is_empty() {
             state_in.id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
         }
-        let mut buffer = String::new();
+        let mut buffer: Vec<u8> = Vec::with_capacity(8192);
 
         futures_util::pin_mut!(byte_stream);
 
@@ -691,18 +702,19 @@ fn transform_byte_stream(
                 }
             };
 
-            let text = String::from_utf8_lossy(&chunk);
-            buffer.push_str(&text);
+            buffer.extend_from_slice(&chunk);
 
-            // 按行喂入两段管线
-            while let Some(pos) = buffer.find('\n') {
-                let line: String = buffer[..pos].trim_end_matches(['\r', '\n']).to_string();
-                buffer.drain(..=pos);
+            // 按行喂入两段管线，使用索引游标避免重复 `drain` 搬移开销
+            let mut start = 0usize;
+            while let Some(rel) = buffer[start..].iter().position(|&b| b == b'\n') {
+                let end = start + rel;
+                let line = String::from_utf8_lossy(&buffer[start..end]);
+                let trimmed = line.trim_end_matches(['\r', '\n']).to_string();
 
                 // 阶段一：供应商 → 内部（None 直通）
                 let internal_lines: Vec<String> = match dir_in {
-                    Some(d) => transform_sse_line(d, &line, &mut state_in),
-                    None => vec![line],
+                    Some(d) => transform_sse_line(d, &trimmed, &mut state_in),
+                    None => vec![trimmed],
                 };
                 // 阶段二：内部 → 客户端（None 直通）
                 for l in internal_lines {
@@ -715,24 +727,30 @@ fn transform_byte_stream(
                         yield Ok(bytes::Bytes::from(ol));
                     }
                 }
+                start = end + 1;
+            }
+            if start > 0 {
+                buffer.drain(0..start);
             }
         }
 
         // 处理最后一行（无换行结尾的残行）
-        let tail = buffer.trim_end_matches('\n').to_string();
-        if !tail.is_empty() {
-            let internal_lines: Vec<String> = match dir_in {
-                Some(d) => transform_sse_line(d, &tail, &mut state_in),
-                None => vec![tail],
-            };
-            for l in internal_lines {
-                let out_lines: Vec<String> = match dir_out {
-                    Some(d) => transform_sse_line(d, &l, &mut state_out),
-                    None => vec![l],
+        if !buffer.is_empty() {
+            let tail = String::from_utf8_lossy(&buffer).trim_end_matches(['\r', '\n']).to_string();
+            if !tail.is_empty() {
+                let internal_lines: Vec<String> = match dir_in {
+                    Some(d) => transform_sse_line(d, &tail, &mut state_in),
+                    None => vec![tail],
                 };
-                for mut ol in out_lines {
-                    ol.push('\n');
-                    yield Ok(bytes::Bytes::from(ol));
+                for l in internal_lines {
+                    let out_lines: Vec<String> = match dir_out {
+                        Some(d) => transform_sse_line(d, &l, &mut state_out),
+                        None => vec![l],
+                    };
+                    for mut ol in out_lines {
+                        ol.push('\n');
+                        yield Ok(bytes::Bytes::from(ol));
+                    }
                 }
             }
         }
@@ -749,9 +767,20 @@ fn ct_eq(a: &str, b: &str) -> bool {
 }
 
 fn error_response(status: u16, message: &str) -> Response {
+    // 限长，避免大错误体回写与前端渲染卡顿
+    const MAX_MSG: usize = 500;
+    let msg = if message.len() > MAX_MSG {
+        let mut cut = MAX_MSG;
+        while !message.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        format!("{}…", &message[..cut])
+    } else {
+        message.to_string()
+    };
     let body = serde_json::json!({
         "error": {
-            "message": message,
+            "message": msg,
             "type": "api_hub_error",
             "code": status
         }

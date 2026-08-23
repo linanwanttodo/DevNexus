@@ -71,10 +71,28 @@ async function handleUninstall(app) {
 
   uninstalling.value = app.name;
   try {
-    const result = await invoke("uninstall_software_deep", {
-      packageName: app.name,
-      appName: app.name,
-    });
+    // 优先带 source 定向到对应包管理器（如 flatpak/snap），避免全量轮询误配
+    let result;
+    try {
+      result = await invoke("uninstall_software_deep_with_source", {
+        packageName: app.name,
+        appName: app.name,
+        source: app.source,
+      });
+    } catch {
+      // 兼容旧后端：回退到定向卸载或通用深度卸载
+      try {
+        result = await invoke("uninstall_installed_app", {
+          packageName: app.name,
+          source: app.source,
+        });
+      } catch {
+        result = await invoke("uninstall_software_deep", {
+          packageName: app.name,
+          appName: app.name,
+        });
+      }
+    }
     showToast(result);
     await scanResidues(app, true);
     await loadApps();

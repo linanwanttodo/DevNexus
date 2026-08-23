@@ -74,12 +74,28 @@ pub async fn api_hub_get_usage_stats(
 
 #[tauri::command]
 pub fn api_hub_status(state: State<'_, AppState>) -> serde_json::Value {
+    let token = &state.auth_token;
+    let masked = if token.len() > 12 && token.is_ascii() {
+        format!("{}••••{}", &token[..4], &token[token.len() - 4..])
+    } else if token.is_empty() {
+        String::new()
+    } else {
+        "••••".to_string()
+    };
     serde_json::json!({
         "running": state.running.load(Ordering::SeqCst),
         "port": 3456,
         "version": env!("CARGO_PKG_VERSION"),
-        "auth_token": state.auth_token
+        "auth_token": masked,
+        "auth_token_masked": masked,
+        "key_encrypted": state.api_key_cipher.is_encrypted()
     })
+}
+
+#[tauri::command]
+pub fn api_hub_get_token(state: State<'_, AppState>) -> String {
+    // 单独获取明文 token，需前端在已认证上下文调用（Endpoints 页按需获取）
+    state.auth_token.clone()
 }
 
 // ── Fetch Models from Provider API ────────────────────────────

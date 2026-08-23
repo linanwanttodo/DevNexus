@@ -25,6 +25,15 @@ pub async fn uninstall_software(package_name: String) -> Result<String, String> 
     software_pm::uninstall_software_exec(package_name).await
 }
 
+/// 定向卸载（供 AppUninstaller 使用，带 source 提示定向到对应包管理器）
+#[tauri::command]
+pub async fn uninstall_installed_app(
+    package_name: String,
+    source: String,
+) -> Result<String, String> {
+    software_pm::uninstall_with_source_hint(package_name, Some(source)).await
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Software {
     pub name: String,
@@ -82,6 +91,7 @@ async fn safe_get_version(cmd: &str) -> String {
 #[tauri::command]
 pub async fn list_software() -> Vec<Software> {
     let defs = build_software_defs();
+    let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(8));
     let mut handles = Vec::with_capacity(defs.len());
 
     for s in &defs {
@@ -89,7 +99,9 @@ pub async fn list_software() -> Vec<Software> {
         let cmd = s.cmd;
         let category = s.category;
         let pkg = s.package_name;
+        let permit_sem = sem.clone();
         handles.push(tokio::spawn(async move {
+            let _permit = permit_sem.acquire_owned().await.ok();
             let found = utils::find_cmd_path(cmd).is_some();
             let version = if found {
                 safe_get_version(cmd).await
@@ -150,8 +162,18 @@ pub async fn uninstall_software_deep(
     package_name: String,
     app_name: String,
 ) -> Result<String, String> {
-    // (a) 先执行标准卸载
-    let result = software_pm::uninstall_software_exec(package_name.clone()).await;
+    uninstall_software_deep_with_source(package_name, app_name, None).await
+}
+
+/// 深度卸载（带来源定向）— 供 AppUninstaller 使用
+#[tauri::command]
+pub async fn uninstall_software_deep_with_source(
+    package_name: String,
+    app_name: String,
+    source: Option<String>,
+) -> Result<String, String> {
+    // (a) 先执行标准卸载（带来源定向，失败则尝试自托管回退）
+    let result = software_pm::uninstall_with_source_hint(package_name.clone(), source).await;
 
     // 安全校验：只有标准卸载成功后才清理残留目录。
     // 若卸载失败（如包管理器报错、无权限），跳过目录删除，避免误删仍在使用的活动数据。

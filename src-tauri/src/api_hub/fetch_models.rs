@@ -1,4 +1,5 @@
 use super::types::{ApiProtocol, FetchedModel};
+use std::time::Duration;
 
 /// 从 Provider 的模型列表端点获取可用模型
 /// `client` 复用 AppState 中已初始化的全局 HTTP client（连接池复用，避免每次新建）
@@ -18,17 +19,32 @@ pub async fn fetch_models_from_provider(
     }
 }
 
+/// 带超时的单次 GET，失败重试 1 次，避免并发拉取时的连接风暴卡死
+async fn get_with_timeout_and_retry(
+    build: impl Fn() -> reqwest::RequestBuilder,
+) -> Result<reqwest::Response, String> {
+    for attempt in 0..2 {
+        let req = build().timeout(Duration::from_secs(8));
+        match req.send().await {
+            Ok(r) => return Ok(r),
+            Err(e) if attempt == 0 => {
+                eprintln!("[API Hub] fetch_models retry after error: {}", e);
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                continue;
+            }
+            Err(e) => return Err(format!("Request failed: {}", e)),
+        }
+    }
+    unreachable!()
+}
+
 /// Ollama 模型列表：GET /api/tags，models[].name 形如 "llama3:8b"（无需认证）
 async fn fetch_ollama_models(
     client: &reqwest::Client,
     base_url: &str,
 ) -> Result<Vec<FetchedModel>, String> {
     let url = format!("{}/api/tags", base_url.trim_end_matches('/'));
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {}", e))?;
+    let resp = get_with_timeout_and_retry(|| client.get(&url)).await?;
     if !resp.status().is_success() {
         let _error = resp.text().await.unwrap_or_default();
         return Ok(vec![]);
@@ -80,14 +96,16 @@ async fn fetch_gemini_models(
         "{}/v1beta/models?pageSize=100",
         base_url.trim_end_matches('/')
     );
-    let mut req = client.get(&url);
-    if !api_key.is_empty() {
-        req = req.header("x-goog-api-key", api_key);
-    }
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {}", e))?;
+    let url_clone = url.clone();
+    let key = api_key.to_string();
+    let resp = get_with_timeout_and_retry(move || {
+        let mut req = client.get(&url_clone);
+        if !key.is_empty() {
+            req = req.header("x-goog-api-key", key.clone());
+        }
+        req
+    })
+    .await?;
 
     if !resp.status().is_success() {
         let _error = resp.text().await.unwrap_or_default();
@@ -145,21 +163,22 @@ async fn fetch_openai_style_models(
     is_anthropic: bool,
 ) -> Result<Vec<FetchedModel>, String> {
     let url = format!("{}/v1/models", base_url.trim_end_matches('/'));
-    let mut req = client.get(&url);
-    if !api_key.is_empty() {
-        if is_anthropic {
-            req = req
-                .header("x-api-key", api_key)
-                .header("anthropic-version", "2023-06-01");
-        } else {
-            req = req.header("Authorization", format!("Bearer {}", api_key));
+    let url_clone = url.clone();
+    let key = api_key.to_string();
+    let resp = get_with_timeout_and_retry(move || {
+        let mut req = client.get(&url_clone);
+        if !key.is_empty() {
+            if is_anthropic {
+                req = req
+                    .header("x-api-key", key.clone())
+                    .header("anthropic-version", "2023-06-01");
+            } else {
+                req = req.header("Authorization", format!("Bearer {}", key));
+            }
         }
-    }
-
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {}", e))?;
+        req
+    })
+    .await?;
     let status = resp.status();
 
     if status.is_success() {

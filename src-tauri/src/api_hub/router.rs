@@ -8,6 +8,12 @@ pub struct RouteResult {
 
 /// 根据模型名找到对应的 Provider（async 版本，使用 tokio RwLock）
 pub async fn route_by_model(state: &AppState, model: &str) -> Option<RouteResult> {
+    const OPENAI_PREFIXES: &[&str] = &[
+        "gpt-", "o1-", "o3-", "o4-", "text-", "dall-e", "tts-", "whisper",
+    ];
+    const ANTHROPIC_PREFIXES: &[&str] = &["claude-"];
+    const GEMINI_PREFIXES: &[&str] = &["gemini-"];
+
     let providers = state.providers.read().await;
 
     // 1. 精确匹配模型名（忽略大小写，无堆分配）
@@ -23,17 +29,15 @@ pub async fn route_by_model(state: &AppState, model: &str) -> Option<RouteResult
         }
     }
 
-    // 2. 通配符匹配：按协议前缀
+    // 2. 通配符匹配：按协议前缀（静态常量，避免每次分配）
     for p in providers.iter() {
         if !p.enabled {
             continue;
         }
         let known_prefixes: &[&str] = match p.protocol {
-            ApiProtocol::OpenAIChat | ApiProtocol::OpenAIResponses => &[
-                "gpt-", "o1-", "o3-", "o4-", "text-", "dall-e", "tts-", "whisper",
-            ],
-            ApiProtocol::Anthropic => &["claude-"],
-            ApiProtocol::Gemini => &["gemini-"],
+            ApiProtocol::OpenAIChat | ApiProtocol::OpenAIResponses => OPENAI_PREFIXES,
+            ApiProtocol::Anthropic => ANTHROPIC_PREFIXES,
+            ApiProtocol::Gemini => GEMINI_PREFIXES,
             // Ollama 模型名任意（llama3、qwen2.5:7b…），无通用前缀
             ApiProtocol::Ollama => &[],
         };

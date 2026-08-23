@@ -1258,14 +1258,28 @@ async fn e2e_anthropic_client_to_gemini_upstream_nonstream() {
 
 #[tokio::test]
 async fn e2e_ollama_client_chat_no_auth() {
-    // Ollama 客户端默认不带凭据：/api/chat 免认证（服务仅绑 127.0.0.1）
+    // 安全加固后：/api/chat 同样需要 X-DevNexus-Token（避免本机任意进程盗用已配 Key）
     let (up_addr, _up) = spawn_mock_upstream().await;
     let state = test_state(&up_addr.to_string());
     let (hub, _h) = spawn_hub(state).await;
 
     let client = reqwest::Client::new();
+    // 无 token 必须 401
+    let unauth = client
+        .post(format!("http://{}/api/chat", hub))
+        .json(&serde_json::json!({
+            "model": "mock-gpt",
+            "stream": false,
+            "messages": [{"role": "user", "content": "hello"}]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unauth.status().as_u16(), 401);
+
     let resp = client
         .post(format!("http://{}/api/chat", hub))
+        .header("X-DevNexus-Token", TEST_TOKEN)
         .json(&serde_json::json!({
             "model": "mock-gpt",
             "stream": false,
@@ -1291,6 +1305,7 @@ async fn e2e_ollama_tags_lists_all_providers() {
 
     let resp = reqwest::Client::new()
         .get(format!("http://{}/api/tags", hub))
+        .header("X-DevNexus-Token", TEST_TOKEN)
         .send()
         .await
         .unwrap();
@@ -1315,6 +1330,7 @@ async fn e2e_ollama_client_streaming_from_openai_upstream() {
 
     let resp = reqwest::Client::new()
         .post(format!("http://{}/api/chat", hub))
+        .header("X-DevNexus-Token", TEST_TOKEN)
         .json(&serde_json::json!({
             "model": "mock-gpt",
             "stream": true,

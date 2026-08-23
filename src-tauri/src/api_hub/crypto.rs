@@ -24,6 +24,11 @@ pub struct ApiKeyCipher {
 }
 
 impl ApiKeyCipher {
+    /// 是否启用加密（false 表示明文降级，前端需提示风险）
+    pub fn is_encrypted(&self) -> bool {
+        self.enabled
+    }
+
     /// 从 OS keyring 读取或创建密钥（service="devnexus", user="api-hub-key"）。
     ///
     /// 回退链：keyring → `data_dir/api_hub_key.bin`（0600 权限，文件兜底）→ 明文降级

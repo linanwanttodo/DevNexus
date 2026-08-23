@@ -128,6 +128,23 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
 
 /// 启动 API Hub HTTP 服务（在 Tauri 的异步运行时中运行）
 pub async fn start(state: Arc<AppState>) {
+    // 后台定时清理过期日志（每日一次），启动时已做一次轻量清理，此处仅兜底长期运行不重启的场景
+    let db_clone = state.db.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(86400));
+        interval.tick().await; // 首 tick 立即完成，跳过避免启动时二次清理
+        loop {
+            interval.tick().await;
+            let db = db_clone.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                let guard = db.blocking_lock();
+                if let Some(ref conn) = *guard {
+                    usage::cleanup_old_logs_sync(conn);
+                }
+            })
+            .await;
+        }
+    });
     server::start_server(state).await;
 }
 

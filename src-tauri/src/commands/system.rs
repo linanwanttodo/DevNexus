@@ -4,7 +4,7 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use sysinfo::System;
 
 /// 平台相关的系统硬件信息（温度 / GPU / 电池）
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct HardwareStatus {
     /// CPU 最高温度（℃），无传感器时为空
     pub cpu_temp_c: Option<f32>,
@@ -349,13 +349,40 @@ pub fn get_resource_usage() -> Result<ResourceUsage, String> {
 /// 收集硬件状态。各部分独立容错：某一部分失败不影响其他部分。
 #[tauri::command]
 pub fn get_hardware_status() -> Result<HardwareStatus, String> {
-    let cpu_temp_c = read_cpu_temperature();
+    // 合并缓存：GPU/电池高成本探测结果缓存 10s；CPU 温度缓存 3s
+    static CACHE: OnceLock<Mutex<Option<(std::time::Instant, HardwareStatus)>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = cache.lock() {
+        if let Some((at, cached)) = guard.as_ref() {
+            if at.elapsed().as_secs() < 5 {
+                // 克隆缓存中的状态（HardwareStatus 需 Clone）
+                return Ok(HardwareStatus {
+                    cpu_temp_c: cached.cpu_temp_c,
+                    gpu_name: cached.gpu_name.clone(),
+                    gpu_memory_used_mb: cached.gpu_memory_used_mb,
+                    gpu_memory_total_mb: cached.gpu_memory_total_mb,
+                    gpu_usage_percent: cached.gpu_usage_percent,
+                    gpu_temp_c: cached.gpu_temp_c,
+                    battery_percent: cached.battery_percent,
+                    battery_status: cached.battery_status.clone(),
+                });
+            }
+        }
+    }
+    let status = HardwareStatus {
+        cpu_temp_c: read_cpu_temperature(),
+        gpu_name: None,
+        gpu_memory_used_mb: None,
+        gpu_memory_total_mb: None,
+        gpu_usage_percent: None,
+        gpu_temp_c: None,
+        battery_percent: None,
+        battery_status: None,
+    };
     let (gpu_name, gpu_memory_used_mb, gpu_memory_total_mb, gpu_usage_percent, gpu_temp_c) =
         read_gpu_status();
     let (battery_percent, battery_status) = read_battery_status();
-
-    Ok(HardwareStatus {
-        cpu_temp_c,
+    let status = HardwareStatus {
         gpu_name,
         gpu_memory_used_mb,
         gpu_memory_total_mb,
@@ -363,7 +390,24 @@ pub fn get_hardware_status() -> Result<HardwareStatus, String> {
         gpu_temp_c,
         battery_percent,
         battery_status,
-    })
+        ..status
+    };
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some((
+            std::time::Instant::now(),
+            HardwareStatus {
+                cpu_temp_c: status.cpu_temp_c,
+                gpu_name: status.gpu_name.clone(),
+                gpu_memory_used_mb: status.gpu_memory_used_mb,
+                gpu_memory_total_mb: status.gpu_memory_total_mb,
+                gpu_usage_percent: status.gpu_usage_percent,
+                gpu_temp_c: status.gpu_temp_c,
+                battery_percent: status.battery_percent,
+                battery_status: status.battery_status.clone(),
+            },
+        ));
+    }
+    Ok(status)
 }
 
 /// 通过 sysinfo Components 读取 CPU 温度（Linux hwmon / Windows），取最高值

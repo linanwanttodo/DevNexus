@@ -477,6 +477,46 @@ pub(super) fn map_package_name<'a>(generic: &'a str, pm_name: &str) -> &'a str {
         // Docker Desktop
         ("docker-desktop", "brew") => "docker",
         ("docker-desktop", "winget") => "Docker.DockerDesktop",
+        // Vim
+        ("vim", "winget") => "vim.vim",
+        ("vim", "chocolatey") => "vim",
+        // GParted (no Windows port, keep Linux mappings above)
+        // Flatpak IDs — when PM is flatpak, generic name must map to app ID
+        ("code", "flatpak") => "com.visualstudio.code",
+        ("neovim", "flatpak") => "io.neovim.nvim",
+        ("dbeaver-ce", "flatpak") => "io.dbeaver.DBeaverCommunity",
+        ("postman", "flatpak") => "com.getpostman.Postman",
+        ("sublime-text", "flatpak") => "com.sublimetext.three",
+        ("gimp", "flatpak") => "org.gimp.GIMP",
+        ("vlc", "flatpak") => "org.videolan.VLC",
+        // Snap names
+        ("code", "snap") => "code",
+        ("neovim", "snap") => "nvim",
+        ("postman", "snap") => "postman",
+        ("sublime-text", "snap") => "sublime-text",
+        // Chocolatey fallbacks for CLI tools absent from winget
+        ("neovim", "chocolatey") => "neovim",
+        ("git", "chocolatey") => "git",
+        ("curl", "chocolatey") => "curl",
+        ("wget", "chocolatey") => "wget",
+        ("python3", "chocolatey") => "python",
+        ("golang", "chocolatey") => "golang",
+        ("nodejs", "chocolatey") => "nodejs-lts",
+        ("rust", "chocolatey") => "rustup.install",
+        ("sqlite", "chocolatey") => "sqlite",
+        ("jq", "chocolatey") => "jq",
+        ("ripgrep", "chocolatey") => "ripgrep",
+        ("fd-find", "chocolatey") => "fd",
+        ("fzf", "chocolatey") => "fzf",
+        ("cmake", "chocolatey") => "cmake",
+        ("htop", "chocolatey") => "htop",
+        ("redis", "chocolatey") => "redis-64",
+        ("postgresql-client", "chocolatey") => "postgresql",
+        ("gcc", "chocolatey") => "mingw",
+        ("clang", "chocolatey") => "llvm",
+        ("vim", "flatpak") => "org.vim.Vim",
+        ("firefox", "flatpak") => "org.mozilla.firefox",
+        ("chromium", "flatpak") => "org.chromium.Chromium",
         // Default: 直接返回通用名
         _ => generic,
     }

@@ -48,6 +48,12 @@ const loading = ref(false);
 const error = ref(null);
 const showForm = ref(false);
 const editingId = ref(null);
+// 日志分页与 token 脱敏
+const LOG_PAGE_SIZE = 20;
+const logOffset = ref(0);
+const hasMoreLogs = ref(true);
+const loadingMore = ref(false);
+const showToken = ref(false);
 
 // 单一协议选项：同时决定品牌、线协议、端点与认证方式
 const protocolOptions = computed(() => [
@@ -92,7 +98,14 @@ let pollTimer = null;
 
 onMounted(() => {
   loadData();
-  pollTimer = setInterval(loadStats, 15000);
+  // 轮询以 visibility 感知为主，间隔 20s，隐藏时暂停
+  pollTimer = setInterval(() => {
+    if (document.hidden) return;
+    loadStats();
+  }, 20000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) loadStats();
+  });
 });
 onBeforeUnmount(() => {
   if (pollTimer) clearInterval(pollTimer);
@@ -104,12 +117,14 @@ async function loadData() {
   try {
     const [p, l, s, st] = await Promise.all([
       invoke("api_hub_list_providers"),
-      invoke("api_hub_get_logs", { limit: 100, offset: 0 }),
+      invoke("api_hub_get_logs", { limit: LOG_PAGE_SIZE, offset: 0 }),
       invoke("api_hub_get_usage_stats"),
       invoke("api_hub_status"),
     ]);
     providers.value = p;
     logs.value = l;
+    logOffset.value = l.length;
+    hasMoreLogs.value = l.length === LOG_PAGE_SIZE;
     stats.value = s;
     status.value = st;
   } catch (err) {
@@ -122,13 +137,31 @@ async function loadData() {
 async function loadStats() {
   if (document.hidden) return;
   try {
-    const [s, l] = await Promise.all([
-      invoke("api_hub_get_usage_stats"),
-      invoke("api_hub_get_logs", { limit: 100, offset: 0 }),
-    ]);
+    // stats 与 logs 分离，logs 分页为 20 条，避免一次性拉 50 条阻塞渲染
+    const s = await invoke("api_hub_get_usage_stats");
     stats.value = s;
-    logs.value = l;
   } catch {}
+}
+
+async function refreshLogs() {
+  try {
+    const l = await invoke("api_hub_get_logs", { limit: LOG_PAGE_SIZE, offset: 0 });
+    logs.value = l;
+    logOffset.value = l.length;
+    hasMoreLogs.value = l.length === LOG_PAGE_SIZE;
+  } catch {}
+}
+
+async function loadMoreLogs() {
+  if (loadingMore.value || !hasMoreLogs.value) return;
+  loadingMore.value = true;
+  try {
+    const more = await invoke("api_hub_get_logs", { limit: LOG_PAGE_SIZE, offset: logOffset.value });
+    logs.value = [...logs.value, ...more];
+    logOffset.value += more.length;
+    hasMoreLogs.value = more.length === LOG_PAGE_SIZE;
+  } catch {}
+  finally { loadingMore.value = false; }
 }
 
 function beginAdd() {
@@ -268,12 +301,6 @@ function heatmapTooltip(cell) {
     .replace("{date}", date)
     .replace("{count}", cell.count);
 }
-// 过去一年请求总数（用于标题下的摘要行）
-const heatmapTotal = computed(() => {
-  const cells = heatmapCells();
-  return cells.reduce((sum, c) => sum + c.count, 0);
-});
-
 // 一次计算整张热力图：格子、月份标注、最大值
 const heatmap = computed(() => {
   const cells = heatmapCells();
@@ -286,12 +313,25 @@ const heatmap = computed(() => {
   };
 });
 
-function getModelEntries() {
-  return stats.value?.by_model
+// 过去一年请求总数（复用 heatmap 计算，避免重复全量遍历）
+const heatmapTotal = computed(() =>
+  heatmap.value.cells.reduce((sum, c) => sum + c.count, 0)
+);
+
+// 模型排行：按 by_model 引用变化才重算，避免每次渲染排序
+const modelEntries = computed(() =>
+  stats.value?.by_model
     ? Object.entries(stats.value.by_model).sort(
         (a, b) => Number(b[1]?.requests) - Number(a[1]?.requests)
       )
-    : [];
+    : []
+);
+const modelMax = computed(() =>
+  modelEntries.value.length ? modelEntries.value[0][1].requests : 1
+);
+
+function getModelEntries() {
+  return modelEntries.value;
 }
 function getAlias(p, id) {
   return p.model_aliases?.[id] || id;
@@ -309,6 +349,18 @@ const endpoints = computed(() =>
     : []
 );
 
+// Token 脱敏：status.auth_token 已为掩码，按需通过 api_hub_get_token 拉取明文
+const realToken = ref("");
+const maskedToken = computed(() => status.value?.auth_token || status.value?.auth_token_masked || "");
+async function toggleToken() {
+  if (!showToken.value) {
+    if (!realToken.value) {
+      try { realToken.value = await invoke("api_hub_get_token"); } catch { realToken.value = ""; }
+    }
+  }
+  showToken.value = !showToken.value;
+}
+
 async function copyEndpoint(url) {
   try {
     await navigator.clipboard.writeText(url);
@@ -320,7 +372,9 @@ async function copyEndpoint(url) {
 
 async function copyToken() {
   try {
-    await navigator.clipboard.writeText(status.value.auth_token || "");
+    const tok = realToken.value || (await invoke("api_hub_get_token"));
+    if (!realToken.value) realToken.value = tok;
+    await navigator.clipboard.writeText(tok || "");
     showToast(t("apiHub.gateway.copied"));
   } catch {
     showToast(t("apiHub.gateway.copyFailed"), "error");
@@ -356,10 +410,6 @@ const metricCards = computed(() =>
     : []
 );
 
-const modelMax = computed(() => {
-  const models = getModelEntries();
-  return models.length ? models[0][1].requests : 1;
-});
 const logColumns = computed(() => [
   { title: t("apiHub.logs.time"), slotName: "time", width: 90 },
   { title: t("apiHub.logs.model"), slotName: "model" },
@@ -643,16 +693,20 @@ const logColumns = computed(() => [
 
             <!-- Auth token display -->
             <div v-if="status?.running && status?.auth_token" class="token-row">
-              <div class="token-info">
+              <div class="token-info" style="cursor: pointer" @click="toggleToken">
                 <AppIcon name="lock" class="token-icon size-4" />
                 <span class="token-label">X-DevNexus-Token</span>
-                <code class="token-value">{{ status.auth_token }}</code>
+                <code class="token-value">{{ showToken ? realToken : maskedToken }}</code>
+                <AppIcon :name="showToken ? 'eye-close' : 'eye'" class="size-3.5 opacity-50" />
               </div>
               <Button size="sm" variant="outline" @click="copyToken">
                 <AppIcon name="copy" class="size-3.5" />
                 {{ t("apiHub.gateway.copyTooltip") }}
               </Button>
             </div>
+            <p v-if="status?.key_encrypted === false" class="mt-2 text-xs text-warning">
+              {{ t("apiHub.gateway.notEncrypted") || "Key storage unavailable, API keys stored in plaintext" }}
+            </p>
           </CardContent>
         </Card>
       </TabsContent>
@@ -729,6 +783,17 @@ const logColumns = computed(() => [
                   <EmptyDescription>{{ t("apiHub.logs.empty") }}</EmptyDescription>
                 </EmptyContent>
               </Empty>
+              <div v-else-if="hasMoreLogs" class="flex justify-center py-3">
+                <Button size="sm" variant="outline" :disabled="loadingMore" @click="loadMoreLogs">
+                  {{ loadingMore ? t("loading") : t("apiHub.logs.loadMore") }}
+                </Button>
+              </div>
+              <div v-else-if="logs.length >= LOG_PAGE_SIZE" class="py-2 text-center text-xs text-muted-foreground">
+                {{ t("apiHub.logs.allLoaded") }}
+              </div>
+            </div>
+            <div class="flex justify-end px-4 py-2">
+              <Button size="sm" variant="ghost" @click="refreshLogs">{{ t("refresh") }}</Button>
             </div>
           </CardContent>
         </Card>
