@@ -755,6 +755,7 @@
     "save_success": "Saved",
     "test_success": "Connected",
     "delete_confirm": "Delete connection {name}?",
+    "rename_confirm": "Rename {name}?",
     "secret_required": "Credential required — saving overwrites the existing one",
     "testing": "Testing…",
     "term_empty_hint": "Pick a connection below to open a terminal session",
@@ -831,7 +832,8 @@
       "dangerHint": "This command may have irreversible consequences. Confirm you understand what it does.",
       "noProvider": "No AI model configured: add an LLM Provider in API Hub first",
       "noTerminal": "No active terminal session",
-      "executed": "Sent to terminal"
+      "executed": "Sent to terminal",
+      "sftpHint": "Ask about the current directory — e.g. 'Which file is largest?' or 'Help me organize logs'"
     }
   }
 }

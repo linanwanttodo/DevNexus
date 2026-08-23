@@ -412,6 +412,88 @@ pub async fn ssh_ai_execute(
         .map_err(|e| format!("EXEC_FAILED: {e}"))
 }
 
+/// SFTP AI 助手：基于当前目录的 SFTP 上下文回答自然语言问题，返回可执行动作。
+/// 复用 API Hub 的 LLM Provider（与终端 AI 相同），无需额外配置。
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn ssh_ai_sftp(
+    state: State<'_, AppState>,
+    session_mgr: State<'_, SshSessionManager>,
+    sftp_id: String,
+    cwd: String,
+    listing: serde_json::Value, // 当前目录文件列表（前端传入）
+    history: Vec<serde_json::Value>,
+    message: String,
+    model: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let provider = pick_provider(&state, &model)?;
+    let chosen_model = model
+        .clone()
+        .or_else(|| provider.models.first().cloned())
+        .ok_or("所选 Provider 没有可用模型，请先在 API Hub 添加模型")?;
+
+    // 验证 SFTP 会话存在，确保上下文来自真实连接
+    if session_mgr.find_sftp(&sftp_id).await.is_none() {
+        return Err(format!("NO_SFTP: {sftp_id}"));
+    }
+
+    let listing_str = serde_json::to_string(&listing).unwrap_or_default();
+    let prompt = format!(
+        "你是运行在远程服务器上的 SFTP 文件管理器 AI 助手。\n\
+当前目录：{cwd}\n\
+当前目录内容（JSON：name/is_dir/size/mode/mtime）：\n{listing_str}\n\n\
+用户会用自然语言描述文件操作意图（如'最大的文件是哪个'、'帮我整理这里的日志'、'这个目录有多大'）。\n\
+你的职责：\n\
+1) 用简洁中文解释你的判断；\n\
+2) 若建议具体操作，只给出这些受支持的动作（JSON 数组，逐条）：\n\
+   - {{\"action\":\"navigate\", \"path\":\"<目录绝对路径>\"}}  # 进入某个目录\n\
+   - {{\"action\":\"rename\", \"from\":\"<旧路径>\", \"to\":\"<新路径>\"}}\n\
+   - {{\"action\":\"delete\", \"path\":\"<路径>\", \"is_dir\":true|false}}\n\
+   - {{\"action\":\"open\", \"path\":\"<文件绝对路径>\"}}  # 前端尝试下载/查看\n\
+3) 不要输出任何除此之外的命令代码；没有可执行动作时返回空数组。\n\
+请先用一段 markdown 说明，然后紧跟一行以 [ACTIONS] 开头的 JSON 数组。"
+    );
+
+    let mut messages: Vec<Value> = vec![serde_json::json!({ "role": "system", "content": prompt })];
+    for h in history.iter().rev().take(10).rev() {
+        if let (Some(role), Some(content)) = (
+            h.get("role").and_then(|r| r.as_str()),
+            h.get("content").and_then(|c| c.as_str()),
+        ) {
+            messages.push(serde_json::json!({ "role": role, "content": content }));
+        }
+    }
+    messages.push(serde_json::json!({ "role": "user", "content": message }));
+
+    let provider_clone = provider.clone();
+    let model_clone = chosen_model.clone();
+    let reply =
+        tokio::task::spawn_blocking(move || call_llm(&provider_clone, &model_clone, &messages, 60))
+            .await
+            .map_err(|e| format!("AI task join error: {e}"))??;
+
+    // 解析 [ACTIONS] 行后的 JSON
+    let mut actions: Vec<Value> = Vec::new();
+    for line in reply.lines() {
+        if let Some(idx) = line.find("[ACTIONS]") {
+            let rest = line[idx + "[ACTIONS]".len()..].trim();
+            if let Ok(v) = serde_json::from_str::<Value>(rest) {
+                if let Some(arr) = v.as_array() {
+                    actions = arr.clone();
+                }
+            }
+            break;
+        }
+    }
+
+    Ok(serde_json::json!({
+        "reply": reply,
+        "actions": actions,
+        "model": chosen_model,
+        "provider": provider.name,
+    }))
+}
+
 /// 读取终端最近输出（供前端"查看 AI 上下文"或调试）。
 #[tauri::command]
 pub async fn ssh_ai_get_buffer(

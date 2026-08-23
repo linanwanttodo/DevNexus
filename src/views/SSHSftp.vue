@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import {
@@ -14,6 +14,8 @@ import {
   onHostkeyPrompt,
   acceptHostkey,
   rejectHostkey,
+  aiSftp,
+  aiSftpModels,
 } from "../lib/api-ssh.js";
 import { showToast } from "../lib/toast.js";
 import { showConfirm } from "../lib/confirm.js";
@@ -68,6 +70,119 @@ const promptValue = ref("");
 // host key 首连确认
 const hostkeyPrompt = ref(null);
 let unlistenHostkey = null;
+
+// ── SFTP AI 助手 ──
+const aiOpen = ref(true);
+const aiModels = ref([]);
+const aiModel = ref("");
+const aiBusy = ref(false);
+const aiMessages = ref([]); // { role, content, actions? }
+const aiInput = ref("");
+
+async function loadAiModels() {
+  try {
+    const models = await aiSftpModels();
+    aiModels.value = models || [];
+    if (!aiModel.value && aiModels.value.length) aiModel.value = aiModels.value[0].model;
+  } catch {
+    // 无 Provider 时静默，AI 面板发送时会提示
+  }
+}
+
+async function sendAi() {
+  const text = aiInput.value.trim();
+  if (!text || aiBusy.value || !sftpId.value) return;
+  if (!aiModels.value.length) {
+    showToast(t("ssh.ai.noProvider"), "error");
+    return;
+  }
+  aiBusy.value = true;
+  aiInput.value = "";
+  aiMessages.value.push({ role: "user", content: text });
+  await nextTick();
+  scrollAi();
+
+  const history = aiMessages.value
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({ role: m.role, content: m.content }));
+
+  try {
+    const res = await aiSftp({
+      sftpId: sftpId.value,
+      cwd: cwd.value,
+      listing: entries.value,
+      history,
+      message: text,
+      model: aiModel.value || null,
+    });
+    aiMessages.value.push({
+      role: "assistant",
+      content: res.reply,
+      actions: res.actions || [],
+    });
+  } catch (err) {
+    aiMessages.value.push({ role: "assistant", content: `⚠️ ${friendlyError(err)}`, actions: [] });
+  } finally {
+    aiBusy.value = false;
+    await nextTick();
+    scrollAi();
+  }
+}
+
+function scrollAi() {
+  const box = document.querySelector(".sftp-ai-messages");
+  if (box) box.scrollTop = box.scrollHeight;
+}
+
+async function runAiAction(action) {
+  if (!sftpId.value) return;
+  try {
+    if (action.action === "navigate" && action.path) {
+      await cd(action.path);
+    } else if (action.action === "rename" && action.from && action.to) {
+      if (await showConfirm(tFormat("ssh.rename_confirm", { name: action.from }))) {
+        await renameSftp(sftpId.value, action.from, action.to);
+        await refresh();
+      }
+    } else if (action.action === "delete" && action.path) {
+      const name = action.path.split("/").pop() || action.path;
+      if (await showConfirm(tFormat("ssh.delete_confirm", { name }))) {
+        await deleteSftp(sftpId.value, action.path, !!action.is_dir);
+        await refresh();
+      }
+    } else if (action.action === "open" && action.path) {
+      // 尝试下载该文件（复用下载逻辑）
+      const name = action.path.split("/").pop() || action.path;
+      const total = null;
+      let local;
+      try {
+        local = await save({ defaultPath: name });
+      } catch {
+        return;
+      }
+      if (!local) return;
+      let offset = 0;
+      transfer.value = { kind: "down", name, done: 0, total: total || 0 };
+      try {
+        while (true) {
+          const b64 = await readSftpFile(sftpId.value, action.path, offset, CHUNK);
+          const bytes = b64ToBytes(b64);
+          if (bytes.length === 0) break;
+          await writeFile(local, bytes, { append: offset > 0, create: true });
+          offset += bytes.length;
+          transfer.value.done = offset;
+        }
+        showToast(t("ssh.download") + " ✓ " + name, "success");
+      } catch (err) {
+        showToast(friendlyError(err), "error");
+      } finally {
+        transfer.value = null;
+      }
+    }
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  }
+}
 
 const busy = computed(() => transfer.value !== null);
 const sortedEntries = computed(() =>
@@ -310,6 +425,7 @@ onMounted(async () => {
   unlistenHostkey = await onHostkeyPrompt((p) => {
     hostkeyPrompt.value = p;
   });
+  loadAiModels();
   try {
     conns.value = await listConnections();
   } catch (err) {
@@ -367,7 +483,8 @@ onBeforeUnmount(() => {
     </Empty>
 
     <!-- 文件浏览器 -->
-    <Card v-else class="shadow-sm drop-zone" @dragover.prevent @drop.prevent="onDrop">
+    <div v-else class="sftp-ai-layout">
+      <Card class="shadow-sm drop-zone flex-1 min-w-0" @dragover.prevent @drop.prevent="onDrop">
       <CardContent class="p-0">
         <!-- 工具栏 -->
         <div class="sftp-toolbar">
@@ -474,6 +591,64 @@ onBeforeUnmount(() => {
         </Table>
       </CardContent>
     </Card>
+
+    <!-- SFTP AI 助手面板 -->
+    <aside class="sftp-ai-panel" :class="{ collapsed: !aiOpen }">
+      <div class="sftp-ai-head">
+        <div class="sftp-ai-title">
+          <AppIcon name="sparkles" class="size-4" />
+          <span>{{ t("ssh.ai.title") }}</span>
+        </div>
+        <button class="sftp-ai-toggle" @click="aiOpen = !aiOpen">
+          <AppIcon :name="aiOpen ? 'panel-right-close' : 'panel-right-open'" class="size-4" />
+        </button>
+      </div>
+      <div v-if="aiOpen" class="sftp-ai-body">
+        <div class="sftp-ai-models">
+          <Select v-model="aiModel">
+            <SelectTrigger class="w-full">
+              <SelectValue :placeholder="t('ssh.ai.pickModel')" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="m in aiModels" :key="m.model + m.provider" :value="m.model">
+                {{ m.model }} · {{ m.provider }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div class="sftp-ai-messages">
+          <div v-if="!aiMessages.length" class="sftp-ai-empty">
+            {{ t("ssh.ai.sftpHint") }}
+          </div>
+          <div v-for="(m, i) in aiMessages" :key="i" class="sftp-ai-msg" :class="m.role">
+            <div class="sftp-ai-msg-role">{{ m.role === 'user' ? t('ssh.ai.you') : t('ssh.ai.assistant') }}</div>
+            <div class="sftp-ai-msg-text">{{ m.content }}</div>
+            <div v-if="m.actions && m.actions.length" class="sftp-ai-actions">
+              <div v-for="(act, ai) in m.actions" :key="ai" class="sftp-ai-action">
+                <code class="sftp-ai-action-code">{{ act.action }} {{ act.path || '' }}</code>
+                <Button size="sm" variant="outline" @click="runAiAction(act)">
+                  <AppIcon name="play" class="size-3.5" />
+                  {{ t("ssh.ai.run") }}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="sftp-ai-input">
+          <Input
+            v-model="aiInput"
+            :placeholder="t('ssh.ai.inputPlaceholder')"
+            @keydown.enter.prevent="sendAi"
+          />
+          <Button :disabled="aiBusy || !aiInput.trim()" @click="sendAi">
+            <Spinner v-if="aiBusy" class="size-3.5" />
+            <AppIcon v-else name="send" class="size-4" />
+            {{ t("ssh.ai.send") }}
+          </Button>
+        </div>
+      </div>
+    </aside>
+  </div>
 
     <!-- 传输进度 -->
     <div v-if="transfer" class="transfer-bar">
@@ -633,5 +808,136 @@ onBeforeUnmount(() => {
   margin-top: 4px;
   font-size: 12px;
   opacity: 0.7;
+}
+
+/* ── SFTP AI 助手布局 ─────────────────────────────────────── */
+.sftp-ai-layout {
+  display: flex;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+
+.sftp-ai-panel {
+  width: 330px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background-color: var(--color-card);
+  overflow: hidden;
+}
+.sftp-ai-panel.collapsed {
+  width: 44px;
+}
+.sftp-ai-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-muted);
+}
+.sftp-ai-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+.sftp-ai-toggle {
+  border: none;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: inline-flex;
+}
+.sftp-ai-toggle:hover {
+  background-color: var(--color-border);
+  color: var(--color-foreground);
+}
+.sftp-ai-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.sftp-ai-models {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.sftp-ai-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+}
+.sftp-ai-empty {
+  margin: auto;
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+  padding: 20px;
+}
+.sftp-ai-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sftp-ai-msg.user .sftp-ai-msg-role {
+  color: var(--color-primary);
+}
+.sftp-ai-msg.assistant .sftp-ai-msg-role {
+  color: var(--color-success);
+}
+.sftp-ai-msg-role {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sftp-ai-msg-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--color-foreground);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.sftp-ai-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.sftp-ai-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-muted);
+}
+.sftp-ai-action-code {
+  flex: 1;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--color-foreground);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.sftp-ai-input {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-border);
 }
 </style>

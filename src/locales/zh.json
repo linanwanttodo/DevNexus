@@ -762,6 +762,7 @@
     "save_success": "已保存",
     "test_success": "连接成功",
     "delete_confirm": "确定删除连接 {name}？",
+    "rename_confirm": "确定重命名 {name}？",
     "secret_required": "凭据必填：保存会覆盖旧凭据",
     "testing": "测试中…",
     "term_empty_hint": "从下方选择连接，打开终端会话",
@@ -838,7 +839,8 @@
       "dangerHint": "该命令可能造成不可逆后果，请确认你了解它的作用。",
       "noProvider": "未配置 AI 模型：请先在 API Hub 添加一个 LLM Provider",
       "noTerminal": "没有活动的终端会话",
-      "executed": "已发送到终端"
+      "executed": "已发送到终端",
+      "sftpHint": "可以询问当前目录相关的问题，例如「哪个文件最大？」或「帮我整理这里的日志」"
     }
   }
 }

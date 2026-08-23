@@ -387,6 +387,8 @@ pub fn run() {
             commands::ssh::ai::ssh_ai_chat,
             commands::ssh::ai::ssh_ai_execute,
             commands::ssh::ai::ssh_ai_get_buffer,
+            // SFTP AI 助手（复用 API Hub 的 LLM Provider 配置）
+            commands::ssh::ai::ssh_ai_sftp,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevNexus");

@@ -50,6 +50,13 @@ export const deleteSftp = (sftpId, path, isDir) =>
 export const statSftp = (sftpId, path) =>
   invoke("ssh_sftp_stat", { sftpId, path });
 
+// ---- SFTP AI 助手（复用 API Hub 的 LLM Provider 配置）----
+// 传入当前目录上下文，返回 { reply, actions, model, provider }
+export const aiSftp = (params) =>
+  invoke("ssh_ai_sftp", params);
+export const aiSftpModels = () =>
+  invoke("ssh_ai_list_models");
+
 // ---- 端口转发与隧道 ----
 export const forwardLocal = (sessionId, bindHost, bindPort, destHost, destPort) =>
   invoke("ssh_forward_local", { sessionId, bindHost, bindPort, destHost, destPort });
