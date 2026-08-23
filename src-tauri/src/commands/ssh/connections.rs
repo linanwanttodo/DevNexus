@@ -15,6 +15,16 @@ pub struct SshConnection {
     pub key_passphrase_encrypted: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// 连接分组（如 "生产环境"、"测试环境"）
+    pub group: Option<String>,
+    /// 标签列表
+    pub tags: Vec<String>,
+    /// 上次成功连接的时间戳
+    pub last_connected: Option<i64>,
+    /// Keepalive 间隔（秒），默认 30
+    pub keepalive_secs: u64,
+    /// 跳板机 ID（指向另一个 SshConnection.id）
+    pub jump_host_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -25,6 +35,11 @@ pub struct SshConnectionInfo {
     pub port: u16,
     pub username: String,
     pub auth_type: String,
+    pub group: Option<String>,
+    pub tags: Vec<String>,
+    pub last_connected: Option<i64>,
+    pub keepalive_secs: u64,
+    pub jump_host_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -37,6 +52,22 @@ pub struct SshConnectionInput {
     pub auth_type: String,
     pub secret: String,
     pub key_passphrase: Option<String>,
+    pub group: Option<String>,
+    pub tags: Vec<String>,
+    pub keepalive_secs: Option<u64>,
+    pub jump_host_id: Option<String>,
+}
+
+/// OpenSSH config 解析后的单条记录
+#[derive(Debug, Clone, Serialize)]
+pub struct OpenSshHost {
+    pub host: String,
+    pub host_name: Option<String>,
+    pub user: Option<String>,
+    pub port: Option<u16>,
+    pub identity_file: Option<String>,
+    pub proxy_command: Option<String>,
+    pub proxy_jump: Option<String>,
 }
 
 pub struct SshStore {
@@ -117,6 +148,11 @@ impl SshStore {
             port: c.port,
             username: c.username.clone(),
             auth_type: c.auth_type.clone(),
+            group: c.group.clone(),
+            tags: c.tags.clone(),
+            last_connected: c.last_connected,
+            keepalive_secs: c.keepalive_secs,
+            jump_host_id: c.jump_host_id.clone(),
         }
     }
 
@@ -169,14 +205,18 @@ pub fn ssh_save_connection(
     let conn = match &connection.id {
         Some(id) if conns.iter().any(|c| &c.id == id) => {
             let c = conns.iter_mut().find(|c| &c.id == id).unwrap();
-            c.name = connection.name;
-            c.host = connection.host;
+            c.name = connection.name.clone();
+            c.host = connection.host.clone();
             c.port = connection.port;
-            c.username = connection.username;
-            c.auth_type = connection.auth_type;
+            c.username = connection.username.clone();
+            c.auth_type = connection.auth_type.clone();
             c.encrypted_secret = enc;
             c.key_passphrase_encrypted = pass;
             c.updated_at = ts;
+            c.group = connection.group.clone();
+            c.tags = connection.tags.clone();
+            c.keepalive_secs = connection.keepalive_secs.unwrap_or(30);
+            c.jump_host_id = connection.jump_host_id.clone();
             c.clone()
         }
         _ => {
@@ -185,15 +225,20 @@ pub fn ssh_save_connection(
             *nid += 1;
             let c = SshConnection {
                 id: id.clone(),
-                name: connection.name,
-                host: connection.host,
+                name: connection.name.clone(),
+                host: connection.host.clone(),
                 port: connection.port,
-                username: connection.username,
-                auth_type: connection.auth_type,
+                username: connection.username.clone(),
+                auth_type: connection.auth_type.clone(),
                 encrypted_secret: enc,
                 key_passphrase_encrypted: pass,
                 created_at: ts,
                 updated_at: ts,
+                group: connection.group.clone(),
+                tags: connection.tags.clone(),
+                last_connected: None,
+                keepalive_secs: connection.keepalive_secs.unwrap_or(30),
+                jump_host_id: connection.jump_host_id.clone(),
             };
             conns.push(c.clone());
             c
@@ -202,6 +247,133 @@ pub fn ssh_save_connection(
     drop(conns);
     state.save()?;
     Ok(SshStore::to_info(&conn))
+}
+
+/// 标记连接成功建立的时间戳（session 打开成功后调用）
+#[tauri::command]
+pub fn ssh_touch_connection(state: tauri::State<SshStore>, id: String) -> Result<(), String> {
+    let ts = now_ts();
+    let mut conns = state.conns.lock().map_err(|e| e.to_string())?;
+    if let Some(c) = conns.iter_mut().find(|c| c.id == id) {
+        c.last_connected = Some(ts);
+    }
+    drop(conns);
+    state.save()
+}
+
+/// 从 ~/.ssh/config 解析连接条目（不包含密钥，仅元数据）
+#[tauri::command]
+pub fn ssh_import_open_ssh_config() -> Result<Vec<OpenSshHost>, String> {
+    let home = dirs::home_dir().ok_or("cannot find home directory")?;
+    let config_path = home.join(".ssh").join("config");
+    if !config_path.exists() {
+        return Ok(Vec::new());
+    }
+    let content =
+        std::fs::read_to_string(&config_path).map_err(|e| format!("read config: {}", e))?;
+    parse_openssh_config(&content)
+}
+
+/// 解析 OpenSSH config 内容，返回 Host 条目列表
+fn parse_openssh_config(content: &str) -> Result<Vec<OpenSshHost>, String> {
+    let mut hosts = Vec::new();
+    let mut current_host: Option<OpenSshHost> = None;
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 2 {
+            continue;
+        }
+        let key = parts[0].to_lowercase();
+        let value = parts[1..].join(" ");
+
+        match key.as_str() {
+            "host" => {
+                if let Some(h) = current_host.take() {
+                    hosts.push(h);
+                }
+                current_host = Some(OpenSshHost {
+                    host: value.clone(),
+                    host_name: None,
+                    user: None,
+                    port: None,
+                    identity_file: None,
+                    proxy_command: None,
+                    proxy_jump: None,
+                });
+            }
+            "hostname" => {
+                if let Some(ref mut h) = current_host {
+                    h.host_name = Some(value);
+                }
+            }
+            "user" => {
+                if let Some(ref mut h) = current_host {
+                    h.user = Some(value);
+                }
+            }
+            "port" => {
+                if let Some(ref mut h) = current_host {
+                    h.port = value.parse().ok();
+                }
+            }
+            "identityfile" | "identity_file" => {
+                // 展开 ~ 为真实 home 路径
+                let path = if value.starts_with("~/") {
+                    dirs::home_dir()
+                        .map(|h| h.join(value.trim_start_matches("~/")))
+                        .unwrap_or_else(|| std::path::PathBuf::from(&value))
+                } else {
+                    std::path::PathBuf::from(&value)
+                };
+                if let Some(ref mut h) = current_host {
+                    h.identity_file = Some(path.to_string_lossy().into_owned());
+                }
+            }
+            "proxycommand" => {
+                if let Some(ref mut h) = current_host {
+                    h.proxy_command = Some(value);
+                }
+            }
+            "proxyjump" => {
+                if let Some(ref mut h) = current_host {
+                    h.proxy_jump = Some(value);
+                }
+            }
+            _ => {}
+        }
+    }
+    if let Some(h) = current_host {
+        hosts.push(h);
+    }
+    Ok(hosts)
+}
+
+/// 导出连接为 OpenSSH config 格式（不含密码，仅元数据）
+#[tauri::command]
+pub fn ssh_export_openssh_config(
+    conn_ids: Vec<String>,
+    state: tauri::State<SshStore>,
+) -> Result<String, String> {
+    let conns = state.conns.lock().map_err(|e| e.to_string())?;
+    let mut lines = Vec::new();
+    for c in conns.iter().filter(|c| conn_ids.contains(&c.id)) {
+        lines.push(format!("Host {}", c.name));
+        if let Some(ref g) = c.group {
+            lines.push(format!("  # group: {}", g));
+        }
+        lines.push(format!("  HostName {}", c.host));
+        lines.push(format!("  User {}", c.username));
+        if c.port != 22 {
+            lines.push(format!("  Port {}", c.port));
+        }
+        lines.push(String::new());
+    }
+    Ok(lines.join("\n"))
 }
 
 #[tauri::command]
@@ -236,6 +408,10 @@ mod tests {
             auth_type: "password".into(),
             secret: "s3cret".into(),
             key_passphrase: None,
+            group: None,
+            tags: Vec::new(),
+            keepalive_secs: None,
+            jump_host_id: None,
         };
         let (enc, pass) = store.encrypt_secret(&input).unwrap();
         assert_ne!(enc, "s3cret");
@@ -256,6 +432,11 @@ mod tests {
             key_passphrase_encrypted: None,
             created_at: 0,
             updated_at: 0,
+            group: None,
+            tags: Vec::new(),
+            last_connected: None,
+            keepalive_secs: 30,
+            jump_host_id: None,
         };
         let info: SshConnectionInfo = conn.into();
         assert_eq!(info.id, "1");

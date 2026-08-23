@@ -8,6 +8,10 @@ export const listConnections = () => invoke("ssh_list_connections");
 export const saveConnection = (connection) =>
   invoke("ssh_save_connection", { connection });
 export const deleteConnection = (id) => invoke("ssh_delete_connection", { id });
+export const touchConnection = (id) => invoke("ssh_touch_connection", { id });
+export const importOpenSshConfig = () => invoke("ssh_import_open_ssh_config");
+export const exportOpenSshConfig = (connIds) =>
+  invoke("ssh_export_openssh_config", { connIds });
 
 // ---- 会话 / host key 首连确认 ----
 export const testConnection = (connectionId) =>
@@ -45,6 +49,16 @@ export const deleteSftp = (sftpId, path, isDir) =>
   invoke("ssh_sftp_delete", { sftpId, path, isDir });
 export const statSftp = (sftpId, path) =>
   invoke("ssh_sftp_stat", { sftpId, path });
+
+// ---- 端口转发与隧道 ----
+export const forwardLocal = (sessionId, bindHost, bindPort, destHost, destPort) =>
+  invoke("ssh_forward_local", { sessionId, bindHost, bindPort, destHost, destPort });
+export const closeForward = (sessionId, forwardId) =>
+  invoke("ssh_close_forward", { sessionId, forwardId });
+export const listForwards = (sessionId) =>
+  invoke("ssh_list_forwards", { sessionId });
+export const forwardAgent = (sessionId) =>
+  invoke("ssh_forward_agent", { sessionId });
 
 // ---- AI 助手（复用 API Hub 的 LLM Provider 配置）----
 // 列出可用模型（来自 API Hub 启用的 Provider）

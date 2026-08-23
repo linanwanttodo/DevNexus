@@ -74,6 +74,8 @@ export const iconMap = {
   server: "Server",
   list: "List",
   terminal: "Terminal",
+  network: "Link2",
+  forward: "ArrowLeftRight",
 
   // SSH AI 助手
   sparkles: "Sparkles",

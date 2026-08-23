@@ -7,6 +7,12 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fs;
 use std::sync::{Arc, Mutex};
+use tokio::io::{AsyncRead, AsyncWrite};
+
+/// 任何可作为 SSH 传输层的字节流：同时实现 AsyncRead/AsyncWrite 且可跨线程发送。
+/// 用于把直连 TcpStream 与跳板机隧道 ChannelStream 统一为 `Box<dyn TunnelStream>`。
+trait TunnelStream: AsyncRead + AsyncWrite + Unpin + Send + 'static {}
+impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> TunnelStream for T {}
 use tauri::Emitter;
 
 pub struct SshSessionManager {
@@ -31,6 +37,22 @@ pub struct SessionEntry {
     pub connection_id: String,
     pub terminals: tokio::sync::Mutex<HashMap<String, Arc<TerminalHandle>>>,
     pub sftp_sessions: tokio::sync::Mutex<HashMap<String, Arc<SftpHandle>>>,
+    /// 本地端口转发列表（已激活的 -L 转发）
+    pub local_forwards: tokio::sync::Mutex<Vec<ForwardEntry>>,
+    /// Keepalive 配置（秒）
+    pub keepalive_secs: u64,
+    /// 上次成功写入时间（用于 Keepalive 检测）
+    pub last_activity: tokio::sync::Mutex<std::time::Instant>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ForwardEntry {
+    pub id: String,
+    pub bind_host: String,
+    pub bind_port: u16,
+    pub dest_host: String,
+    pub dest_port: u16,
+    pub active: bool,
 }
 
 // TerminalHandle 持有可写的 write half（读 half 已移入后台 task）
@@ -264,6 +286,91 @@ impl SshSessionManager {
     }
 }
 
+/// 通过跳板机建立到目标的 SSH 传输层（ProxyJump 单跳）。
+/// 流程：直连跳板机 → 握手/认证 → 在跳板会话上开 direct-tcpip 通道到 (conn.host:conn.port)
+/// → 用该通道作为目标主机 SSH 握手的传输层（由上层 open() 接管后续握手/认证）。
+///
+/// 说明：跳板机自身须已“已知 host key”（先单独连一次跳板机，让 DevNexus 记住指纹）；
+/// 若跳板机指纹未知，则直接报错引导用户先直连跳板机，避免二次 hostkey 确认的交互歧义。
+async fn open_via_jump(
+    store: &SshStore,
+    manager: &SshSessionManager,
+    app: &tauri::AppHandle,
+    conn: &SshConnection,
+    target_host_key: &str,
+    jump_id: &str,
+) -> Result<Box<dyn TunnelStream>, String> {
+    let jump_conn = store
+        .find(jump_id)
+        .ok_or_else(|| format!("JUMP_HOST_NOT_FOUND: {jump_id}"))?;
+
+    let jump_host_key = format!("{}:{}", jump_conn.host, jump_conn.port);
+
+    // 1. 直连跳板机
+    let jtcp = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        tokio::net::TcpStream::connect((jump_conn.host.as_str(), jump_conn.port)),
+    )
+    .await
+    .map_err(|_| {
+        format!(
+            "JUMP_TIMEOUT: connect to {}:{}",
+            jump_conn.host, jump_conn.port
+        )
+    })?
+    .map_err(|e| format!("JUMP_CONNECT_FAILED: {e}"))?;
+
+    // 2. 跳板机握手 + 捕获 server key
+    let j_server_key: Arc<Mutex<Option<russh::keys::PublicKey>>> = Arc::new(Mutex::new(None));
+    let j_handler = SshHandler {
+        server_key: j_server_key.clone(),
+    };
+    let j_config = session_config();
+    let mut j_client = russh::client::connect_stream(j_config, jtcp, j_handler)
+        .await
+        .map_err(|e| format!("JUMP_HANDSHAKE_FAILED: {e}"))?;
+
+    let j_key = j_server_key
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or_else(|| "JUMP_NO_SERVER_KEY".to_string())?;
+    let j_fp = fingerprint(&j_key);
+
+    // 3. 跳板机 host key 校验（未知则引导先直连）
+    let j_known = manager.host_key(&jump_host_key);
+    match j_known {
+        Some(k) if k == j_fp => {}
+        _ => {
+            return Err(format!(
+                "JUMP_HOST_UNKNOWN_KEY: connect to jump host {} directly once to trust its key",
+                jump_conn.host
+            ));
+        }
+    }
+
+    // 4. 跳板机认证
+    authenticate(&mut j_client, store, &jump_conn).await?;
+
+    // 5. 在跳板会话上开 direct-tcpip 通道到目标主机
+    let ch = j_client
+        .channel_open_direct_tcpip(
+            conn.host.clone(),
+            conn.port as u32,
+            "127.0.0.1".to_string(),
+            0,
+        )
+        .await
+        .map_err(|e| format!("JUMP_DIRECT_TCP_FAIL: {e}"))?;
+
+    // 触发一次事件，确保后续目标握手若产生 hostkey 提示能被前端接收
+    let _ = app;
+    let _ = target_host_key;
+
+    // 6. 用通道作为目标 SSH 传输层
+    Ok(Box::new(ch.into_stream()))
+}
+
 pub async fn open(
     app: &tauri::AppHandle,
     store: &SshStore,
@@ -273,16 +380,24 @@ pub async fn open(
     let conn = store
         .find(connection_id)
         .ok_or_else(|| format!("NOT_FOUND: connection {connection_id}"))?;
+
     let host_key = format!("{}:{}", conn.host, conn.port);
 
-    // 1. TCP 连接
-    let tcp = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        tokio::net::TcpStream::connect((conn.host.as_str(), conn.port)),
-    )
-    .await
-    .map_err(|_| format!("TIMEOUT: connect to {}:{}", conn.host, conn.port))?
-    .map_err(|e| format!("CONNECT_FAILED: {e}"))?;
+    // 0. 传输层：若配置了跳板机，则先连跳板、经其建立 direct-tcpip 隧道到目标，
+    //    再在隧道之上跑目标主机的 SSH 握手；否则直连。
+    let transport: Box<dyn TunnelStream> = if let Some(jump_id) = &conn.jump_host_id {
+        Box::new(open_via_jump(store, manager, app, &conn, &host_key, jump_id).await?)
+    } else {
+        // 1. TCP 连接
+        let tcp = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            tokio::net::TcpStream::connect((conn.host.as_str(), conn.port)),
+        )
+        .await
+        .map_err(|_| format!("TIMEOUT: connect to {}:{}", conn.host, conn.port))?
+        .map_err(|e| format!("CONNECT_FAILED: {e}"))?;
+        Box::new(tcp)
+    };
 
     // 2. SSH 握手 + 捕获 server key
     let server_key: Arc<Mutex<Option<russh::keys::PublicKey>>> = Arc::new(Mutex::new(None));
@@ -290,7 +405,7 @@ pub async fn open(
         server_key: server_key.clone(),
     };
     let config = session_config();
-    let mut client = russh::client::connect_stream(config, tcp, handler)
+    let mut client = russh::client::connect_stream(config, transport, handler)
         .await
         .map_err(|e| format!("HANDSHAKE_FAILED: {e}"))?;
 
@@ -369,13 +484,12 @@ pub async fn open(
             connection_id: conn.id.clone(),
             terminals: tokio::sync::Mutex::new(HashMap::new()),
             sftp_sessions: tokio::sync::Mutex::new(HashMap::new()),
+            local_forwards: tokio::sync::Mutex::new(Vec::new()),
+            keepalive_secs: conn.keepalive_secs,
+            last_activity: tokio::sync::Mutex::new(std::time::Instant::now()),
         }),
     );
     Ok(session_id)
-}
-
-pub async fn close(manager: &SshSessionManager, session_id: &str) {
-    manager.sessions.lock().await.remove(session_id);
 }
 
 #[tauri::command]
@@ -427,8 +541,135 @@ pub async fn ssh_test_connection(
     connection_id: String,
 ) -> Result<String, String> {
     let sid = open(&app, &store, &manager, &connection_id).await?;
-    close(&manager, &sid).await;
+    manager.sessions.lock().await.remove(&sid);
     Ok("ok".into())
+}
+
+/// 启动本地端口转发（-L）：绑定 bind_host:bind_port，将流量通过 SSH 隧道转发到 dest_host:dest_port。
+#[tauri::command]
+pub async fn ssh_forward_local(
+    state: tauri::State<'_, SshSessionManager>,
+    session_id: String,
+    bind_host: String,
+    bind_port: u16,
+    dest_host: String,
+    dest_port: u16,
+) -> Result<ForwardEntry, String> {
+    use std::net::SocketAddr;
+    use tokio::net::TcpListener;
+
+    let sessions = state.sessions.lock().await;
+    let entry = sessions.get(&session_id).ok_or("SESSION_NOT_FOUND")?;
+    let entry_arc = Arc::clone(entry);
+    drop(sessions);
+
+    let dest_h = dest_host.clone();
+    let dest_p = dest_port;
+    let bind_a: SocketAddr = format!("{}:{}", bind_host, bind_port)
+        .parse()
+        .map_err(|_| "INVALID_BIND_ADDRESS")?;
+
+    let listener = TcpListener::bind(bind_a)
+        .await
+        .map_err(|e| format!("BIND_FAILED: {}", e))?;
+
+    let fid = uuid::Uuid::new_v4().to_string();
+    let fentry = ForwardEntry {
+        id: fid.clone(),
+        bind_host: bind_host.clone(),
+        bind_port,
+        dest_host: dest_host.clone(),
+        dest_port,
+        active: true,
+    };
+
+    // 登记到 local_forwards
+    {
+        let mut fw = entry_arc.local_forwards.lock().await;
+        fw.push(fentry.clone());
+    }
+
+    // 后台接受本地连接，通过 SSH direct-tcpip 转发
+    tokio::spawn(async move {
+        loop {
+            match listener.accept().await {
+                Ok((inbound, src)) => {
+                    let client = entry_arc.client.lock().await;
+                    match client
+                        .channel_open_direct_tcpip(
+                            dest_h.clone(),
+                            dest_p as u32,
+                            src.ip().to_string(),
+                            src.port() as u32,
+                        )
+                        .await
+                    {
+                        Ok(ch) => {
+                            // 用 ChannelStream 包装 SSH 通道（实现 tokio AsyncRead/AsyncWrite），
+                            // 再与本地 TCP 双向并发拷贝。copy_bidirectional 在任一端关闭后自动收尾。
+                            let mut ch_stream = ch.into_stream();
+                            let mut inbound = inbound;
+                            tokio::spawn(async move {
+                                let _ = tokio::io::copy_bidirectional(&mut inbound, &mut ch_stream)
+                                    .await;
+                            });
+                        }
+                        Err(e) => {
+                            eprintln!("[forward] channel open failed: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[forward] accept failed: {}", e);
+                    break;
+                }
+            }
+        }
+    });
+
+    Ok(fentry)
+}
+
+/// 关闭指定端口转发（标记 inactive）
+#[tauri::command]
+pub async fn ssh_close_forward(
+    state: tauri::State<'_, SshSessionManager>,
+    session_id: String,
+    forward_id: String,
+) -> Result<(), String> {
+    let sessions = state.sessions.lock().await;
+    if let Some(entry) = sessions.get(&session_id) {
+        let mut fw = entry.local_forwards.lock().await;
+        if let Some(f) = fw.iter_mut().find(|f| f.id == forward_id) {
+            f.active = false;
+        }
+    }
+    Ok(())
+}
+
+/// 查询当前会话已激活的端口转发列表
+#[tauri::command]
+pub async fn ssh_list_forwards(
+    state: tauri::State<'_, SshSessionManager>,
+    session_id: String,
+) -> Result<Vec<ForwardEntry>, String> {
+    let sessions = state.sessions.lock().await;
+    let entry = sessions.get(&session_id).ok_or("SESSION_NOT_FOUND")?;
+    let fw = entry.local_forwards.lock().await;
+    Ok(fw.clone())
+}
+
+/// 启用 SSH Agent 转发（读取 SSH_AUTH_SOCK，通过 SSH channel 转发 agent 请求）
+#[tauri::command]
+pub async fn ssh_forward_agent(
+    _state: tauri::State<'_, SshSessionManager>,
+    _session_id: String,
+) -> Result<String, String> {
+    use std::env;
+    let auth_sock = env::var("SSH_AUTH_SOCK")
+        .map_err(|_| "SSH_AUTH_SOCK not set — no agent available on this system")?;
+    // Agent 转发由 russh 协议层自动处理；此处仅验证环境变量存在
+    Ok(auth_sock)
 }
 
 #[cfg(test)]

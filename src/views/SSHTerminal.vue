@@ -21,7 +21,12 @@ import {
   aiChat,
   aiExecute,
   aiGetBuffer,
+  forwardLocal,
+  listForwards,
+  closeForward,
+  forwardAgent,
 } from "../lib/api-ssh.js";
+import { Input } from "@/components/ui/input";
 import { showToast } from "../lib/toast.js";
 import { t, tFormat } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
@@ -363,6 +368,71 @@ async function onHostkeyReject() {
     showToast(friendlyError(err), "error");
   }
 }
+
+// ── 端口转发（-L）面板 ──
+const forwardOpen = ref(false);
+const forwardList = ref([]);
+const fwd = ref({ bindHost: "127.0.0.1", bindPort: null, destHost: "", destPort: null });
+const fwdBusy = ref(false);
+
+async function refreshForwards() {
+  const sid = activeTermId();
+  if (!sid) return;
+  try {
+    forwardList.value = await listForwards(sid);
+  } catch (err) {
+    forwardList.value = [];
+  }
+}
+
+async function openForwardDialog() {
+  fwd.value = { bindHost: "127.0.0.1", bindPort: null, destHost: "", destPort: null };
+  forwardOpen.value = true;
+  await refreshForwards();
+}
+
+async function addForward() {
+  const sid = activeTermId();
+  if (!sid) return;
+  const { bindHost, bindPort, destHost, destPort } = fwd.value;
+  if (!bindPort || !destHost || !destPort) {
+    showToast(t("ssh.forward.fillRequired"), "error");
+    return;
+  }
+  fwdBusy.value = true;
+  try {
+    await forwardLocal(sid, bindHost, Number(bindPort), destHost, Number(destPort));
+    showToast(t("ssh.forward.added"), "success");
+    await refreshForwards();
+    fwd.value = { bindHost: "127.0.0.1", bindPort: null, destHost: "", destPort: null };
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  } finally {
+    fwdBusy.value = false;
+  }
+}
+
+async function removeForward(id) {
+  const sid = activeTermId();
+  if (!sid) return;
+  try {
+    await closeForward(sid, id);
+    await refreshForwards();
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  }
+}
+
+async function enableAgentForward() {
+  const sid = activeTermId();
+  if (!sid) return;
+  try {
+    const sock = await forwardAgent(sid);
+    showToast(t("ssh.forward.agentOn") + " " + sock, "success");
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  }
+}
 </script>
 
 <template>
@@ -387,6 +457,10 @@ async function onHostkeyReject() {
         <Button :disabled="!newConnId" @click="openTab(newConnId)">
           <AppIcon name="plus" class="size-4" />
           {{ t("ssh.open_terminal") }}
+        </Button>
+        <Button variant="outline" :disabled="!activeTermId()" @click="openForwardDialog">
+          <AppIcon name="network" class="size-4" />
+          {{ t("ssh.forward.title") }}
         </Button>
       </div>
     </div>
@@ -550,6 +624,63 @@ async function onHostkeyReject() {
           <Button variant="outline" @click="onHostkeyReject">{{ t("ssh.reject") }}</Button>
           <Button @click="onHostkeyAccept">{{ t("ssh.accept") }}</Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- 端口转发（-L）与 Agent 转发 -->
+    <Dialog :open="forwardOpen" @update:open="(v) => !v && (forwardOpen = false)">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{{ t("ssh.forward.title") }}</DialogTitle>
+        </DialogHeader>
+
+        <div class="fwd-form grid grid-cols-2 gap-2">
+          <label class="text-xs text-muted-foreground">
+            {{ t("ssh.forward.bindHost") }}
+            <Input v-model="fwd.bindHost" placeholder="127.0.0.1" />
+          </label>
+          <label class="text-xs text-muted-foreground">
+            {{ t("ssh.forward.bindPort") }}
+            <Input v-model="fwd.bindPort" type="number" placeholder="8080" />
+          </label>
+          <label class="text-xs text-muted-foreground">
+            {{ t("ssh.forward.destHost") }}
+            <Input v-model="fwd.destHost" placeholder="localhost" />
+          </label>
+          <label class="text-xs text-muted-foreground">
+            {{ t("ssh.forward.destPort") }}
+            <Input v-model="fwd.destPort" type="number" placeholder="80" />
+          </label>
+        </div>
+        <div class="flex items-center gap-2 mt-2">
+          <Button :disabled="fwdBusy" @click="addForward">
+            <Spinner v-if="fwdBusy" class="size-3.5" />
+            <AppIcon v-else name="forward" class="size-3.5" />
+            {{ t("ssh.forward.add") }}
+          </Button>
+          <Button variant="outline" @click="enableAgentForward">
+            <AppIcon name="key" class="size-3.5" />
+            {{ t("ssh.forward.agent") }}
+          </Button>
+        </div>
+
+        <div class="fwd-list mt-3 space-y-1">
+          <div v-if="!forwardList.length" class="text-xs text-muted-foreground">
+            {{ t("ssh.forward.empty") }}
+          </div>
+          <div
+            v-for="f in forwardList"
+            :key="f.id"
+            class="flex items-center justify-between rounded border px-2 py-1 text-sm"
+            :class="{ 'opacity-50': !f.active }"
+          >
+            <span class="font-mono">{{ f.bindHost }}:{{ f.bindPort }} → {{ f.destHost }}:{{ f.destPort }}</span>
+            <Button v-if="f.active" size="sm" variant="ghost" @click="removeForward(f.id)">
+              <AppIcon name="close" class="size-3.5" />
+              {{ t("ssh.forward.close") }}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   </div>
