@@ -466,3 +466,579 @@ pub fn clean_requires_sudo(paths: Vec<String>) -> Result<bool, String> {
     }
     Ok(need)
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Phase 3 — Linux 系统调优工具箱（Swap / DNS / 时区 / 防火墙 / 系统限制 / 日志清理）
+// 非 Linux 平台：命令返回 TUNING_UNSUPPORTED，前端展示「正在开发中」。
+// ════════════════════════════════════════════════════════════════════
+
+/// 总览：当前平台 + 支持的调优能力列表。
+#[derive(Serialize)]
+pub struct TuningOverview {
+    pub platform: String,
+    pub supported: Vec<String>,
+    pub message: Option<String>,
+}
+
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn get_tuning_overview() -> Result<TuningOverview, String> {
+    let platform = std::env::consts::OS.to_string();
+    #[cfg(target_os = "linux")]
+    {
+        return Ok(TuningOverview {
+            platform,
+            supported: vec![
+                "swap".into(),
+                "dns".into(),
+                "timezone".into(),
+                "firewall".into(),
+                "system_limits".into(),
+                "log_cleanup".into(),
+            ],
+            message: None,
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Ok(TuningOverview {
+            platform,
+            supported: vec![],
+            message: Some("TUNING_UNSUPPORTED: 系统调优工具箱当前仅支持 Linux".into()),
+        });
+    }
+}
+
+/// Swap 信息（swapon --show 解析）
+#[derive(Serialize)]
+pub struct SwapInfo {
+    pub enabled: bool,
+    pub devices: Vec<SwapDevice>,
+    pub total_mb: u64,
+    pub used_mb: u64,
+}
+#[derive(Serialize)]
+pub struct SwapDevice {
+    pub filename: String,
+    pub type_: String,
+    pub size_mb: u64,
+    pub used_mb: u64,
+}
+
+#[cfg(target_os = "linux")]
+fn run_cmd(prog: &str, args: &[&str]) -> Result<String, String> {
+    let out = std::process::Command::new(prog)
+        .args(args)
+        .output()
+        .map_err(|e| format!("CMD_FAILED {prog}: {e}"))?;
+    Ok(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn get_swap_info() -> Result<SwapInfo, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let out = run_cmd("swapon", &["--show=NAME,TYPE,SIZE,USED", "--bytes"]).unwrap_or_default();
+        let mut devices = Vec::new();
+        let mut total_mb = 0u64;
+        let mut used_mb = 0u64;
+        for (i, line) in out.lines().enumerate() {
+            if i == 0 {
+                continue; // header
+            }
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            if cols.len() >= 4 {
+                let size = cols[2].parse::<u64>().unwrap_or(0) / 1024 / 1024;
+                let used = cols[3].parse::<u64>().unwrap_or(0) / 1024 / 1024;
+                total_mb += size;
+                used_mb += used;
+                devices.push(SwapDevice {
+                    filename: cols[0].to_string(),
+                    type_: cols[1].to_string(),
+                    size_mb: size,
+                    used_mb: used,
+                });
+            }
+        }
+        return Ok(SwapInfo {
+            enabled: !devices.is_empty(),
+            devices,
+            total_mb,
+            used_mb,
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持 Swap 管理".into());
+    }
+}
+
+/// 创建/启用 swapfile（需要 root）。size_mb 为大小，路径默认 /swapfile。
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn set_swap(size_mb: u64, path: Option<String>) -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let p = path.unwrap_or_else(|| "/swapfile".to_string());
+        run_cmd("fallocate", &["-l", &format!("{}M", size_mb), &p])?;
+        run_cmd("chmod", &["600", &p])?;
+        run_cmd("mkswap", &[&p])?;
+        run_cmd("swapon", &[&p])?;
+        return Ok(format!("SWAP_OK: {p} enabled ({size_mb} MB)"));
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持 Swap 管理".into());
+    }
+}
+
+/// 关闭指定 swap 设备。
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn disable_swap(path: String) -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        run_cmd("swapoff", &[&path])?;
+        return Ok(format!("SWAP_OFF: {path} disabled"));
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持 Swap 管理".into());
+    }
+}
+
+/// DNS 配置（/etc/resolv.conf 内容 + 解析出的 nameserver 列表）
+#[derive(Serialize)]
+pub struct DnsConfig {
+    pub resolv_conf: String,
+    pub nameservers: Vec<String>,
+    pub search_domains: Vec<String>,
+}
+
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn get_dns_config() -> Result<DnsConfig, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let content =
+            fs::read_to_string("/etc/resolv.conf").map_err(|e| format!("RESOLV_CONF: {e}"))?;
+        let mut nameservers = Vec::new();
+        let mut search_domains = Vec::new();
+        for line in content.lines() {
+            let t = line.trim();
+            if let Some(rest) = t.strip_prefix("nameserver ") {
+                nameservers.push(rest.trim().to_string());
+            } else if let Some(rest) = t.strip_prefix("search ") {
+                search_domains.push(rest.trim().to_string());
+            }
+        }
+        return Ok(DnsConfig {
+            resolv_conf: content,
+            nameservers,
+            search_domains,
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持 DNS 管理".into());
+    }
+}
+
+/// 切换 DNS 预设（需 root 写入 /etc/resolv.conf，并备份原文件）。
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn set_dns(preset: String) -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let servers: Vec<&str> = match preset.as_str() {
+            "114" => vec!["114.114.114.114", "114.114.115.115"],
+            "google" => vec!["8.8.8.8", "8.8.4.4"],
+            "cloudflare" => vec!["1.1.1.1", "1.0.0.1"],
+            "ali" => vec!["223.5.5.5", "223.6.6.6"],
+            _ => return Err("DNS_BAD_PRESET".into()),
+        };
+        // 备份
+        if Path::new("/etc/resolv.conf").exists() {
+            let _ = fs::copy("/etc/resolv.conf", "/etc/resolv.conf.devnexus.bak");
+        }
+        let mut content = String::from("# Generated by DevNexus\n");
+        for s in servers {
+            content.push_str(&format!("nameserver {s}\n"));
+        }
+        fs::write("/etc/resolv.conf", content).map_err(|e| format!("DNS_WRITE: {e}"))?;
+        return Ok(format!("DNS_OK: switched to {preset}"));
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持 DNS 管理".into());
+    }
+}
+
+/// 时区信息（timedatectl status 解析）
+#[derive(Serialize)]
+pub struct TimezoneInfo {
+    pub timezone: String,
+    pub local_time: String,
+    pub utc_time: String,
+    pub ntp_enabled: bool,
+}
+
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn get_timezone_info() -> Result<TimezoneInfo, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let out = run_cmd("timedatectl", &["status"]).unwrap_or_default();
+        let mut timezone = String::new();
+        let mut local_time = String::new();
+        let mut utc_time = String::new();
+        let mut ntp_enabled = false;
+        for line in out.lines() {
+            let t = line.trim();
+            if let Some(rest) = t.strip_prefix("Time zone:") {
+                timezone = rest.split_whitespace().next().unwrap_or("").to_string();
+            } else if let Some(rest) = t.strip_prefix("Local time:") {
+                local_time = rest.to_string();
+            } else if let Some(rest) = t.strip_prefix("Universal time:") {
+                utc_time = rest.to_string();
+            } else if t.starts_with("NTP service:") {
+                ntp_enabled = t.contains("active");
+            }
+        }
+        return Ok(TimezoneInfo {
+            timezone,
+            local_time,
+            utc_time,
+            ntp_enabled,
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持时区管理".into());
+    }
+}
+
+/// 设置时区（需 root）。
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn set_timezone(tz: String) -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let tz_path = format!("/usr/share/zoneinfo/{tz}");
+        if !Path::new(&tz_path).exists() {
+            return Err("TZ_INVALID: 时区不存在".into());
+        }
+        run_cmd("timedatectl", &["set-timezone", &tz])?;
+        return Ok(format!("TZ_OK: set to {tz}"));
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持时区管理".into());
+    }
+}
+
+/// 防火墙状态（ufw / iptables）
+#[derive(Serialize)]
+pub struct FirewallStatus {
+    pub ufw_active: bool,
+    pub ufw_status: String,
+    pub iptables_rules: Vec<String>,
+}
+
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn get_firewall_status() -> Result<FirewallStatus, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let ufw = run_cmd("ufw", &["status"]).unwrap_or_default();
+        let ufw_active = ufw.contains("Status: active");
+        let iptables = run_cmd("iptables", &["-L", "-n", "-v"]).unwrap_or_default();
+        let rules: Vec<String> = iptables.lines().take(60).map(|s| s.to_string()).collect();
+        return Ok(FirewallStatus {
+            ufw_active,
+            ufw_status: ufw,
+            iptables_rules: rules,
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持防火墙管理".into());
+    }
+}
+
+/// 启用/禁用防火墙（需 root）。
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn set_firewall(enable: bool) -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let action = if enable { "enable" } else { "disable" };
+        run_cmd("ufw", &[action])?;
+        return Ok(if enable {
+            "FIREWALL_ENABLE".into()
+        } else {
+            "FIREWALL_DISABLE".into()
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持防火墙管理".into());
+    }
+}
+
+/// 系统资源限制（ulimit 解析关键项）
+#[derive(Serialize)]
+pub struct SystemLimits {
+    pub nofile_soft: String,
+    pub nofile_hard: String,
+    pub core_dump: String,
+    pub max_user_processes: String,
+    pub raw: String,
+}
+
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn get_system_limits() -> Result<SystemLimits, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let raw = run_cmd("bash", &["-c", "ulimit -a"]).unwrap_or_default();
+        let nofile_soft = run_cmd("bash", &["-c", "ulimit -Sn"])
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let nofile_hard = run_cmd("bash", &["-c", "ulimit -Hn"])
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let core_dump = run_cmd("bash", &["-c", "ulimit -c"])
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let max_user_processes = run_cmd("bash", &["-c", "ulimit -u"])
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        return Ok(SystemLimits {
+            nofile_soft,
+            nofile_hard,
+            core_dump,
+            max_user_processes,
+            raw,
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持系统限制查看".into());
+    }
+}
+
+/// 日志/缓存清理目标扫描（journalctl 占用、旧内核、/var/log、Docker 等）
+#[derive(Serialize)]
+pub struct CleanupTarget {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub size_mb: u64,
+    pub risk: String, // safe | warn | dangerous
+    pub action: String,
+}
+
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn scan_cleanup_targets() -> Result<Vec<CleanupTarget>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let mut out = Vec::new();
+        // 1. journalctl 日志占用
+        let journal = run_cmd("journalctl", &["--disk-usage"]).unwrap_or_default();
+        let journal_mb = parse_mb_from_line(&journal);
+        if journal_mb > 0 {
+            out.push(CleanupTarget {
+                id: "journal".into(),
+                name: "systemd 日志 (journalctl)".into(),
+                description: format!("journalctl --disk-usage: {journal_mb} MB"),
+                size_mb: journal_mb,
+                risk: "safe".into(),
+                action: "journalctl --vacuum-time=7days".into(),
+            });
+        }
+        // 2. /var/log
+        let mut varlog_fc = 0u64;
+        let varlog = dir_size(Path::new("/var/log"), &mut varlog_fc);
+        let varlog_mb = varlog / 1024 / 1024;
+        if varlog_mb > 0 {
+            out.push(CleanupTarget {
+                id: "varlog".into(),
+                name: "/var/log 日志".into(),
+                description: format!("{varlog_mb} MB 日志文件"),
+                size_mb: varlog_mb,
+                risk: "safe".into(),
+                action: "find /var/log -name '*.gz' -mtime +30 -delete".into(),
+            });
+        }
+        // 3. 用户缓存
+        let home = std::env::var("HOME").unwrap_or_default();
+        let mut cache_fc = 0u64;
+        let cache = dir_size(Path::new(&format!("{home}/.cache")), &mut cache_fc);
+        let cache_mb = cache / 1024 / 1024;
+        if cache_mb > 0 {
+            out.push(CleanupTarget {
+                id: "usercache".into(),
+                name: "用户缓存 ~/.cache".into(),
+                description: format!("{cache_mb} MB 缓存"),
+                size_mb: cache_mb,
+                risk: "warn".into(),
+                action: "rm -rf ~/.cache/*".into(),
+            });
+        }
+        // 4. 旧内核（Debian/Ubuntu）
+        let kernels = run_cmd("dpkg", &["-l", "linux-image-*"]).unwrap_or_default();
+        let kernel_count = kernels.lines().filter(|l| l.starts_with("ii")).count();
+        if kernel_count > 1 {
+            out.push(CleanupTarget {
+                id: "oldkernel".into(),
+                name: "旧内核 (linux-image)".into(),
+                description: format!("已安装 {kernel_count} 个内核，可清理旧版本"),
+                size_mb: 0,
+                risk: "dangerous".into(),
+                action: "apt-get autoremove --purge".into(),
+            });
+        }
+        // 5. Docker 悬空资源
+        let docker = run_cmd("docker", &["system", "df"]).ok();
+        if let Some(d) = docker {
+            if !d.trim().is_empty() {
+                out.push(CleanupTarget {
+                    id: "docker".into(),
+                    name: "Docker 悬空资源".into(),
+                    description: d.lines().next().unwrap_or("").to_string(),
+                    size_mb: 0,
+                    risk: "dangerous".into(),
+                    action: "docker system prune -a --volumes".into(),
+                });
+            }
+        }
+        out.sort_by_key(|a| a.size_mb);
+        out.reverse();
+        return Ok(out);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持日志清理扫描".into());
+    }
+}
+
+/// 解析形如 "Logs take up 256.0M in the journal." 的行里的 MB 数
+#[cfg(target_os = "linux")]
+fn parse_mb_from_line(s: &str) -> u64 {
+    for line in s.lines() {
+        let mut iter = line.split_whitespace().rev();
+        let Some(unit) = iter.next() else { continue };
+        if unit.ends_with('M') {
+            if let Ok(v) = unit.trim_end_matches('M').parse::<f64>() {
+                return v as u64;
+            }
+        }
+        if unit.ends_with('G') {
+            if let Ok(v) = unit.trim_end_matches('G').parse::<f64>() {
+                return (v * 1024.0) as u64;
+            }
+        }
+    }
+    0
+}
+
+/// 执行清理。dry_run=true 时只返回将执行的命令，不实际执行。
+/// 危险操作（Docker prune / 旧内核）要求前端传入 confirmed=true 二次确认。
+#[derive(Serialize)]
+pub struct CleanResult {
+    pub executed: Vec<String>,
+    pub freed_mb: u64,
+    pub dry_run: bool,
+}
+
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn clean_targets(
+    target_ids: Vec<String>,
+    dry_run: bool,
+    confirmed: bool,
+) -> Result<CleanResult, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let targets = scan_cleanup_targets().unwrap_or_default();
+        let mut executed = Vec::new();
+        let mut freed_mb = 0u64;
+        for t in targets {
+            if !target_ids.contains(&t.id) {
+                continue;
+            }
+            match t.id.as_str() {
+                "journal" => {
+                    if dry_run {
+                        executed.push(format!("[dry-run] {}", t.action));
+                    } else {
+                        let _ = run_cmd("journalctl", &["--vacuum-time=7days"]);
+                        executed.push("[done] journalctl vacuum → 7d".to_string());
+                        freed_mb += t.size_mb;
+                    }
+                }
+                "varlog" => {
+                    if dry_run {
+                        executed.push(format!("[dry-run] {}", t.action));
+                    } else {
+                        let _ = run_cmd(
+                            "find",
+                            &["/var/log", "-name", "*.gz", "-mtime", "+30", "-delete"],
+                        );
+                        executed.push("[done] /var/log *.gz (mtime+30) 已清理".to_string());
+                        freed_mb += t.size_mb;
+                    }
+                }
+                "usercache" => {
+                    if dry_run {
+                        executed.push(format!("[dry-run] {}", t.action));
+                    } else {
+                        let home = std::env::var("HOME").unwrap_or_default();
+                        let _ = fs::remove_dir_all(format!("{home}/.cache"));
+                        executed.push("[done] ~/.cache 已清理".to_string());
+                        freed_mb += t.size_mb;
+                    }
+                }
+                "oldkernel" => {
+                    if !confirmed {
+                        return Err("DANGER_REQUIRES_CONFIRM: 旧内核清理需要二次确认".into());
+                    }
+                    if dry_run {
+                        executed.push("[dry-run] apt-get autoremove --purge".to_string());
+                    } else {
+                        let _ = run_cmd("apt-get", &["-y", "autoremove", "--purge"]);
+                        executed.push("[done] apt autoremove --purge 已执行".to_string());
+                    }
+                }
+                "docker" => {
+                    if !confirmed {
+                        return Err("DANGER_REQUIRES_CONFIRM: Docker prune 需要二次确认".into());
+                    }
+                    if dry_run {
+                        executed.push("[dry-run] docker system prune -a --volumes".to_string());
+                    } else {
+                        let _ = run_cmd("docker", &["system", "prune", "-a", "--volumes", "-f"]);
+                        executed.push("[done] docker system prune -a --volumes 已执行".to_string());
+                    }
+                }
+                _ => {}
+            }
+        }
+        return Ok(CleanResult {
+            executed,
+            freed_mb,
+            dry_run,
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持日志清理".into());
+    }
+}

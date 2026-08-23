@@ -21,13 +21,13 @@ export const navItems = [
   { id: "passwords", route: "/passwords", icon: "lock", labelKey: "nav.passwords" },
   { id: "cookies", route: "/cookies", icon: "idcard", labelKey: "nav.cookies" },
   { id: "uninstall", route: "/uninstall", icon: "delete", labelKey: "nav.uninstall" },
-  { id: "system-tune", route: "/system-tune", icon: "tool", labelKey: "nav.system_tune",
+  { id: "tuning", route: "/tuning/linux", icon: "tool", labelKey: "nav.system_tune",
     context: {
       titleKey: "nav.system_tune",
       items: [
-        { route: "/system-tune", icon: "database", labelKey: "systemTune.disk" },
-        { route: "/system-tune/mac", icon: "apple", labelKey: "systemTune.mac" },
-        { route: "/system-tune/win", icon: "monitor", labelKey: "systemTune.win" },
+        { route: "/tuning/linux", icon: "terminal", labelKey: "tuningLinux.nav" },
+        { route: "/tuning/macos", icon: "apple", labelKey: "systemTune.mac" },
+        { route: "/tuning/windows", icon: "monitor", labelKey: "systemTune.win" },
       ],
     },
   },

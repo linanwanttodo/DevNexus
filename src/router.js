@@ -55,15 +55,15 @@ const routes = [
     component: () => import("./views/AppUninstaller.vue"),
   },
   {
-    path: "/system-tune",
+    path: "/tuning/linux",
     component: () => import("./views/SystemTuning.vue"),
   },
   {
-    path: "/system-tune/mac",
+    path: "/tuning/macos",
     component: () => import("./views/SystemTuning.vue"),
   },
   {
-    path: "/system-tune/win",
+    path: "/tuning/windows",
     component: () => import("./views/SystemTuning.vue"),
   },
   {
