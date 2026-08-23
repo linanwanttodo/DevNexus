@@ -263,4 +263,6 @@ pub struct AppState {
     pub auth_token: String,
     /// HTTP 服务是否已惰性启动（CAS 保证只启动一次）
     pub started: Arc<AtomicBool>,
+    /// 最近一次服务请求时间（毫秒时间戳）；用于空闲自动关闭（30 分钟无请求）
+    pub last_activity_ms: Arc<std::sync::atomic::AtomicU64>,
 }

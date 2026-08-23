@@ -124,6 +124,7 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
         api_key_cipher,
         auth_token,
         started: Arc::new(AtomicBool::new(false)),
+        last_activity_ms: Arc::new(std::sync::atomic::AtomicU64::new(0)),
     }
 }
 
@@ -147,6 +148,17 @@ pub fn ensure_started(state: &AppState) {
     tauri::async_runtime::spawn(async move {
         start(hub).await;
     });
+}
+
+/// 记录一次 API Hub 使用活动（刷新空闲关闭计时器）。
+/// 供服务端 HTTP 请求（touch_activity_mw）与前端 Tauri 命令共同调用。
+pub fn note_activity(state: &AppState) {
+    use std::sync::atomic::Ordering;
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    state.last_activity_ms.store(ms, Ordering::Relaxed);
 }
 
 /// 启动 API Hub HTTP 服务（在 Tauri 的异步运行时中运行）

@@ -29,28 +29,67 @@ pub async fn start_server(state: Arc<AppState>) {
     start_server_on(state, "127.0.0.1:3456").await;
 }
 
-/// 启动 API Hub HTTP 服务到指定地址（测试可绑定 `127.0.0.1:0`）
+/// 空闲自动关闭阈值：30 分钟无任何请求则优雅退出（释放端口与连接池）
+const IDLE_SHUTDOWN_SECS: u64 = 30 * 60;
+
+/// 启动 API Hub HTTP 服务到指定地址（测试可绑定 `127.0.0.1:0`）。
+/// 服务空闲超过 IDLE_SHUTDOWN_SECS 后自动优雅关闭，并把 started 复位，
+/// 下次使用 API Hub 的命令会再次触发惰性启动（ensure_started）。
 pub async fn start_server_on(state: Arc<AppState>, addr: &str) {
     let app = build_router(state.clone());
-
     let listener = match tokio::net::TcpListener::bind(addr).await {
-        Ok(l) => {
-            if let Ok(local) = l.local_addr() {
-                println!("[API Hub] Server started on http://{}", local);
-            }
-            state.running.store(true, Ordering::SeqCst);
-            l
-        }
+        Ok(l) => l,
         Err(e) => {
             eprintln!("[API Hub] Failed to bind {}: {}", addr, e);
             return;
         }
     };
+    if let Ok(local) = listener.local_addr() {
+        println!("[API Hub] Server started on http://{}", local);
+    }
+    state.running.store(true, Ordering::SeqCst);
+    // 记录启动时刻作为首个活动时间，避免「刚启动就被判定空闲」
+    touch_activity(&state);
 
-    if let Err(e) = axum::serve(listener, app).await {
+    // 空闲超时触发优雅关闭：axum::serve(..).with_graceful_shutdown 等待该 future
+    let idle_state = state.clone();
+    let idle_shutdown = async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            let now_ms = now_unix_ms();
+            let last = idle_state.last_activity_ms.load(Ordering::Relaxed);
+            if last > 0 && now_ms.saturating_sub(last) >= IDLE_SHUTDOWN_SECS * 1000 {
+                println!("[API Hub] Idle for {IDLE_SHUTDOWN_SECS}s, shutting down server");
+                break;
+            }
+        }
+    };
+
+    if let Err(e) = axum::serve(listener, app)
+        .with_graceful_shutdown(idle_shutdown)
+        .await
+    {
         eprintln!("[API Hub] Server error: {}", e);
     }
     state.running.store(false, Ordering::SeqCst);
+    // 复位 started，允许下次使用再次惰性拉起
+    let _ = state
+        .started
+        .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst);
+}
+
+/// 记录一次服务活动（每次 HTTP 请求命中时调用）
+fn touch_activity(state: &AppState) {
+    state
+        .last_activity_ms
+        .store(now_unix_ms(), Ordering::Relaxed);
+}
+
+fn now_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 /// 构建 Router（供集成测试 / 冒烟示例使用）
@@ -96,7 +135,22 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(health)
         .merge(protected)
         .layer(cors)
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            touch_activity_mw,
+        ))
         .with_state(state)
+}
+
+/// 请求级活动中间件：每次命中任一端点都刷新 last_activity_ms，
+/// 供空闲自动关闭逻辑判断「是否仍在使用」。
+async fn touch_activity_mw(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    touch_activity(&state);
+    next.run(req).await
 }
 
 /// 认证中间件：校验 `X-DevNexus-Token`、`Authorization: Bearer <token>`，

@@ -20,6 +20,7 @@ fn mask_api_key(key: &str) -> String {
 
 #[tauri::command]
 pub async fn api_hub_list_providers(state: State<'_, AppState>) -> Result<Vec<Provider>, String> {
+    super::note_activity(state.inner());
     let providers = state.providers.read().await;
     Ok(providers
         .iter()
@@ -35,11 +36,13 @@ pub async fn api_hub_add_provider(
     state: State<'_, AppState>,
     provider: Provider,
 ) -> Result<(), String> {
+    super::note_activity(state.inner());
     super::provider::add_provider(state.inner(), provider).await
 }
 
 #[tauri::command]
 pub async fn api_hub_delete_provider(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    super::note_activity(state.inner());
     super::provider::delete_provider(state.inner(), &id).await
 }
 
@@ -49,6 +52,7 @@ pub async fn api_hub_update_provider(
     id: String,
     provider: Provider,
 ) -> Result<(), String> {
+    super::note_activity(state.inner());
     super::provider::update_provider(state.inner(), &id, provider).await
 }
 
@@ -60,6 +64,7 @@ pub async fn api_hub_get_logs(
     limit: Option<usize>,
     offset: Option<usize>,
 ) -> Result<Vec<super::types::RequestLog>, String> {
+    super::note_activity(state.inner());
     Ok(super::usage::get_logs(state.inner(), limit.unwrap_or(50), offset.unwrap_or(0)).await)
 }
 
@@ -67,6 +72,7 @@ pub async fn api_hub_get_logs(
 pub async fn api_hub_get_usage_stats(
     state: State<'_, AppState>,
 ) -> Result<super::usage::UsageStats, String> {
+    super::note_activity(state.inner());
     Ok(super::usage::get_usage_stats(state.inner()).await)
 }
 
@@ -75,6 +81,7 @@ pub async fn api_hub_get_usage_stats(
 #[tauri::command]
 pub fn api_hub_status(state: State<'_, AppState>) -> serde_json::Value {
     super::ensure_started(state.inner());
+    super::note_activity(state.inner());
     let token = &state.auth_token;
     let masked = if token.len() > 12 && token.is_ascii() {
         format!("{}••••{}", &token[..4], &token[token.len() - 4..])
@@ -109,6 +116,7 @@ pub async fn api_hub_fetch_models(
     protocol: String,
     provider_id: Option<String>,
 ) -> Result<Vec<FetchedModel>, String> {
+    super::note_activity(state.inner());
     let pt = super::types::ApiProtocol::from_protocol_str(&protocol).ok_or_else(|| {
         format!(
             "Unknown protocol: '{}'. Supported: openai_chat, openai_responses, anthropic, gemini, ollama",

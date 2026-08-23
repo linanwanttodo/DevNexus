@@ -156,6 +156,7 @@ pub struct AppState {
     pub api_key_cipher: Arc<ApiKeyCipher>,   // API Key 加密/解密
     pub auth_token: String,                   // 本地访问令牌（H1 安全修复）
     pub started: Arc<AtomicBool>,            // HTTP 服务惰性启动标记（CAS 保证只启动一次）
+    pub last_activity_ms: Arc<AtomicU64>,    // 最近一次服务请求时间戳（空闲自动关闭用）
 }
 ```
 
@@ -248,6 +249,10 @@ pub fn ensure_started(state: &AppState) {
 
 pub async fn start(state: Arc<AppState>) {
     server::start_server(state).await;
+    // server::start_server_on 内置空闲自动关闭：
+    //   每次 HTTP 请求/前端 Tauri 命令都会刷新 last_activity_ms；
+    //   连续 30 分钟无任何调用 → with_graceful_shutdown 优雅退出、
+    //   复位 started，下次使用 API Hub 时重新惰性拉起。
 }
 ```
 
