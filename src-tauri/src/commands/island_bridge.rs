@@ -240,6 +240,7 @@ mod imp {
 /// spawn_blocking 把阻塞调用挪到线程池，主线程始终空闲。
 #[tauri::command]
 pub async fn island_media_status() -> Option<MediaStatus> {
+    ensure_started();
     tauri::async_runtime::spawn_blocking(imp::media_status)
         .await
         .ok()
@@ -250,6 +251,7 @@ pub async fn island_media_status() -> Option<MediaStatus> {
 /// 同样 async + spawn_blocking，避免阻塞主线程。
 #[tauri::command]
 pub async fn island_media_control(action: String) -> Result<(), String> {
+    ensure_started();
     tauri::async_runtime::spawn_blocking(move || imp::media_control(&action))
         .await
         .map_err(|e| e.to_string())?
@@ -257,9 +259,36 @@ pub async fn island_media_control(action: String) -> Result<(), String> {
 
 /// 启动系统通知监听（在 setup 中调用一次）
 pub fn init(app: tauri::AppHandle) {
-    imp::start_notification_listener(app.clone());
-    // 工作区跟随：mutter(Wayland) 下 STICKY 不可靠，改为监听工作区切换、移动岛窗口
-    start_workspace_follower(app);
+    // 惰性启动：不再立即拉起 D-Bus 通知监听线程与工作区跟随轮询线程。
+    // 二者只有灵动岛真正启用/使用时才需要——未启用时每次启动省掉一个
+    // D-Bus monitor 连接 + 一个 500ms 的 X11 工作区轮询线程。
+    // 首次使用灵动岛（island_get_enabled / island_set_enabled / media / hud）
+    // 时由 ensure_started() 真正拉起。这里仅暂存 app 句柄供惰性启动使用。
+    let _ = HANDLE.set(app);
+}
+
+/// 缓存 AppHandle，供无 window/app 参数的 island 命令触发 ensure_started()
+static HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+
+/// 惰性启动灵动岛数据桥（通知监听 + 工作区跟随）。CAS 保证只启动一次。
+/// 由使用灵动岛的命令（island_get_enabled / island_set_enabled / media / hud）
+/// 首个触发；未启用灵动岛的应用启动不拉起后台线程。
+pub fn ensure_started() {
+    use std::sync::OnceLock;
+    static STARTED: OnceLock<()> = OnceLock::new();
+    if STARTED.get().is_some() {
+        return;
+    }
+    let _ = STARTED.set(());
+    // 通知监听仅 Linux；工作区跟随亦仅在 Linux 实际工作（见各 cfg 实现）
+    let Some(app) = HANDLE.get() else {
+        return;
+    };
+    #[cfg(target_os = "linux")]
+    {
+        imp::start_notification_listener(app.clone());
+        start_workspace_follower(app.clone());
+    }
 }
 
 // ═══════════════ 跨工作区可见（GNOME/mutter 兼容）═══════════════
@@ -427,6 +456,8 @@ fn island_enabled_path() -> std::path::PathBuf {
 /// 读取灵动岛开关状态（默认关闭，与前端 stores.js 默认一致）
 #[tauri::command]
 pub fn island_get_enabled() -> bool {
+    // 注意：不在此触发 ensure_started()——该命令会在启动构造托盘菜单时被调用，
+    // 会导致惰性启动退化为启动即拉。由 media/hud/set_enabled 等真正使用时触发。
     std::fs::read_to_string(island_enabled_path())
         .map(|s| s.trim() == "1")
         .unwrap_or(false)
@@ -435,6 +466,7 @@ pub fn island_get_enabled() -> bool {
 /// 设置灵动岛开关状态并同步所有岛窗口显示/隐藏
 #[tauri::command]
 pub fn island_set_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), String> {
+    ensure_started();
     if let Err(e) = std::fs::create_dir_all(crate::utils::data_dir()) {
         eprintln!("[DevNexus] cannot create data dir for island_enabled: {e}");
     }
@@ -709,6 +741,7 @@ fn read_brightness_percent() -> Option<f32> {
 /// 查询系统 HUD（音量/亮度）快照
 #[tauri::command]
 pub async fn island_get_hud() -> IslandHud {
+    ensure_started();
     tauri::async_runtime::spawn_blocking(|| IslandHud {
         volume_percent: read_volume_percent(),
         brightness_percent: read_brightness_percent(),
