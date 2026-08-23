@@ -1,6 +1,6 @@
 # SSH 模块与通用导航上下文 实现计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 为 DevNexus 新增 SSH 模块（连接管理 + 交互式终端 + SFTP），并将侧边栏改造成"图标轨 + 上下文面板"的通用导航上下文机制。
 
@@ -69,7 +69,7 @@
 - Produces: `pub struct CryptoVault { .. }`，方法 `CryptoVault::new() -> Self`、`fn encrypt(&self, data: &str) -> Result<String, String>`、`fn decrypt(&self, encrypted_data: &str) -> Result<String, String>`。密钥服务名 `com.devnexus.app` / 用户 `encryption-key`，回退文件 `password_key.bin`，与现有 vault 完全一致（**保证既有加密数据可继续解密**）。
 - Consumes: 无。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 创建 `src-tauri/src/utils/crypto.rs`，先写测试（`#[cfg(test)]`）：
 
@@ -190,12 +190,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml utils::crypto`
 Expected: FAIL（`unimplemented!()` panic + `mod crypto not found` 编译错误）。先将 `src-tauri/src/utils/mod.rs` 加上 `pub mod crypto;` 解决 `mod crypto not found`。
 
-- [ ] **Step 3: 实现 `load_or_create_key`**
+- [x] **Step 3: 实现 `load_or_create_key`**
 
 从 `password_manager.rs` 的 `load_or_create_key` / `read_key_file` / `write_key_file` / `migrate_from_keyfile` / `try_remove_old_keyfile`（第 99–271 行）整体迁移到 `CryptoVault`，保留相同 SERVICE_NAME/KEYRING_USER 与回退链。复制后把其中的 `Self::` 路径保持（方法名相同），删掉 password_manager 中的重复实现。
 
@@ -299,7 +299,7 @@ fn try_remove_old_keyfile() {
 }
 ```
 
-- [ ] **Step 4: 重构 `PasswordManager` 使用共享 vault**
+- [x] **Step 4: 重构 `PasswordManager` 使用共享 vault**
 
 在 `password_manager.rs` 中：
 - 删除重复的 `load_or_create_key`/`read_key_file`/`write_key_file`/`migrate_from_keyfile`/`try_remove_old_keyfile`/`encrypt`/`decrypt` 方法及其辅助函数（第 99–322 行）
@@ -318,12 +318,12 @@ pub struct PasswordManager {
 }
 ```
 
-- [ ] **Step 5: 运行全部测试验证通过**
+- [x] **Step 5: 运行全部测试验证通过**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml`
 Expected: 全部 PASS（含 password_manager 既有 7 个测试 + crypto 新 4 个测试）。
 
-- [ ] **Step 6: 门禁 + 提交**
+- [x] **Step 6: 门禁 + 提交**
 
 ```bash
 cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo clippy --all-targets -- -D warnings
@@ -351,7 +351,7 @@ git commit -m "refactor: 抽取共享 CryptoVault，SSH 与密码管理器复用
   - `pub struct SshStore { pub vault: CryptoVault, pub conns: Arc<Mutex<Vec<SshConnection>>> }`，`impl SshStore { pub fn new() -> Self }`（启动即加载 `ssh_connections.json`）
 - Consumes: Task 1 的 `CryptoVault`。
 
-- [ ] **Step 1: 加依赖**
+- [x] **Step 1: 加依赖**
 
 `src-tauri/Cargo.toml` 的 `[dependencies]` 增加：
 
@@ -363,7 +363,7 @@ bytes = "1"
 
 Run: `cargo check --manifest-path src-tauri/Cargo.toml` 确认依赖解析成功。
 
-- [ ] **Step 2: 写连接序列化/加解密测试**
+- [x] **Step 2: 写连接序列化/加解密测试**
 
 创建 `src-tauri/src/commands/ssh/connections.rs`，先写测试与结构（`SshStore` 构造带固定密钥 vault）：
 
@@ -475,12 +475,12 @@ mod tests {
 
 说明：`CryptoVault::for_test()` 是本任务临时加的测试辅助——在 `crypto.rs` 增加 `pub fn for_test() -> Self { Self { key: Arc::new(Mutex::new([9u8; 32])) } }`。
 
-- [ ] **Step 3: 运行测试验证失败**
+- [x] **Step 3: 运行测试验证失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml ssh::connections`
 Expected: FAIL（`SshStore` 等未实现、`CryptoVault::for_test` 不存在）。先创建 `src-tauri/src/commands/ssh/mod.rs`：`pub mod connections;`，并在 `commands/mod.rs` 加 `pub mod ssh;`。
 
-- [ ] **Step 4: 实现 CRUD 命令**
+- [x] **Step 4: 实现 CRUD 命令**
 
 补全 `SshStore` 与命令：
 
@@ -609,12 +609,12 @@ pub fn ssh_delete_connection(state: tauri::State<SshStore>, id: String) -> Resul
 }
 ```
 
-- [ ] **Step 5: 运行测试验证通过**
+- [x] **Step 5: 运行测试验证通过**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml ssh::connections`
 Expected: PASS。
 
-- [ ] **Step 6: 门禁 + 提交**
+- [x] **Step 6: 门禁 + 提交**
 
 ```bash
 cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo clippy --all-targets -- -D warnings
@@ -642,7 +642,7 @@ git commit -m "feat(ssh): 连接配置加密存储与 CRUD 命令"
   - 命令：`#[tauri::command] pub async fn ssh_hostkey_accept(app: tauri::AppHandle, state: tauri::State<SshSessionManager>, session_id: String, host: String, fingerprint: String) -> Result<(), String>`、`ssh_hostkey_reject(...)`、`ssh_close(session_id)`、`ssh_test_connection(store, connection_id)`
 - Consumes: Task 2 的 `SshStore`（`find`/`decrypt_secret`/`decrypt_passphrase`）。
 
-- [ ] **Step 1: 写 host key 指纹与 known_hosts 测试**
+- [x] **Step 1: 写 host key 指纹与 known_hosts 测试**
 
 先写纯逻辑测试（known_hosts 文件读写 + 指纹字符串化），不依赖真实网络：
 
@@ -735,12 +735,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml ssh::session`
 Expected: FAIL（模块不存在）。在 `ssh/mod.rs` 加 `pub mod session;`。`save_known_hosts` 与 `check_host_key` 测试应该能跑过——把实现先补齐（上面代码已含），验证"未知→Prompt / 不匹配→Err"语义正确。`check_host_key` 的调用方（Step 4）是编译期验证点。
 
-- [ ] **Step 3: 实现 `SshHandler` + 连接认证**
+- [x] **Step 3: 实现 `SshHandler` + 连接认证**
 
 补全 handler 与 `open`：
 
@@ -803,7 +803,7 @@ async fn authenticate(
 }
 ```
 
-- [ ] **Step 4: 实现 `open`（连接 + host key 提示 + 认证）**
+- [x] **Step 4: 实现 `open`（连接 + host key 提示 + 认证）**
 
 ```rust
 use tauri::Emitter;
@@ -917,7 +917,7 @@ pub async fn close(manager: &SshSessionManager, session_id: &str) {
 }
 ```
 
-- [ ] **Step 5: 实现 host key 确认与测试命令**
+- [x] **Step 5: 实现 host key 确认与测试命令**
 
 ```rust
 #[tauri::command]
@@ -963,11 +963,11 @@ pub async fn ssh_test_connection(
 
 注意：`open` 里等待确认的循环依赖 `pending_keys` 中 fingerprint 变化来判断 accept（`ssh_hostkey_accept` 只是校验参数，不主动移除）。可改为在 `ssh_hostkey_accept` 校验通过后直接 `pending.remove(&session_id)`，循环里用 `pending.contains_key` 判断。实现时采用后者（语义更清晰）：accept → remove；循环里 `pending.get(&session_id)` 返回 None 且此前为 Some 则视为接受，超时判拒绝。
 
-- [ ] **Step 6: 运行测试 + 编译**
+- [x] **Step 6: 运行测试 + 编译**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml ssh::session` → PASS；`cargo check --manifest-path src-tauri/Cargo.toml` → OK。
 
-- [ ] **Step 7: 门禁 + 提交**
+- [x] **Step 7: 门禁 + 提交**
 
 ```bash
 cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo clippy --all-targets -- -D warnings
@@ -993,7 +993,7 @@ git commit -m "feat(ssh): 连接池、认证与 host key 首连确认"
   - 事件：`ssh-terminal-output`（payload `{ session_id: String, data: String /* base64 */ }`）、`ssh-terminal-closed`（`{ session_id: String, reason: String }`）
 - Consumes: Task 3 的 `SshSessionManager`（`sessions` 的 `SessionEntry.client`）、`open`。
 
-- [ ] **Step 1: 实现终端会话状态与 open**
+- [x] **Step 1: 实现终端会话状态与 open**
 
 `SessionEntry` 增加终端通道表。在 `session.rs` 的 `SessionEntry` 中加字段（Task 3 已建，这里补）：
 
@@ -1059,7 +1059,7 @@ pub async fn ssh_terminal_open(
 }
 ```
 
-- [ ] **Step 2: 实现通道开启 + 读任务 + 输入命令**
+- [x] **Step 2: 实现通道开启 + 读任务 + 输入命令**
 
 ```rust
 async fn open_channel<H: russh::client::Handler>(
@@ -1172,12 +1172,12 @@ pub async fn ssh_terminal_close(
 }
 ```
 
-- [ ] **Step 3: 编译验证**
+- [x] **Step 3: 编译验证**
 
 Run: `cargo check --manifest-path src-tauri/Cargo.toml`
 Expected: OK。若 `Handle<H>` 泛型在 `open_channel` 传参上有生命周期/泛型问题，将 `open_channel` 的参数类型改为 `russh::client::Handle<SshHandler>`（我们只用具体 handler）。
 
-- [ ] **Step 4: 门禁 + 提交**
+- [x] **Step 4: 门禁 + 提交**
 
 ```bash
 cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo clippy --all-targets -- -D warnings
@@ -1203,7 +1203,7 @@ git commit -m "feat(ssh): PTY 终端会话、输入输出数据流与缩放"
   - `#[tauri::command] pub async fn ssh_sftp_mkdir / ssh_sftp_rename / ssh_sftp_delete / ssh_sftp_stat`（签名同列表）
 - Consumes: Task 3 的 `SshSessionManager`、`open`。
 
-- [ ] **Step 1: 实现 SFTP 会话与目录列举**
+- [x] **Step 1: 实现 SFTP 会话与目录列举**
 
 ```rust
 use crate::commands::ssh::connections::SshStore;
@@ -1288,7 +1288,7 @@ pub async fn ssh_sftp_list_dir(
 }
 ```
 
-- [ ] **Step 2: 实现读写/增删改命令**
+- [x] **Step 2: 实现读写/增删改命令**
 
 ```rust
 use base64::{engine::general_purpose, Engine as _};
@@ -1416,12 +1416,12 @@ pub async fn ssh_sftp_stat(manager: tauri::State<'_, SshSessionManager>, sftp_id
 
 注意：`open_with_flags` 与 `create_dir`/`rename`/`remove_file`/`remove_dir`/`stat`/`open` 均为 `russh-sftp 2.x` 的 `SftpSession` 方法；若版本方法名不同（如 `create_dir` vs `create_dir`），以 `russh-sftp 2.4` 文档为准微调。`with_sftp` 占位函数若引入编译噪音则删除。
 
-- [ ] **Step 3: 编译验证**
+- [x] **Step 3: 编译验证**
 
 Run: `cargo check --manifest-path src-tauri/Cargo.toml`
 Expected: OK。SFTP 相关 API 若签名不一致，参考 `russh-sftp` 2.4 的 `_autodocs/02-client-session.md` 与 `03-client-file-and-streams.md` 修正。
 
-- [ ] **Step 4: 门禁 + 提交**
+- [x] **Step 4: 门禁 + 提交**
 
 ```bash
 cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo clippy --all-targets -- -D warnings
@@ -1441,7 +1441,7 @@ git commit -m "feat(ssh): SFTP 目录列举、读写、增删改"
 - Consumes: Task 1–5 全部命令。
 - Produces: 后端可被前端调用的完整命令集 + `manage` 的 `SshStore`/`SshSessionManager`。
 
-- [ ] **Step 1: `ssh/mod.rs` 导出 + 状态构建**
+- [x] **Step 1: `ssh/mod.rs` 导出 + 状态构建**
 
 ```rust
 pub mod connections;
@@ -1450,7 +1450,7 @@ pub mod terminal;
 pub mod sftp;
 ```
 
-- [ ] **Step 2: `lib.rs` 注册状态与命令**
+- [x] **Step 2: `lib.rs` 注册状态与命令**
 
 `lib.rs` 的 `setup` 或 builder 链中加：
 
@@ -1483,12 +1483,12 @@ commands::ssh::sftp::ssh_sftp_delete,
 commands::ssh::sftp::ssh_sftp_stat,
 ```
 
-- [ ] **Step 3: 编译 + 全量测试**
+- [x] **Step 3: 编译 + 全量测试**
 
 Run: `cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --all-targets -- -D warnings`
 Expected: PASS + 无警告。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add src-tauri/src/lib.rs src-tauri/src/commands/ssh/mod.rs
@@ -1515,13 +1515,13 @@ git commit -m "feat(ssh): 注册全部 SSH 命令与全局状态"
   - 新图标 key：`server`、`list`、`terminal`
 - Consumes: 无。
 
-- [ ] **Step 1: 加 xterm 依赖**
+- [x] **Step 1: 加 xterm 依赖**
 
 ```bash
 pnpm add @xterm/xterm@6 @xterm/addon-fit
 ```
 
-- [ ] **Step 2: 建 `nav-config.js`**
+- [x] **Step 2: 建 `nav-config.js`**
 
 ```js
 // src/lib/nav-config.js — 导航配置单一事实来源
@@ -1570,7 +1570,7 @@ export function navWithContext(id) {
 }
 ```
 
-- [ ] **Step 3: 路由新增**
+- [x] **Step 3: 路由新增**
 
 `router.js` 末尾（`/:pathMatch` 之前）追加：
 
@@ -1589,7 +1589,7 @@ export function navWithContext(id) {
 },
 ```
 
-- [ ] **Step 4: 图标映射与按需导入**
+- [x] **Step 4: 图标映射与按需导入**
 
 `icon-map.js` 增加：
 
@@ -1601,7 +1601,7 @@ terminal: "Terminal",
 
 `AppIcon.vue` 的 import 与 `IconComp` 增加 `Server, List, Terminal`（来自 `@lucide/vue`）。
 
-- [ ] **Step 5: i18n 键**
+- [x] **Step 5: i18n 键**
 
 `zh.json`：
 ```json
@@ -1642,7 +1642,7 @@ terminal: "Terminal",
 ```
 `en.json` / `ru.json` 对应翻译（`nav.ssh` = "SSH"；ru 参考既有模块风格）。
 
-- [ ] **Step 6: 编译验证**
+- [x] **Step 6: 编译验证**
 
 Run: `pnpm check`
 Expected: 构建通过（视图文件尚不存在会失败——先建三个最小占位视图，见 Task 9/10/11 的骨架，此处先建空壳导出即可）。
@@ -1652,7 +1652,7 @@ Expected: 构建通过（视图文件尚不存在会失败——先建三个最�
 <template><div class="page"><h1>SSH</h1></div></template>
 ```
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add package.json pnpm-lock.yaml src/router.js src/lib/nav-config.js src/components/AppIcon.vue src/lib/icon-map.js src/locales src/views/SSHConnections.vue src/views/SSHTerminal.vue src/views/SSHSftp.vue
@@ -1670,7 +1670,7 @@ git commit -m "feat(ssh): 前端路由、导航上下文配置、i18n 与 xterm 
 - Consumes: Task 7 的 `navItems`/`navForPath`。
 - Produces: 双栏侧边栏：图标轨（全部主模块）+ 上下文面板（激活模块的子项）。
 
-- [ ] **Step 1: 替换 script 逻辑**
+- [x] **Step 1: 替换 script 逻辑**
 
 `Sidebar.vue` 的 `<script setup>` 中替换导航相关部分：
 
@@ -1693,7 +1693,7 @@ function handleSubClick(sub) {
 
 删除旧的 `navItems` 数组、`selectedKey` 计算（改用 `active`）。
 
-- [ ] **Step 2: 重写模板为双栏**
+- [x] **Step 2: 重写模板为双栏**
 
 `<aside class="sidebar">` 内替换 `<nav class="nav-menu">` 为：
 
@@ -1732,7 +1732,7 @@ function handleSubClick(sub) {
 </div>
 ```
 
-- [ ] **Step 3: 调整样式**
+- [x] **Step 3: 调整样式**
 
 `.sidebar` 宽度改为：图标轨 52px + 上下文面板 172px（有上下文时），无上下文时仅 52px。新增：
 
@@ -1777,17 +1777,17 @@ function handleSubClick(sub) {
 
 保留 logo 区、status-bar、footer 不动。`.sidebar` 容器样式更新为：`width: auto; min-width: 52px;` 由子栏撑开。
 
-- [ ] **Step 4: 编译验证**
+- [x] **Step 4: 编译验证**
 
 Run: `pnpm check`
 Expected: 构建通过。
 
-- [ ] **Step 5: 手动验证**
+- [x] **Step 5: 手动验证**
 
 Run: `pnpm tauri dev`
 验证：① 点击各主模块图标导航正常；② 点击 SSH 图标 → 右侧出现 SSH 上下文面板（连接/终端/文件）；③ 切到 `/ssh/sessions` 时图标轨 SSH 保持高亮、面板"终端"子项高亮；④ 点击无上下文的模块（如概览）→ 面板收起。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/components/Sidebar.vue
@@ -1808,7 +1808,7 @@ git commit -m "feat(nav): 侧边栏双栏图标轨 + 上下文面板"
   - `SSHConnections.vue`：连接列表 + 新建/编辑表单（Dialog）+ 测试 + 打开终端跳转 `/ssh/sessions?open=<id>`
 - Consumes: Task 6 的后端命令、Task 7 的路由。
 
-- [ ] **Step 1: 建 `api-ssh.js`**
+- [x] **Step 1: 建 `api-ssh.js`**
 
 ```js
 // src/lib/api-ssh.js — SSH 后端命令封装
@@ -1829,7 +1829,7 @@ export const closeTerminal = (sessionId) =>
   invoke("ssh_terminal_close", { sessionId });
 ```
 
-- [ ] **Step 2: 实现连接管理视图**
+- [x] **Step 2: 实现连接管理视图**
 
 `SSHConnections.vue`：列表 + 对话框表单 + 操作。参考 `ContainerManager.vue` 的布局与 `ConfirmDialog`/`toast` 用法（`src/lib/toast.js` 提供 `toast.success/error`）。核心：
 
@@ -1948,15 +1948,15 @@ function openTerminal(id) { router.push({ path: "/ssh/sessions", query: { open: 
 
 配套 `.conn-grid`/`.conn-card`/`.modal` 等 scoped 样式（与 `ContainerManager.vue` 的卡片风格一致）。
 
-- [ ] **Step 3: 编译验证**
+- [x] **Step 3: 编译验证**
 
 Run: `pnpm check` → 构建通过。
 
-- [ ] **Step 4: 手动验证**
+- [x] **Step 4: 手动验证**
 
 Run: `pnpm tauri dev` → 连接页新增/编辑/删除/测试；测试不存在的 host 显示错误 toast。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/views/SSHConnections.vue src/lib/api-ssh.js
@@ -1975,7 +1975,7 @@ git commit -m "feat(ssh): 连接管理视图（列表/增删改/测试）"
 - Produces: 多标签终端页（xterm.js）。每标签一个 `{ sessionId, connectionName, terminal, fitAddon }`。监听 `ssh-terminal-output`/`ssh-terminal-closed`/`ssh-hostkey-prompt`。
 - Consumes: Task 6 命令、Task 9 的 `api-ssh.js`。
 
-- [ ] **Step 1: `api-ssh.js` 补终端/事件封装**
+- [x] **Step 1: `api-ssh.js` 补终端/事件封装**
 
 ```js
 import { listen } from "@tauri-apps/api/event";
@@ -1989,7 +1989,7 @@ export const rejectHostkey = (sessionId) => invoke("ssh_hostkey_reject", { sessi
 export const listSftp = (sftpId, path) => invoke("ssh_sftp_list_dir", { sftpId, path });
 ```
 
-- [ ] **Step 2: 实现终端视图**
+- [x] **Step 2: 实现终端视图**
 
 `SSHTerminal.vue` 核心逻辑：
 
@@ -2097,15 +2097,15 @@ onBeforeUnmount(async () => {
 
 样式：`.tabbar`（水平滚动、圆角 tab）、`.term-holder { flex: 1; min-height: 0; padding: 4px; }`、`.term-container { height: 100%; }`；`.page-terminal { display: flex; flex-direction: column; height: 100%; }`。多标签切换时用 `v-show` 控制 `display`（xterm 在 display:none 时会丢布局，fit 时重新 fit）。实现中为每个 tab 挂到 `#term-holder`，切换时设置 `container.style.display = tab.sessionId === activeId ? 'block' : 'none'` 并 `fit.fit()`。
 
-- [ ] **Step 3: 编译验证**
+- [x] **Step 3: 编译验证**
 
 Run: `pnpm check` → 通过。
 
-- [ ] **Step 4: 手动验证**
+- [x] **Step 4: 手动验证**
 
 Run: `pnpm tauri dev` → 从连接页点"打开终端"跳转并连上；输入命令有响应；调整窗口大小终端自适应；断线显示 disconnected；首次连接弹出指纹确认。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/views/SSHTerminal.vue src/lib/api-ssh.js
@@ -2124,7 +2124,7 @@ git commit -m "feat(ssh): 多标签 xterm 终端视图与事件流"
 - Produces: 双栏 SFTP 浏览器 + 拖拽上传/下载 + 进度条。
 - Consumes: Task 6 命令（`ssh_sftp_*`）、Task 9 `api-ssh.js`。
 
-- [ ] **Step 1: `api-ssh.js` 补 SFTP 封装**
+- [x] **Step 1: `api-ssh.js` 补 SFTP 封装**
 
 ```js
 export const openSftp = (connectionId) => invoke("ssh_sftp_open", { connectionId });
@@ -2136,7 +2136,7 @@ export const deleteSftp = (sftpId, path, isDir) => invoke("ssh_sftp_delete", { s
 export const statSftp = (sftpId, path) => invoke("ssh_sftp_stat", { sftpId, path });
 ```
 
-- [ ] **Step 2: 实现 SFTP 视图**
+- [x] **Step 2: 实现 SFTP 视图**
 
 `SSHSftp.vue` 核心：
 
@@ -2218,15 +2218,15 @@ function onDrop(e) {
 
 `decode`/`btoa` 辅助函数与 Task 10 相同。
 
-- [ ] **Step 3: 编译验证**
+- [x] **Step 3: 编译验证**
 
 Run: `pnpm check` → 通过。
 
-- [ ] **Step 4: 手动验证**
+- [x] **Step 4: 手动验证**
 
 Run: `pnpm tauri dev` → 连接后浏览目录、进入/返回、上传拖拽、下载到本地、新建文件夹、重命名、删除。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/views/SSHSftp.vue src/lib/api-ssh.js
@@ -2243,7 +2243,7 @@ git commit -m "feat(ssh): SFTP 双栏文件浏览器与拖拽传输"
 **Interfaces:**
 - Consumes: Task 1–11。
 
-- [ ] **Step 1: 全量测试**
+- [x] **Step 1: 全量测试**
 
 ```bash
 cargo test --manifest-path src-tauri/Cargo.toml
@@ -2252,18 +2252,18 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check --manifest-path src-tauri/Cargo.toml
 ```
 
-- [ ] **Step 2: 手动集成验证清单**
+- [x] **Step 2: 手动集成验证清单**
 
-- [ ] 连接页：新建/编辑/删除/测试连接
-- [ ] 终端：多标签打开、输入命令、窗口缩放、关闭、断线提示、host key 首连确认
-- [ ] SFTP：浏览/上传（拖拽）/下载/新建文件夹/重命名/删除
-- [ ] 侧边栏：图标轨点击 SSH 展开上下文面板；无上下文模块收起面板；子项高亮跟随路由
+- [x] 连接页：新建/编辑/删除/测试连接
+- [x] 终端：多标签打开、输入命令、窗口缩放、关闭、断线提示、host key 首连确认
+- [x] SFTP：浏览/上传（拖拽）/下载/新建文件夹/重命名/删除
+- [x] 侧边栏：图标轨点击 SSH 展开上下文面板；无上下文模块收起面板；子项高亮跟随路由
 
-- [ ] **Step 3: 更新文档**
+- [x] **Step 3: 更新文档**
 
 `README.md` 特性列表加 SSH；`docs/modules/` 新增 `14-ssh.md`（简述架构与命令清单）；`CHANGELOG.md` 记一条。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add README.md docs CHANGELOG.md

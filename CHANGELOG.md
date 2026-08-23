@@ -13,6 +13,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.12] - 2026-08-16
+
+### Added (English)
+- SSH module: encrypted connection store, multi-tab xterm terminal, SFTP browser with chunked transfer
+- SSH ProxyJump (jump host), local port forwarding (-L), dynamic SOCKS5 proxy (-D), SSH agent forwarding
+- SSH AI assistant for terminal and SFTP, reusing API Hub LLM providers
+- OpenSSH config import/export; connection groups, tags, keepalive; key file import
+- Generic sidebar context-panel navigation (icon rail + sub-items)
+
+### 新增（中文）
+- SSH 模块：加密连接存储、多标签 xterm 终端、SFTP 分块传输文件浏览器
+- SSH 跳板机（ProxyJump）、本地端口转发（-L）、动态 SOCKS5 代理（-D）、Agent 转发
+- 终端/SFTP AI 助手（复用 API Hub 的 LLM Provider 配置）
+- OpenSSH config 导入/导出；连接分组、标签、Keepalive；私钥文件导入
+- 侧边栏通用导航上下文机制（图标轨 + 子面板）
+
+---
+
 ## [1.3.10] - 2026-08-13
 
 ### Added (English)

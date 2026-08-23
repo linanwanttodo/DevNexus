@@ -25,6 +25,7 @@ DevNexus 是一个**跨平台桌面应用**，将开发者日常需要的环境�
 - **环境管理器** — 编辑 PATH、环境变量、dotfile 配置
 - **容器管理** — Docker/Podman 容器、镜像、卷、网络一站式管理
 - **API Hub** — 本地 AI 统一网关，兼容 OpenAI/Anthropic/Google 等多协议转换
+- **SSH 管理** — 连接配置、多标签终端（xterm）、SFTP 文件管理、跳板机/端口转发/SOCKS5 代理
 - **镜像设置** — 一键配置 pip / npm / apt 镜像源
 - **系统仪表板** — 实时查看 CPU、内存、磁盘、运行时版本
 - **灵动岛** — 全局悬浮胶囊：系统状态 HUD、通知融合、媒体控制
@@ -47,6 +48,7 @@ DevNexus 是一个**跨平台桌面应用**，将开发者日常需要的环境�
 | [环境管理](docs/modules/03-environment.md) | 运行时检测、Unix/Windows PATH 编辑 |
 | [容器管理](docs/modules/13-containers.md) | Docker/Podman 容器、镜像、卷、网络管理 |
 | [API Hub](docs/modules/11-api-hub.md) | 本地 AI 统一网关，多协议格式转换 |
+| [SSH](docs/modules/14-ssh.md) | 连接管理、交互终端、SFTP、隧道与 AI 助手 |
 | [镜像设置](docs/modules/04-mirror.md) | 12 种包源切换、延迟测试与推荐 |
 | [端口管理](docs/modules/05-port.md) | lsof / procfs / netstat 三平台方案 |
 | [密码管理器](docs/modules/07-password.md) | AES-256-GCM + PBKDF2 + SQLite |

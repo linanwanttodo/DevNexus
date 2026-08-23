@@ -49,6 +49,14 @@ export const deleteSftp = (sftpId, path, isDir) =>
   invoke("ssh_sftp_delete", { sftpId, path, isDir });
 export const statSftp = (sftpId, path) =>
   invoke("ssh_sftp_stat", { sftpId, path });
+export const chmodSftp = (sftpId, path, mode) =>
+  invoke("ssh_sftp_chmod", { sftpId, path, mode });
+export const copyRecursiveSftp = (sftpId, from, to, overwrite) =>
+  invoke("ssh_sftp_copy_recursive", { sftpId, from, to, overwrite });
+export const rmRecursiveSftp = (sftpId, path) =>
+  invoke("ssh_sftp_rm_recursive", { sftpId, path });
+export const searchSftp = (sftpId, root, pattern, maxDepth) =>
+  invoke("ssh_sftp_search", { sftpId, root, pattern, maxDepth });
 
 // ---- SFTP AI 助手（复用 API Hub 的 LLM Provider 配置）----
 // 传入当前目录上下文，返回 { reply, actions, model, provider }

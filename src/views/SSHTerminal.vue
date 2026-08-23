@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import "@xterm/xterm/css/xterm.css";
 import {
   listConnections,
@@ -215,7 +216,7 @@ async function openTab(connectionId) {
     return;
   }
 
-  const tab = { key: ++seq, sessionId: null, connectionId, name: c.name, term: null, fit: null, status: "connecting" };
+  const tab = { key: ++seq, sessionId: null, connectionId, name: c.name, term: null, fit: null, search: null, status: "connecting", autoReconnect: true };
   tabs.value.push(tab);
   activeKey.value = tab.key;
   await nextTick();
@@ -252,7 +253,9 @@ async function openTab(connectionId) {
     },
   });
   const fit = new FitAddon();
+  const search = new SearchAddon();
   term.loadAddon(fit);
+  term.loadAddon(search);
   term.open(el);
   try {
     fit.fit();
@@ -260,12 +263,31 @@ async function openTab(connectionId) {
     // 首帧可能尚未布局完成，稍后由 watch(activeKey) 兜底
   }
 
+  // Ctrl+Shift+C 复制选中文本；无选中则发送系统中断（与常规终端一致）
+  term.attachCustomKeyEventHandler((ev) => {
+    if (ev.type !== "keydown") return true;
+    if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && (ev.code === "KeyC" || ev.code === "KeyV")) {
+      if (ev.code === "KeyC" && term.hasSelection()) {
+        onCopySelection(tab);
+      }
+      return false; // 由我们不发送到远端
+    }
+    if (ev.ctrlKey || ev.metaKey) {
+      if (ev.key.toLowerCase() === "f") {
+        openSearch(tab);
+        return false;
+      }
+    }
+    return true;
+  });
+
   try {
     // 先按当前容器尺寸打开 PTY，避免 80x24 之后再resize抖动
     const sessionId = await openTerminal(connectionId, term.cols, term.rows);
     tab.sessionId = sessionId;
     tab.term = term;
     tab.fit = fit;
+    tab.search = search;
     tab.status = "live";
     term.onData((d) => {
       sendTerminalInput(sessionId, toBase64(d)).catch(() => {});
@@ -295,8 +317,160 @@ function closeTab(tab) {
 
 function reconnect(tab) {
   const connectionId = tab.connectionId;
+  const name = tab.name;
+  const wasAuto = tab.autoReconnect;
+  // 保留历史：copy 旧 xterm 缓冲到新实例前先记录 scrollback
+  const history = tab.term ? tab.term.buffer.active ? scrollbackText(tab.term) : "" : "";
   closeTab(tab);
-  openTab(connectionId);
+  const key = openTabRestore(connectionId, history);
+  // 恢复自动重连开关
+  const nt = tabs.value.find((t) => t.key === key);
+  if (nt) nt.autoReconnect = wasAuto;
+  void name;
+}
+
+/** 读取 xterm scrollback 为纯文本（分块遍历行），用于会话历史持久化 */
+function scrollbackText(term) {
+  if (!term || !term.buffer) return "";
+  const buf = term.buffer.active;
+  const rows = buf.length;
+  const cols = buf.cols;
+  const lines = [];
+  const max = Math.min(rows, 4000); // 限制内存
+  for (let i = Math.max(0, rows - max); i < rows; i++) {
+    const line = buf.getLine(i);
+    if (!line) continue;
+    const cell = line._line;
+    if (cell && typeof cell.translateToString === "function") {
+      lines.push(cell.translateToString(false));
+    } else {
+      lines.push(line.translateToString(false));
+    }
+  }
+  void cols;
+  return lines.join("\n");
+}
+
+/**
+ * 以「保留历史」的方式打开新终端：openTab 的变体。
+ * 返回新 tab 的 key。历史上段在 PTY 建立后写入终端并换行。
+ */
+function openTabRestore(connectionId, history) {
+  const c = conns.value.find((x) => x.id === connectionId);
+  if (!c) return null;
+  const existing = tabs.value.find(
+    (tb) => tb.connectionId === connectionId && tb.status !== "disconnected"
+  );
+  if (existing) {
+    activeKey.value = existing.key;
+    existing.term?.focus();
+    return existing.key;
+  }
+  const tab = { key: ++seq, sessionId: null, connectionId, name: c.name, term: null, fit: null, search: null, status: "connecting", autoReconnect: true };
+  tabs.value.push(tab);
+  activeKey.value = tab.key;
+  nextTick(async () => {
+    const el = els.get(tab.key);
+    if (!el) return;
+    const term = new Terminal({
+      cursorBlink: true,
+      fontFamily: '"JetBrains Mono", Menlo, monospace',
+      fontSize: 13,
+      lineHeight: 1.2,
+      theme: {
+        background: "#0d1117", foreground: "#e6edf3", cursor: "#58a6ff",
+        selectionBackground: "#264f78", black: "#484f58", red: "#ff7b72",
+        green: "#3fb950", yellow: "#d29922", blue: "#58a6ff", magenta: "#bc8cff",
+        cyan: "#39c5cf", white: "#b1bac4", brightBlack: "#6e7681",
+        brightRed: "#ffa198", brightGreen: "#56d364", brightYellow: "#e3b341",
+        brightBlue: "#79c0ff", brightMagenta: "#d2a8ff", brightCyan: "#56d4dd",
+        brightWhite: "#f0f6fc",
+      },
+    });
+    const fit = new FitAddon();
+    const search = new SearchAddon();
+    term.loadAddon(fit);
+    term.loadAddon(search);
+    term.open(el);
+    try { fit.fit(); } catch {}
+    term.attachCustomKeyEventHandler((ev) => {
+      if (ev.type !== "keydown") return true;
+      if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && (ev.code === "KeyC" || ev.code === "KeyV")) {
+        if (ev.code === "KeyC" && term.hasSelection()) onCopySelection(tab);
+        return false;
+      }
+      if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "f") { openSearch(tab); return false; }
+      return true;
+    });
+    try {
+      const sessionId = await openTerminal(connectionId, term.cols, term.rows);
+      tab.sessionId = sessionId;
+      tab.term = term;
+      tab.fit = fit;
+      tab.search = search;
+      tab.status = "live";
+      term.onData((d) => sendTerminalInput(sessionId, toBase64(d)).catch(() => {}));
+      term.onResize(({ cols, rows }) => resizeTerminal(sessionId, cols, rows).catch(() => {}));
+      if (history) {
+        term.write("\x1b[90m── 历史会话（已断开重连） ──\x1b[0m\r\n" + history + "\r\n");
+      }
+      term.focus();
+    } catch (err) {
+      tab.term = term;
+      tab.status = "disconnected";
+      term.writeln(`\r\n\x1b[31m${friendlyError(err)}\x1b[0m`);
+      showToast(friendlyError(err), "error");
+    }
+  });
+  return tab.key;
+}
+
+/** Ctrl+C 复制：用 navigator.clipboard 写入 xterm 选中文本 */
+function onCopySelection(tab) {
+  if (!tab?.term) return;
+  const sel = tab.term.getSelection();
+  if (!sel) return;
+  try {
+    navigator.clipboard
+      .writeText(sel)
+      .then(() => showToast(t("ssh.copied"), "success"))
+      .catch(() => {});
+  } catch {
+    // clipboard API 不可用时忽略
+  }
+}
+
+// ── 终端内搜索（Ctrl+F）──
+const searchOpen = ref(false);
+const searchQuery = ref("");
+const searchTabKey = ref(null);
+const searchInputRef = ref(null);
+
+function openSearch(tab) {
+  searchTabKey.value = tab?.key ?? null;
+  searchOpen.value = true;
+  searchQuery.value = "";
+  tab?.term?.focus();
+  nextTick(() => searchInputRef.value?.focus());
+}
+
+function doSearch(dir) {
+  const tab = tabs.value.find((tb) => tb.key === searchTabKey.value);
+  if (!tab?.search || !searchQuery.value) return;
+  try {
+    if (dir === "prev") tab.search.findPrevious(searchQuery.value, { caseSensitive: false, wholeWord: false });
+    else tab.search.findNext(searchQuery.value, { caseSensitive: false, wholeWord: false });
+  } catch {
+    // 空输入等边界忽略
+  }
+}
+
+function closeSearch() {
+  const tab = tabs.value.find((tb) => tb.key === searchTabKey.value);
+  tab?.search?.clearDecorations();
+  searchOpen.value = false;
+  searchQuery.value = "";
+  tab?.term?.focus();
 }
 
 onMounted(async () => {
@@ -309,6 +483,22 @@ onMounted(async () => {
       if (tab) {
         tab.status = "disconnected";
         tab.term?.writeln(`\r\n\x1b[31m[${t("ssh.disconnected")}]\x1b[0m`);
+        // 自动重连（默认开启，最多重试 3 次，间隔 3s）
+        if (tab.autoReconnect) {
+          const connId = tab.connectionId;
+          const known = tabs.value.includes(tab);
+          let attempts = 0;
+          const timer = setInterval(() => {
+            const still = tabs.value.find((x) => x.connectionId === connId && x.status === "disconnected");
+            attempts += 1;
+            if (!known || !still || attempts >= 3) {
+              clearInterval(timer);
+              return;
+            }
+            reconnect(still);
+            clearInterval(timer);
+          }, 3000);
+        }
       }
     }),
     await onHostkeyPrompt((p) => {
@@ -545,6 +735,29 @@ async function removeSocks(id) {
     <!-- 终端 + AI 助手：左右布局 -->
     <div class="term-layout">
       <div class="term-col">
+        <!-- 终端内搜索栏（Ctrl+F） -->
+        <div v-if="searchOpen" class="search-bar" @keydown.escape="closeSearch">
+          <div class="search-input-wrap">
+            <AppIcon name="search" class="size-3.5" />
+            <input
+              ref="searchInputRef"
+              v-model="searchQuery"
+              :placeholder="t('ssh.search_placeholder')"
+              @keydown.enter.prevent="doSearch('next')"
+              @keydown.shift.enter.prevent="doSearch('prev')"
+            />
+            <span class="search-hint">{{ t("ssh.search_hint") }}</span>
+          </div>
+          <button class="search-btn" @click="doSearch('prev')" :title="t('ssh.search_prev')">
+            <AppIcon name="chevron-up" class="size-3.5" />
+          </button>
+          <button class="search-btn" @click="doSearch('next')" :title="t('ssh.search_next')">
+            <AppIcon name="chevron-down" class="size-3.5" />
+          </button>
+          <button class="search-btn" @click="closeSearch" :title="t('common.close')">
+            <AppIcon name="close" class="size-3.5" />
+          </button>
+        </div>
         <!-- 终端区：每个标签一个常驻容器，v-show 切换保住 xterm 布局 -->
         <div class="term-holder" v-if="tabs.length">
           <div
@@ -903,6 +1116,57 @@ async function removeSocks(id) {
   overflow: hidden;
   border: 1px solid rgba(48, 54, 61, 0.8);
   background-color: #0d1117;
+}
+
+/* ── 终端内搜索栏 ── */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background-color: var(--color-muted);
+}
+.search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: var(--color-card);
+  color: var(--color-muted-foreground);
+}
+.search-input-wrap input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-foreground);
+  font-size: 12px;
+}
+.search-hint {
+  font-size: 10px;
+  color: var(--color-muted-foreground);
+  white-space: nowrap;
+}
+.search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+}
+.search-btn:hover {
+  background-color: var(--color-border);
+  color: var(--color-foreground);
 }
 
 .term-container {

@@ -11,6 +11,11 @@ import {
   mkdirSftp,
   renameSftp,
   deleteSftp,
+  statSftp,
+  chmodSftp,
+  copyRecursiveSftp,
+  rmRecursiveSftp,
+  searchSftp,
   onHostkeyPrompt,
   acceptHostkey,
   rejectHostkey,
@@ -384,6 +389,102 @@ async function onDelete(entry) {
   }
 }
 
+// ── 权限编辑（chmod）──
+const chmod = ref(null); // { path, modeStr } 对话框
+function openChmod(entry) {
+  chmod.value = {
+    path: join(cwd.value, entry.name),
+    name: entry.name,
+    modeStr: (entry.mode & 0o7777).toString(8).padStart(3, "0"),
+  };
+}
+async function onChmodOk() {
+  if (!chmod.value) return;
+  const mode = parseInt(chmod.value.modeStr, 8);
+  if (Number.isNaN(mode)) {
+    showToast(t("ssh.chmod_invalid"), "error");
+    return;
+  }
+  try {
+    await chmodSftp(sftpId.value, chmod.value.path, mode);
+    chmod.value = null;
+    showToast(t("ssh.chmod_done"), "success");
+    await refresh();
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  }
+}
+
+// ── 文件搜索（远端 find）──
+const searchDialog = ref(null); // { pattern, maxDepth }
+const searchResults = ref([]);
+const searchBusy = ref(false);
+function openSearch() {
+  searchDialog.value = { pattern: "", maxDepth: null };
+  searchResults.value = [];
+}
+async function onSearchOk() {
+  if (!searchDialog.value) return;
+  const pattern = searchDialog.value.pattern.trim();
+  if (!pattern) {
+    showToast(t("ssh.search_empty"), "error");
+    return;
+  }
+  searchBusy.value = true;
+  searchResults.value = [];
+  try {
+    const res = await searchSftp(sftpId.value, cwd.value, pattern, searchDialog.value.maxDepth || null);
+    searchResults.value = res || [];
+    if (searchResults.value.length === 0) showToast(t("ssh.search_no_result"), "info");
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  } finally {
+    searchBusy.value = false;
+  }
+}
+function gotoResult(p) {
+  const parent = parentOf(p);
+  searchDialog.value = null;
+  cd(parent).then(() => {
+    const name = p.split("/").pop();
+    showToast(t("ssh.search_in") + " " + p, "success");
+    void name;
+  });
+}
+
+// ── 复制/移动 → 目标目录（dialog）──
+const moveDialog = ref(null); // { entry, action: 'copy'|'move', dest }
+function openCopy(entry, action) {
+  moveDialog.value = {
+    entry,
+    action,
+    src: join(cwd.value, entry.name),
+    dest: cwd.value,
+  };
+}
+async function onMoveOk() {
+  const d = moveDialog.value;
+  if (!d) return;
+  try {
+    const destDir = d.dest.trim() || "/";
+    const target = join(destDir, d.entry.name);
+    if (d.action === "copy") {
+      await copyRecursiveSftp(sftpId.value, d.src, target, false);
+      showToast(t("ssh.copy_done") + " ✓ " + d.entry.name, "success");
+    } else {
+      // 移动 = 复制 + 删除源
+      await copyRecursiveSftp(sftpId.value, d.src, target, false);
+      if (d.entry.is_dir) await rmRecursiveSftp(sftpId.value, d.src);
+      else await deleteSftp(sftpId.value, d.src, false);
+      showToast(t("ssh.move_done") + " ✓ " + d.entry.name, "success");
+    }
+    moveDialog.value = null;
+    await refresh();
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  }
+}
+
 async function onPromptOk() {
   const p = prompt.value;
   if (!p) return;
@@ -503,6 +604,9 @@ onBeforeUnmount(() => {
             <Button size="sm" variant="ghost" :title="t('ssh.refresh')" :disabled="busy" @click="refresh">
               <AppIcon name="refresh" class="size-4" />
             </Button>
+            <Button size="sm" variant="ghost" :title="t('ssh.search_files')" :disabled="busy" @click="openSearch">
+              <AppIcon name="search" class="size-4" />
+            </Button>
             <Button size="sm" variant="ghost" :title="t('ssh.new_folder')" :disabled="busy" @click="openMkdir">
               <AppIcon name="plus" class="size-4" />
             </Button>
@@ -556,6 +660,34 @@ onBeforeUnmount(() => {
               </TableCell>
               <TableCell class="text-muted-foreground">{{ fmtTime(e.mtime) }}</TableCell>
               <TableCell class="text-right">
+                <div class="flex items-center justify-end gap-0.5">
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  :title="t('ssh.chmod')"
+                  :disabled="busy"
+                  @click="openChmod(e)"
+                >
+                  <AppIcon name="shield" class="size-3.5" />
+                </Button>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  :title="t('ssh.copy_to')"
+                  :disabled="busy"
+                  @click="openCopy(e, 'copy')"
+                >
+                  <AppIcon name="copy" class="size-3.5" />
+                </Button>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  :title="t('ssh.move_to')"
+                  :disabled="busy"
+                  @click="openCopy(e, 'move')"
+                >
+                  <AppIcon name="move" class="size-3.5" />
+                </Button>
                 <Button
                   v-if="!e.is_dir"
                   size="icon-sm"
@@ -585,6 +717,7 @@ onBeforeUnmount(() => {
                 >
                   <AppIcon name="delete" class="size-4" />
                 </Button>
+                </div>
               </TableCell>
             </TableRow>
           </TableBody>
@@ -702,6 +835,86 @@ onBeforeUnmount(() => {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <!-- 权限编辑（chmod） -->
+    <Dialog :open="chmod !== null" @update:open="(v) => !v && (chmod = null)">
+      <DialogContent class="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{{ t("ssh.chmod") }} — {{ chmod?.name }}</DialogTitle>
+        </DialogHeader>
+        <div class="space-y-3">
+          <div>
+            <Label for="ssh-chmod-mode" class="mb-1.5 block">{{ t("ssh.chmod_mode") }}</Label>
+            <div class="flex items-center gap-2">
+              <Input id="ssh-chmod-mode" v-model="chmod.modeStr" class="w-24 font-mono" placeholder="755" />
+              <span class="text-xs text-muted-foreground">{{ t("ssh.chmod_octal") }}</span>
+            </div>
+          </div>
+          <p class="text-xs text-muted-foreground">
+            {{ t("ssh.chmod_hint") }}
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="chmod = null">{{ t("common.cancel") }}</Button>
+          <Button @click="onChmodOk">{{ t("common.confirm") }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- 复制/移动 到目录 -->
+    <Dialog :open="moveDialog !== null" @update:open="(v) => !v && (moveDialog = null)">
+      <DialogContent class="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{{ moveDialog?.action === 'copy' ? t('ssh.copy_to') : t('ssh.move_to') }}</DialogTitle>
+        </DialogHeader>
+        <div class="space-y-3">
+          <p class="text-sm">{{ moveDialog?.entry?.name }}</p>
+          <div>
+            <Label for="sftp-move-dest" class="mb-1.5 block">{{ t("ssh.dest_path") }}</Label>
+            <Input id="sftp-move-dest" v-model="moveDialog.dest" placeholder="/" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="moveDialog = null">{{ t("common.cancel") }}</Button>
+          <Button @click="onMoveOk">{{ t("common.confirm") }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- 文件搜索 -->
+    <Dialog :open="searchDialog !== null" @update:open="(v) => !v && (searchDialog = null)">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{{ t("ssh.search_files") }}</DialogTitle>
+        </DialogHeader>
+        <div class="space-y-3">
+          <div class="flex items-center gap-2">
+            <Input v-model="searchDialog.pattern" :placeholder="t('ssh.search_placeholder')" class="flex-1" @keydown.enter="onSearchOk" />
+            <Button :disabled="searchBusy" @click="onSearchOk">
+              <Spinner v-if="searchBusy" class="size-3.5" />
+              <AppIcon v-else name="search" class="size-3.5" />
+              {{ t("ssh.search") }}
+            </Button>
+          </div>
+          <div class="flex items-center gap-2 text-xs text-muted-foreground">
+            <Label for="sftp-search-depth" class="shrink-0">{{ t("ssh.search_maxdepth") }}</Label>
+            <Input id="sftp-search-depth" v-model="searchDialog.maxDepth" type="number" min="1" max="20" class="w-16" placeholder="5" />
+          </div>
+          <div v-if="searchResults.length" class="sftp-search-results">
+            <div v-for="(r, ri) in searchResults" :key="ri" class="sftp-search-result" @click="gotoResult(r)">
+              <AppIcon name="file" class="size-3.5 shrink-0" />
+              <span class="truncate font-mono text-xs">{{ r }}</span>
+            </div>
+          </div>
+          <p v-if="!searchResults.length && !searchBusy" class="text-xs text-muted-foreground">
+            {{ t("ssh.search_no_result") }}
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="searchDialog = null">{{ t("common.close") }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
@@ -761,6 +974,28 @@ onBeforeUnmount(() => {
 
 .entry-row.dir .entry-name:hover {
   color: var(--color-primary);
+}
+
+.sftp-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.sftp-search-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--color-foreground);
+  transition: background-color 0.12s ease;
+}
+.sftp-search-result:hover {
+  background-color: var(--color-muted);
 }
 
 .drop-zone {
