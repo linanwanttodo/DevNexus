@@ -3,6 +3,7 @@
 // 按需导入图标组件，避免全量导入导致 chunk 体积膨胀（672KB → ~50KB）。
 import { computed, useAttrs } from "vue";
 import {
+  Apple,
   Archive,
   ArrowDown,
   ArrowLeftRight,
@@ -45,6 +46,7 @@ import {
   Menu,
   MessageSquare,
   Minus,
+  Monitor,
   Pause,
   PenLine,
   Pill,
@@ -57,6 +59,7 @@ import {
   Search,
   Server,
   Settings,
+  Shield,
   Sparkles,
   Square,
   SquareCode,
@@ -82,6 +85,7 @@ const props = defineProps({
 
 // 按需映射：仅打包用到的图标，从 672KB 降至 ~50KB
 const IconComp = {
+  Apple,
   Archive,
   ArrowDown,
   ArrowLeftRight,
@@ -124,6 +128,7 @@ const IconComp = {
   Menu,
   MessageSquare,
   Minus,
+  Monitor,
   Pause,
   PenLine,
   Pill,
@@ -136,6 +141,7 @@ const IconComp = {
   Search,
   Server,
   Settings,
+  Shield,
   Sparkles,
   Square,
   SquareCode,

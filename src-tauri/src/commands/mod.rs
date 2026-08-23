@@ -11,6 +11,7 @@ pub mod software;
 pub mod ssh;
 pub mod system;
 pub mod tray;
+pub mod tuning;
 pub mod updater;
 pub mod version_manager;
 pub mod window_factory;

@@ -21,6 +21,16 @@ export const navItems = [
   { id: "passwords", route: "/passwords", icon: "lock", labelKey: "nav.passwords" },
   { id: "cookies", route: "/cookies", icon: "idcard", labelKey: "nav.cookies" },
   { id: "uninstall", route: "/uninstall", icon: "delete", labelKey: "nav.uninstall" },
+  { id: "system-tune", route: "/system-tune", icon: "tool", labelKey: "nav.system_tune",
+    context: {
+      titleKey: "nav.system_tune",
+      items: [
+        { route: "/system-tune", icon: "database", labelKey: "systemTune.disk" },
+        { route: "/system-tune/mac", icon: "apple", labelKey: "systemTune.mac" },
+        { route: "/system-tune/win", icon: "monitor", labelKey: "systemTune.win" },
+      ],
+    },
+  },
   { id: "api-hub", route: "/api-hub", icon: "branch", labelKey: "nav.api_hub",
     context: {
       titleKey: "nav.api_hub",

@@ -83,6 +83,11 @@ export const iconMap = {
   send: "Send",
   "panel-right-close": "PanelRightClose",
   "panel-right-open": "PanelRightOpen",
+
+  // 系统调优
+  apple: "Apple",
+  monitor: "Monitor",
+  shield: "Shield",
 };
 
 export const FALLBACK_ICON = "CircleAlert";
