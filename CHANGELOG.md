@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Cloud service credential management (AWS / GCP CLI) (planned)
 
+### Added (English)
+- SSH terminal: Ctrl+F in-terminal search, auto-reconnect, copy-on-select highlight
+- SFTP: chmod (permission editing), remote file search, recursive copy/move/delete
+- SSH AI: streaming typewriter reply, quick-command chips, enhanced dangerous-command detection
+- System Tune module: disk cache scan/clean with safe-path validation, exclusions, one-click
+  platform optimization (Linux/macOS/Windows)
+
+### 新增（中文）
+- SSH 终端：终端内 Ctrl+F 搜索、自动重连、复制高亮
+- SFTP：权限编辑（chmod）、远端文件搜索、递归复制/移动/删除
+- SSH AI：回复流式打字、快捷命令 chips、强化危险命令识别
+- 系统调优模块：磁盘缓存扫描与安全清理、排除项管理、三平台一键优化
+
 ---
 
 ## [1.3.12] - 2026-08-16
