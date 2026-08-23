@@ -210,6 +210,12 @@ function statusLabel(item) {
   if (item.status === "available") return t("software.available");
   return t("software.system");
 }
+
+// 虚拟截断：首屏仅渲染 40 项，降低 DOM 与图标开销
+const visibleLimit = ref(40);
+const visibleSoftware = computed(() => filteredSoftware.value.slice(0, visibleLimit.value));
+function loadMore() { visibleLimit.value += 40; }
+
 </script>
 
 <template>
@@ -355,7 +361,7 @@ function statusLabel(item) {
 
         <!-- Grid -->
         <div v-else class="soft-grid">
-          <Card v-for="item in filteredSoftware" :key="item.name" class="soft-card shadow-sm">
+          <Card v-for="item in visibleSoftware" :key="item.name" class="soft-card shadow-sm">
             <CardContent class="flex flex-1 flex-col p-4">
               <div class="soft-head">
                 <div class="soft-icon">
@@ -381,6 +387,9 @@ function statusLabel(item) {
               </Button>
             </CardContent>
           </Card>
+        </div>
+        <div v-if="visibleSoftware.length < filteredSoftware.length" class="flex justify-center mt-4">
+          <Button variant="outline" @click="loadMore">{{ t("common.load_more") || "Load more" }} ({{ visibleSoftware.length }}/{{ filteredSoftware.length }})</Button>
         </div>
       </div>
     </div>

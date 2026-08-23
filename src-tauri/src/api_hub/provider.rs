@@ -25,25 +25,26 @@ pub async fn add_provider(state: &AppState, provider: Provider) -> Result<(), St
     }
 
     // 2) 持久化到 SQLite（失败则向上传播错误）；api_key 存储边界加密
+    // 先在锁外完成加密，避免持锁期间做加解密阻塞
+    let encrypted_key = state.api_key_cipher.encrypt(&provider.api_key)?;
+    let pid = provider.id.clone();
+    let pname = provider.name.clone();
+    let pproto = provider.protocol.as_str().to_string();
+    let pbase = provider.base_url.clone();
+    let pmodels = serde_json::to_string(&provider.models).unwrap_or_default();
+    let penabled = provider.enabled as i32;
+    let pcreated = provider.created_at;
+    let paliases =
+        serde_json::to_string(&provider.model_aliases).unwrap_or_else(|_| "{}".to_string());
+    let pctx =
+        serde_json::to_string(&provider.model_context_lengths).unwrap_or_else(|_| "{}".to_string());
     {
         let db = state.db.lock().await;
         if let Some(ref conn) = *db {
-            let encrypted_key = state.api_key_cipher.encrypt(&provider.api_key)?;
             conn.execute(
                 "INSERT INTO providers (id, name, protocol, base_url, api_key, models, enabled, created_at, model_aliases, model_context_lengths)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                rusqlite::params![
-                    provider.id,
-                    provider.name,
-                    provider.protocol.as_str(),
-                    provider.base_url,
-                    encrypted_key,
-                    serde_json::to_string(&provider.models).unwrap_or_default(),
-                    provider.enabled as i32,
-                    provider.created_at,
-                    serde_json::to_string(&provider.model_aliases).unwrap_or_else(|_| "{}".to_string()),
-                    serde_json::to_string(&provider.model_context_lengths).unwrap_or_else(|_| "{}".to_string()),
-                ],
+                rusqlite::params![pid, pname, pproto, pbase, encrypted_key, pmodels, penabled, pcreated, paliases, pctx],
             )
             .map_err(|e| format!("Database error: {}", e))?;
         }
@@ -114,26 +115,28 @@ pub async fn update_provider(state: &AppState, id: &str, provider: Provider) -> 
         ..provider
     };
 
+    // 先在锁外完成加密，避免持锁阻塞
+    let pname = provider.name.clone();
+    let pproto = provider.protocol.as_str().to_string();
+    let pbase = provider.base_url.clone();
+    let pm_api_key = provider.api_key.clone();
+    let pmodels = serde_json::to_string(&provider.models).unwrap_or_default();
+    let penabled = provider.enabled as i32;
+    let paliases =
+        serde_json::to_string(&provider.model_aliases).unwrap_or_else(|_| "{}".to_string());
+    let pctx =
+        serde_json::to_string(&provider.model_context_lengths).unwrap_or_else(|_| "{}".to_string());
+
     // 先持久化到数据库；影响行数为 0 说明 id 不存在；api_key 存储边界加密
     {
         let db = state.db.lock().await;
         match *db {
             Some(ref conn) => {
-                let encrypted_key = state.api_key_cipher.encrypt(&provider.api_key)?;
+                let encrypted_key = state.api_key_cipher.encrypt(&pm_api_key)?;
                 let affected = conn
                     .execute(
                         "UPDATE providers SET name=?1, protocol=?2, base_url=?3, api_key=?4, models=?5, enabled=?6, model_aliases=?7, model_context_lengths=?8 WHERE id=?9",
-                        rusqlite::params![
-                            provider.name,
-                            provider.protocol.as_str(),
-                            provider.base_url,
-                            encrypted_key,
-                            serde_json::to_string(&provider.models).unwrap_or_default(),
-                            provider.enabled as i32,
-                            serde_json::to_string(&provider.model_aliases).unwrap_or_else(|_| "{}".to_string()),
-                            serde_json::to_string(&provider.model_context_lengths).unwrap_or_else(|_| "{}".to_string()),
-                            id,
-                        ],
+                        rusqlite::params![pname, pproto, pbase, encrypted_key, pmodels, penabled, paliases, pctx, id],
                     )
                     .map_err(|e| format!("Database error: {}", e))?;
                 if affected == 0 {
@@ -190,12 +193,24 @@ pub fn load_providers_from_db_sync(
         let ctx_str: String = row.get(9).unwrap_or_else(|_| "{}".to_string());
         let model_context_lengths: std::collections::HashMap<String, u64> =
             serde_json::from_str(&ctx_str).unwrap_or_default();
+        let stored_key: String = row.get(4)?;
+        let api_key = cipher.decrypt(&stored_key);
+        // 存储为密文但解密失败（篡改/密钥不匹配）则跳过该 Provider 并告警，避免加载空 key 的无效配置
+        if stored_key.starts_with("enc1:") && api_key.is_empty() && !stored_key.is_empty() {
+            eprintln!(
+                "[API Hub] WARNING: failed to decrypt api_key for provider '{}', skipping",
+                row.get::<_, String>(1).unwrap_or_default()
+            );
+            return Err(rusqlite::Error::InvalidParameterName(
+                "decrypt_failed".to_string(),
+            ));
+        }
         Ok(Provider {
             id: row.get(0)?,
             name: row.get(1)?,
             protocol,
             base_url: row.get(3)?,
-            api_key: cipher.decrypt(&row.get::<_, String>(4)?),
+            api_key,
             models,
             model_aliases,
             model_context_lengths,

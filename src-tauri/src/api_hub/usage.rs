@@ -23,19 +23,20 @@ pub async fn log_request(state: &AppState, mut log: RequestLog) {
         }
     }
 
-    // 内存中保留最近 MAX_LOGS_IN_MEMORY 条（VecDeque O(1) 移除）
+    // 内存中保留最近 MAX_LOGS_IN_MEMORY 条（批量淘汰，避免逐条 pop 抖动）
     {
         let mut logs = state.request_logs.write().await;
-        if logs.len() >= MAX_LOGS_IN_MEMORY {
-            logs.pop_front();
-        }
         logs.push_back(log.clone());
+        if logs.len() > MAX_LOGS_IN_MEMORY {
+            let overflow = logs.len() - MAX_LOGS_IN_MEMORY;
+            logs.drain(0..overflow);
+        }
     }
 
     // 异步持久化到 SQLite（await 确保 INSERT 提交后再返回，避免流式结束后
     // update_log_tokens 的 UPDATE 先于 INSERT 执行导致 token 统计丢失）
     let db = state.db.clone();
-    let _ = tokio::task::spawn_blocking(move || {
+    let res = tokio::task::spawn_blocking(move || {
         let db_guard = db.blocking_lock();
         if let Some(ref conn) = *db_guard {
             if let Err(e) = conn.execute(
@@ -62,6 +63,9 @@ pub async fn log_request(state: &AppState, mut log: RequestLog) {
         }
     })
     .await;
+    if res.is_err() {
+        eprintln!("[API Hub] log_request spawn_blocking join failed");
+    }
 }
 
 /// 回填流式请求的 token 用量（流结束后调用）
@@ -82,7 +86,7 @@ pub async fn update_log_tokens(state: &AppState, log_id: &str, input: u64, outpu
     // 更新数据库（await 确保 UPDATE 提交后再返回，且此时 INSERT 已提交，保证匹配到行）
     let db = state.db.clone();
     let id = log_id.to_string();
-    let _ = tokio::task::spawn_blocking(move || {
+    let res = tokio::task::spawn_blocking(move || {
         let db_guard = db.blocking_lock();
         if let Some(ref conn) = *db_guard {
             if let Err(e) = conn.execute(
@@ -94,6 +98,9 @@ pub async fn update_log_tokens(state: &AppState, log_id: &str, input: u64, outpu
         }
     })
     .await;
+    if res.is_err() {
+        eprintln!("[API Hub] update_log_tokens spawn_blocking join failed");
+    }
 }
 
 /// 获取请求日志列表（优先查 SQLite，DB 不可用时回退内存）
@@ -107,6 +114,9 @@ pub async fn get_logs(state: &AppState, limit: usize, offset: usize) -> Vec<Requ
     .await
     .ok()
     .flatten();
+    if db_result.is_none() {
+        eprintln!("[API Hub] get_logs: DB unavailable or query failed, falling back to memory");
+    }
 
     if let Some(logs) = db_result {
         return logs;
@@ -133,6 +143,11 @@ pub async fn get_usage_stats(state: &AppState) -> UsageStats {
     .await
     .ok()
     .flatten();
+    if db_result.is_none() {
+        eprintln!(
+            "[API Hub] get_usage_stats: DB unavailable or query failed, falling back to memory"
+        );
+    }
 
     if let Some(stats) = db_result {
         return stats;

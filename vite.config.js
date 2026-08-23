@@ -15,6 +15,10 @@ export default defineConfig({
   clearScreen: false,
   build: {
     chunkSizeWarningLimit: 1000,
+    // 启用轻量压缩与现代目标，降低运行时内存与首次加载开销
+    target: "esnext",
+    cssMinify: true,
+    reportCompressedSize: false,
     rollupOptions: {
       // 多入口：主应用 + 灵动岛悬浮窗（透明窗口加载 island.html）
       input: {
@@ -32,6 +36,12 @@ export default defineConfig({
           if (m.includes("/node_modules/@tauri-apps/")) {
             return "tauri-vendor";
           }
+          if (m.includes("/node_modules/xterm") || m.includes("/node_modules/@xterm/")) {
+            return "xterm-vendor";
+          }
+          if (m.includes("/node_modules/codemirror") || m.includes("/node_modules/@codemirror")) {
+            return "editor-vendor";
+          }
         },
       },
     },
@@ -45,13 +55,13 @@ export default defineConfig({
       Pragma: "no-cache",
       Expires: "0",
     },
-    // 当前系统 inotify 文件监视数上限过低（ENOSPC），无法用 sudo 提升时，
-    // 改用轮询（usePolling）替代 inotify 监听，彻底避免 "file watchers reached" 错误。
-    // 根因修复：sudo sysctl -w fs.inotify.max_user_watches=524288（并写入 /etc/sysctl.d）。
+    // 监听策略：默认使用 inotify（零 CPU 空转），仅当检测到 ENOSPC 或
+    // 显式设置 VITE_USE_POLLING=1 时回退到轮询，避免全量轮询常驻占 CPU。
+    // 根因修复：sudo sysctl -w fs.inotify.max_user_watches=524288
     watch: {
-      usePolling: true,
-      interval: 1000,
-      ignored: ["**/src-tauri/**", "**/target/**", "**/node_modules/**"],
+      usePolling: !!process.env.VITE_USE_POLLING,
+      interval: process.env.VITE_USE_POLLING ? 2000 : undefined,
+      ignored: ["**/src-tauri/**", "**/target/**", "**/node_modules/**", "**/dist/**", "**/.git/**"],
     },
     hmr: {
       overlay: false,

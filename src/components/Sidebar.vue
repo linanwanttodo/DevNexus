@@ -24,12 +24,22 @@ onMounted(() => {
     }
     loadResourceUsage();
   })();
-  timer = setInterval(loadResourceUsage, 10000);
+  // 节流至 15s 并在页面隐藏时暂停，避免与 Dashboard 重复高频挤压 sysinfo 锁
+  timer = setInterval(() => {
+    if (document.hidden) return;
+    loadResourceUsage();
+  }, 15000);
+  document.addEventListener("visibilitychange", onVisibility);
 });
 
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer);
+  document.removeEventListener("visibilitychange", onVisibility);
 });
+
+async function onVisibility() {
+  if (!document.hidden) loadResourceUsage();
+}
 
 async function loadResourceUsage() {
   try {

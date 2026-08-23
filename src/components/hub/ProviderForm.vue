@@ -60,6 +60,21 @@ const selectedModels = ref(createSelected());
 const fetchingModels = ref(false);
 const addingManualModel = ref(false);
 const manualModelId = ref("");
+// 防抖与输入校验
+let fetchDebounce = null;
+const fetchAbort = ref(false);
+
+function validateForm() {
+  const name = form.value.name.trim();
+  if (!name) { showToast(t("apiHub.errors.nameRequired") || "Name required", "error"); return false; }
+  if (name.length > 64) { showToast("Name too long (max 64)", "error"); return false; }
+  try {
+    const u = new URL(form.value.base_url);
+    if (!["http:", "https:"].includes(u.protocol)) throw new Error();
+  } catch { showToast(t("apiHub.errors.invalidUrl") || "Invalid URL", "error"); return false; }
+  if (form.value.api_key && form.value.api_key.length > 512) { showToast("API key too long (max 512)", "error"); return false; }
+  return true;
+}
 
 function onProtocolChange() {
   const opt = props.protocolOptions.find((p) => p.id === form.value.protocol);
@@ -71,29 +86,35 @@ async function fetchModels() {
     showToast(t("apiHub.errors.fillBaseUrl"), "error");
     return;
   }
-  fetchingModels.value = true;
-  fetchedModels.value = [];
-  try {
-    fetchedModels.value = await invoke("api_hub_fetch_models", {
-      baseUrl: form.value.base_url,
-      apiKey: form.value.api_key || "",
-      protocol: form.value.protocol,
-      providerId: props.initial?.id,
-    });
-    fetchedModels.value.forEach((m) => {
-      if (!(m.id in selectedModels.value)) {
-        selectedModels.value[m.id] = true;
-        form.value.model_aliases[m.id] = m.name || m.id;
-      }
-    });
-    showToast(
-      tFormat("apiHub.toast.fetchedModels", { count: fetchedModels.value.length })
-    );
-  } catch (err) {
-    showToast(tFormat("apiHub.toast.fetchFailed", { error: err.message }), "error");
-  } finally {
-    fetchingModels.value = false;
-  }
+  if (!validateForm()) return;
+  // 防抖 300ms，避免频繁点击
+  if (fetchDebounce) clearTimeout(fetchDebounce);
+  fetchDebounce = setTimeout(async () => {
+    if (fetchAbort.value) return;
+    fetchingModels.value = true;
+    fetchedModels.value = [];
+    try {
+      fetchedModels.value = await invoke("api_hub_fetch_models", {
+        baseUrl: form.value.base_url,
+        apiKey: form.value.api_key || "",
+        protocol: form.value.protocol,
+        providerId: props.initial?.id,
+      });
+      fetchedModels.value.forEach((m) => {
+        if (!(m.id in selectedModels.value)) {
+          selectedModels.value[m.id] = true;
+          form.value.model_aliases[m.id] = m.name || m.id;
+        }
+      });
+      showToast(
+        tFormat("apiHub.toast.fetchedModels", { count: fetchedModels.value.length })
+      );
+    } catch (err) {
+      showToast(tFormat("apiHub.toast.fetchFailed", { error: err.message || err }), "error");
+    } finally {
+      fetchingModels.value = false;
+    }
+  }, 300);
 }
 
 function toggleModel(id) {
@@ -126,6 +147,7 @@ function selectedCount() {
 }
 
 function submit() {
+  if (!validateForm()) return;
   const models = Object.keys(selectedModels.value).filter((m) => selectedModels.value[m]);
   if (models.length === 0) {
     showToast(t("apiHub.errors.selectModel"), "error");

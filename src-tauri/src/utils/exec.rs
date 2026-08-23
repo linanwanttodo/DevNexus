@@ -1,7 +1,7 @@
 // src-tauri/src/utils/exec.rs
 use std::time::Duration;
 
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(120);
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// 统一命令执行：带超时、UTF-8 输出归一化、错误信息结构化
 #[derive(Debug)]

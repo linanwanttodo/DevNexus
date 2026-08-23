@@ -283,17 +283,33 @@ fn list_ports_windows() -> Result<Vec<PortEntry>, String> {
     Ok(entries)
 }
 
-/// Build a PID -> ports mapping from port list
+/// Build a PID -> ports mapping from port list (cached 2s to avoid repeated lsof/ss forks)
+#[allow(clippy::type_complexity)]
 fn build_port_map() -> HashMap<u32, Vec<u16>> {
-    list_ports_impl()
-        .unwrap_or_default()
-        .into_iter()
-        .fold(HashMap::new(), |mut map, entry| {
-            map.entry(entry.pid)
-                .or_insert_with(Vec::new)
-                .push(entry.port);
-            map
-        })
+    static CACHE: OnceLock<std::sync::Mutex<Option<(std::time::Instant, HashMap<u32, Vec<u16>>)>>> =
+        OnceLock::new();
+    let cache = CACHE.get_or_init(|| std::sync::Mutex::new(None));
+    if let Ok(guard) = cache.lock() {
+        if let Some((at, ref map)) = *guard {
+            if at.elapsed().as_secs() < 2 {
+                return map.clone();
+            }
+        }
+    }
+    let map =
+        list_ports_impl()
+            .unwrap_or_default()
+            .into_iter()
+            .fold(HashMap::new(), |mut map, entry| {
+                map.entry(entry.pid)
+                    .or_insert_with(Vec::new)
+                    .push(entry.port);
+                map
+            });
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some((std::time::Instant::now(), map.clone()));
+    }
+    map
 }
 
 // ==================== Tauri Commands ====================
