@@ -357,6 +357,7 @@ fn test_state(upstream: &str) -> AppState {
         running: Arc::new(AtomicBool::new(false)),
         api_key_cipher: Arc::new(ApiKeyCipher::from_key([7u8; 32], true)),
         auth_token: "test-token".into(),
+        started: Arc::new(AtomicBool::new(false)),
     }
 }
 
@@ -842,6 +843,7 @@ async fn e2e_provider_duplicate_name_rejected_and_not_persisted() {
         running: Arc::new(AtomicBool::new(false)),
         api_key_cipher: Arc::new(ApiKeyCipher::from_key([7u8; 32], true)),
         auth_token: TEST_TOKEN.into(),
+        started: Arc::new(AtomicBool::new(false)),
     };
 
     let mk = |name: &str| Provider {
@@ -897,6 +899,7 @@ fn provider_test_state() -> AppState {
         running: Arc::new(AtomicBool::new(false)),
         api_key_cipher: Arc::new(ApiKeyCipher::from_key([7u8; 32], true)),
         auth_token: TEST_TOKEN.into(),
+        started: Arc::new(AtomicBool::new(false)),
     }
 }
 

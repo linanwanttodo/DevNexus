@@ -123,7 +123,30 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
         running: Arc::new(AtomicBool::new(false)),
         api_key_cipher,
         auth_token,
+        started: Arc::new(AtomicBool::new(false)),
     }
+}
+
+/// 惰性启动 API Hub HTTP 服务（CAS 保证并发下只启动一次）。
+/// 应用启动时不再立即绑定 localhost:3456，改为首个需要服务/状态页的命令
+/// 触发；未使用 API Hub 功能的常驻进程不再占用端口与后台任务。
+pub fn ensure_started(state: &AppState) {
+    use std::sync::atomic::Ordering;
+    // 先读一次，避免每次调用都走 swap（无争议时是单条 relaxed 读）
+    if state.started.load(Ordering::Acquire) {
+        return;
+    }
+    if state
+        .started
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return; // 其他调用者已抢到启动权
+    }
+    let hub = Arc::new(state.clone());
+    tauri::async_runtime::spawn(async move {
+        start(hub).await;
+    });
 }
 
 /// 启动 API Hub HTTP 服务（在 Tauri 的异步运行时中运行）

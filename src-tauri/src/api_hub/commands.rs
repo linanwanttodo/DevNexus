@@ -74,6 +74,7 @@ pub async fn api_hub_get_usage_stats(
 
 #[tauri::command]
 pub fn api_hub_status(state: State<'_, AppState>) -> serde_json::Value {
+    super::ensure_started(state.inner());
     let token = &state.auth_token;
     let masked = if token.len() > 12 && token.is_ascii() {
         format!("{}••••{}", &token[..4], &token[token.len() - 4..])

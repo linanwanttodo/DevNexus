@@ -5,7 +5,6 @@ mod utils;
 
 use commands::window_factory::create_main_window;
 
-use std::sync::Arc;
 use tauri::{
     image::Image,
     menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder},
@@ -77,12 +76,9 @@ pub fn run() {
                 });
             }
 
-            // 启动 API Hub 后台服务
-            let state = app.state::<api_hub::types::AppState>();
-            let hub = Arc::new(state.inner().clone());
-            tauri::async_runtime::spawn(async move {
-                api_hub::start(hub).await;
-            });
+            // 启动 API Hub 后台服务：改为惰性启动——用户首次进入 API Hub 页面时
+            // 由 api_hub_status 命令触发 start()，未使用该功能时不绑定端口/起后台任务。
+            // 见 api_hub::ensure_started (CAS 保证只启动一次)。
 
             // 启动灵动岛数据桥：系统通知监听（微信/QQ 等 → island-notify 事件）
             commands::island_bridge::init(app.handle().clone());

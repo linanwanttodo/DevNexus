@@ -155,6 +155,7 @@ pub struct AppState {
     pub running: Arc<AtomicBool>,
     pub api_key_cipher: Arc<ApiKeyCipher>,   // API Key 加密/解密
     pub auth_token: String,                   // 本地访问令牌（H1 安全修复）
+    pub started: Arc<AtomicBool>,            // HTTP 服务惰性启动标记（CAS 保证只启动一次）
 }
 ```
 
@@ -229,15 +230,20 @@ api_hub/
 2. **通配符匹配** — 按协议前缀匹配（如 `gpt-`/`o1-`/`o3-` 配 OpenAI、`claude-` 配 Anthropic）
 3. **无兜底** — 未匹配则返回 `None`，调用方返回 404 明确错误
 
-### 3.4 启动流程
+### 3.4 启动流程（惰性）
 
 ```rust
 pub fn init(data_dir: &Path) -> AppState {
     // 1. 打开 SQLite 数据库
     // 2. 创建全局 reqwest::Client（连接池复用）
-    // 3. 创建共享状态 (providers, request_logs, db, http_client, running)
+    // 3. 创建共享状态 (providers, request_logs, db, http_client, running, started)
     // 4. 初始化数据库表 + 旧 schema 迁移
     // 5. 从数据库加载已保存的 Provider
+}
+
+// 惰性启动：用户首次进入 API Hub 页面时由 api_hub_status 命令触发
+pub fn ensure_started(state: &AppState) {
+    // CAS 保证只启动一次；未使用 API Hub 的常驻进程不绑定端口、不占后台任务
 }
 
 pub async fn start(state: Arc<AppState>) {

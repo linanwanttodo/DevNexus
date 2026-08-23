@@ -261,4 +261,6 @@ pub struct AppState {
     /// 防止本机任意进程 / 恶意网页（DNS rebinding、CSRF 式请求）
     /// 盗用已配置 Provider 的 API Key。
     pub auth_token: String,
+    /// HTTP 服务是否已惰性启动（CAS 保证只启动一次）
+    pub started: Arc<AtomicBool>,
 }
