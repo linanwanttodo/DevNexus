@@ -1,6 +1,8 @@
 pub mod crypto;
 pub mod error;
 pub mod exec;
+#[allow(dead_code)]
+pub mod http;
 pub mod rc_editor;
 #[allow(dead_code)]
 pub mod timeouts;

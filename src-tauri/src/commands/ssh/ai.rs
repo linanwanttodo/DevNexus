@@ -11,8 +11,7 @@ use std::time::Duration;
 ///   用户无需为 SSH 再填一遍凭据（符合用户选择：复用 api_hub 配置）。
 /// - 凭据解密在 api_hub 内存态已是明文（api_key 字段在 AppState 中为明文，
 ///   前端列表脱敏只是展示层），这里直接读取即可。
-/// - LLM 请求使用阻塞式 reqwest 包在 spawn_blocking 中执行，与 usage.rs 的 SQLite 写法一致，
-///   不引入新的异步流式复杂度。
+/// - LLM 请求使用异步 reqwest，不阻塞 tokio runtime。
 use tauri::State;
 
 /// 危险命令前缀/关键字：命中需用户确认后才执行。
@@ -272,14 +271,14 @@ fn build_system_prompt(platform_hint: &str) -> String {
     )
 }
 
-/// 调用 LLM 补全（阻塞式，应在 spawn_blocking 中调用）。
-fn call_llm(
+/// 调用 LLM 补全（异步，不阻塞 tokio runtime）。
+async fn call_llm(
     provider: &Provider,
     model: &str,
     messages: &[Value],
     timeout_secs: u64,
 ) -> Result<String, String> {
-    let client = reqwest::blocking::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(timeout_secs))
         .build()
         .map_err(|e| format!("HTTP client build failed: {e}"))?;
@@ -296,8 +295,6 @@ fn call_llm(
             format!("{}/v1/messages", provider.base_url.trim_end_matches('/'))
         }
         ApiProtocol::Gemini => {
-            // Gemini 用 generateContent；但为简化，这里统一走 OpenAI 兼容路径
-            // （多数自建/网关 Gemini 也提供 OpenAI 兼容端点）。
             format!(
                 "{}/v1/chat/completions",
                 provider.base_url.trim_end_matches('/')
@@ -323,19 +320,21 @@ fn call_llm(
         }
     };
 
-    let resp = req.send().map_err(|e| format!("LLM request failed: {e}"))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("LLM request failed: {e}"))?;
     if !resp.status().is_success() {
         let status = resp.status().as_u16();
-        let txt = resp.text().unwrap_or_default();
+        let txt = resp.text().await.unwrap_or_default();
         return Err(format!("LLM upstream error ({status}): {txt}"));
     }
     let json: Value = resp
         .json()
+        .await
         .map_err(|e| format!("LLM response parse failed: {e}"))?;
 
-    // 解析两种格式
     let content = if let Some(choices) = json.get("choices") {
-        // OpenAI 兼容
         choices
             .get(0)
             .and_then(|c| c.get("message"))
@@ -344,7 +343,6 @@ fn call_llm(
             .unwrap_or("")
             .to_string()
     } else if let Some(content_arr) = json.get("content") {
-        // Anthropic
         content_arr
             .as_array()
             .map(|arr| {
@@ -549,12 +547,7 @@ pub async fn ssh_ai_chat(
     };
     messages.push(serde_json::json!({ "role": "user", "content": user_msg }));
 
-    let provider_clone = provider.clone();
-    let model_clone = chosen_model.clone();
-    let reply =
-        tokio::task::spawn_blocking(move || call_llm(&provider_clone, &model_clone, &messages, 60))
-            .await
-            .map_err(|e| format!("AI task join error: {e}"))??;
+    let reply = call_llm(&provider, &chosen_model, &messages, 60).await?;
 
     let cmds = extract_commands(&reply);
     let has_danger_marker = reply
@@ -704,12 +697,7 @@ pub async fn ssh_ai_sftp(
     }
     messages.push(serde_json::json!({ "role": "user", "content": message }));
 
-    let provider_clone = provider.clone();
-    let model_clone = chosen_model.clone();
-    let reply =
-        tokio::task::spawn_blocking(move || call_llm(&provider_clone, &model_clone, &messages, 60))
-            .await
-            .map_err(|e| format!("AI task join error: {e}"))??;
+    let reply = call_llm(&provider, &chosen_model, &messages, 60).await?;
 
     // 解析 [ACTIONS] 行后的 JSON，并对路径做基础校验
     let mut actions: Vec<Value> = Vec::new();

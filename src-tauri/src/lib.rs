@@ -12,8 +12,22 @@ use tauri::{
     Manager,
 };
 
+fn init_tracing() {
+    let filter = std::env::var("RUST_LOG")
+        .map(|s| {
+            tracing_subscriber::EnvFilter::try_new(s)
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"))
+        })
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"));
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .try_init();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_tracing();
     // GNOME Wayland 不支持透明窗口与 always-on-top（Tauri/WebKitGTK 已知限制，
     // 灵动岛窗口依赖两者）。在 GTK 初始化前强制走 XWayland（X11 后端）：
     // X11 协议原生支持 ARGB 透明 + _NET_WM_STATE_ABOVE 置顶，mutter 会正常合成。
