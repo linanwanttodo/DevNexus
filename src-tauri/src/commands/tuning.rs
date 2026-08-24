@@ -578,7 +578,98 @@ fn run_cmd(prog: &str, args: &[&str]) -> Result<String, String> {
         .args(args)
         .output()
         .map_err(|e| format!("CMD_FAILED {prog}: {e}"))?;
+    // 非 0 退出也视为错误（便于上层感知权限不足等）
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        if !err.is_empty() {
+            return Err(format!("CMD_FAILED {prog}: {err}"));
+        }
+        return Err(format!(
+            "CMD_FAILED {prog}: exit {}",
+            out.status.code().unwrap_or(-1)
+        ));
+    }
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+/// 以提权方式执行命令：已是 root 则直接运行，否则通过 `sudo -S` 喂密码执行。
+/// security-sensitive: 处理用户输入的密码，仅通过 stdin 传递，不落盘不记录日志。
+#[cfg(target_os = "linux")]
+fn run_privileged(password: Option<String>, prog: &str, args: &[&str]) -> Result<String, String> {
+    if running_as_root() {
+        return run_cmd(prog, args);
+    }
+    let pw = password.ok_or_else(|| "NEED_SUDO: 需要管理员密码（请在弹窗中输入）".to_string())?;
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let mut child = Command::new("sudo")
+        .arg("-S")
+        .arg(prog)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("SUDO_SPAWN {prog}: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(format!("{pw}\n").as_bytes());
+    }
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr).to_string();
+        if err.contains("incorrect password")
+            || err.contains("Sorry, try again")
+            || err.to_lowercase().contains("incorrect")
+        {
+            return Err("SUDO_AUTH_FAILED: 密码错误".into());
+        }
+        let trimmed = err.trim();
+        if !trimmed.is_empty() {
+            return Err(format!("SUDO_FAILED {prog}: {trimmed}"));
+        }
+        return Err(format!(
+            "SUDO_FAILED {prog}: exit {}",
+            out.status.code().unwrap_or(-1)
+        ));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+/// 校验 sudo 密码是否正确（`sudo -S -v`），供前端在弹窗后即时反馈。
+#[tauri::command]
+pub fn verify_sudo_password(password: String) -> Result<bool, String> {
+    #[cfg(target_os = "linux")]
+    {
+        if running_as_root() {
+            return Ok(true);
+        }
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        let mut child = Command::new("sudo")
+            .args(["-S", "-v"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("SUDO_SPAWN: {e}"))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(format!("{password}\n").as_bytes());
+        }
+        let out = child.wait_with_output().map_err(|e| e.to_string())?;
+        if out.status.success() {
+            return Ok(true);
+        }
+        let err = String::from_utf8_lossy(&out.stderr).to_string();
+        if err.contains("incorrect password") || err.contains("Sorry, try again") {
+            return Err("SUDO_AUTH_FAILED: 密码错误".into());
+        }
+        Err(format!("SUDO_FAILED: {}", err.trim()))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = password;
+        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持 sudo 校验".into());
+    }
 }
 
 #[allow(clippy::needless_return)]
@@ -624,18 +715,27 @@ pub fn get_swap_info() -> Result<SwapInfo, String> {
 /// 创建/启用 swapfile（需要 root）。size_mb 为大小，路径默认 /swapfile。
 #[allow(clippy::needless_return)]
 #[tauri::command]
-pub fn set_swap(size_mb: u64, path: Option<String>) -> Result<String, String> {
+pub fn set_swap(
+    size_mb: u64,
+    path: Option<String>,
+    password: Option<String>,
+) -> Result<String, String> {
     #[cfg(target_os = "linux")]
     {
         let p = path.unwrap_or_else(|| "/swapfile".to_string());
-        run_cmd("fallocate", &["-l", &format!("{}M", size_mb), &p])?;
-        run_cmd("chmod", &["600", &p])?;
-        run_cmd("mkswap", &[&p])?;
-        run_cmd("swapon", &[&p])?;
+        run_privileged(
+            password.clone(),
+            "fallocate",
+            &["-l", &format!("{}M", size_mb), &p],
+        )?;
+        run_privileged(password.clone(), "chmod", &["600", &p])?;
+        run_privileged(password.clone(), "mkswap", &[&p])?;
+        run_privileged(password, "swapon", &[&p])?;
         return Ok(format!("SWAP_OK: {p} enabled ({size_mb} MB)"));
     }
     #[cfg(not(target_os = "linux"))]
     {
+        let _ = (size_mb, path, password);
         return Err("TUNING_UNSUPPORTED: 仅 Linux 支持 Swap 管理".into());
     }
 }
@@ -643,14 +743,15 @@ pub fn set_swap(size_mb: u64, path: Option<String>) -> Result<String, String> {
 /// 关闭指定 swap 设备。
 #[allow(clippy::needless_return)]
 #[tauri::command]
-pub fn disable_swap(path: String) -> Result<String, String> {
+pub fn disable_swap(path: String, password: Option<String>) -> Result<String, String> {
     #[cfg(target_os = "linux")]
     {
-        run_cmd("swapoff", &[&path])?;
+        run_privileged(password, "swapoff", &[&path])?;
         return Ok(format!("SWAP_OFF: {path} disabled"));
     }
     #[cfg(not(target_os = "linux"))]
     {
+        let _ = (path, password);
         return Err("TUNING_UNSUPPORTED: 仅 Linux 支持 Swap 管理".into());
     }
 }
@@ -695,7 +796,7 @@ pub fn get_dns_config() -> Result<DnsConfig, String> {
 /// 切换 DNS 预设（需 root 写入 /etc/resolv.conf，并备份原文件）。
 #[allow(clippy::needless_return)]
 #[tauri::command]
-pub fn set_dns(preset: String) -> Result<String, String> {
+pub fn set_dns(preset: String, password: Option<String>) -> Result<String, String> {
     #[cfg(target_os = "linux")]
     {
         let servers: Vec<&str> = match preset.as_str() {
@@ -705,19 +806,50 @@ pub fn set_dns(preset: String) -> Result<String, String> {
             "ali" => vec!["223.5.5.5", "223.6.6.6"],
             _ => return Err("DNS_BAD_PRESET".into()),
         };
-        // 备份
+        // 备份：尽量使用提权方式
         if Path::new("/etc/resolv.conf").exists() {
-            let _ = fs::copy("/etc/resolv.conf", "/etc/resolv.conf.devnexus.bak");
+            if running_as_root() {
+                let _ = fs::copy("/etc/resolv.conf", "/etc/resolv.conf.devnexus.bak");
+            } else if let Some(ref pw) = password {
+                let _ = run_privileged(
+                    Some(pw.clone()),
+                    "cp",
+                    &["/etc/resolv.conf", "/etc/resolv.conf.devnexus.bak"],
+                );
+            }
         }
         let mut content = String::from("# Generated by DevNexus\n");
         for s in servers {
             content.push_str(&format!("nameserver {s}\n"));
         }
-        fs::write("/etc/resolv.conf", content).map_err(|e| format!("DNS_WRITE: {e}"))?;
+        // 写入：root 直接写，非 root 通过 sudo tee
+        if running_as_root() {
+            fs::write("/etc/resolv.conf", content).map_err(|e| format!("DNS_WRITE: {e}"))?;
+        } else {
+            let pw = password.ok_or_else(|| "NEED_SUDO: 需要管理员密码".to_string())?;
+            use std::io::Write;
+            use std::process::{Command, Stdio};
+            let mut child = Command::new("sudo")
+                .args(["-S", "tee", "/etc/resolv.conf"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| format!("SUDO_SPAWN tee: {e}"))?;
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(format!("{pw}\n{content}").as_bytes());
+            }
+            let out = child.wait_with_output().map_err(|e| e.to_string())?;
+            if !out.status.success() {
+                let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                return Err(format!("DNS_WRITE: {err}"));
+            }
+        }
         return Ok(format!("DNS_OK: switched to {preset}"));
     }
     #[cfg(not(target_os = "linux"))]
     {
+        let _ = (preset, password);
         return Err("TUNING_UNSUPPORTED: 仅 Linux 支持 DNS 管理".into());
     }
 }
@@ -769,18 +901,19 @@ pub fn get_timezone_info() -> Result<TimezoneInfo, String> {
 /// 设置时区（需 root）。
 #[allow(clippy::needless_return)]
 #[tauri::command]
-pub fn set_timezone(tz: String) -> Result<String, String> {
+pub fn set_timezone(tz: String, password: Option<String>) -> Result<String, String> {
     #[cfg(target_os = "linux")]
     {
         let tz_path = format!("/usr/share/zoneinfo/{tz}");
         if !Path::new(&tz_path).exists() {
             return Err("TZ_INVALID: 时区不存在".into());
         }
-        run_cmd("timedatectl", &["set-timezone", &tz])?;
+        run_privileged(password, "timedatectl", &["set-timezone", &tz])?;
         return Ok(format!("TZ_OK: set to {tz}"));
     }
     #[cfg(not(target_os = "linux"))]
     {
+        let _ = (tz, password);
         return Err("TUNING_UNSUPPORTED: 仅 Linux 支持时区管理".into());
     }
 }
@@ -817,11 +950,11 @@ pub fn get_firewall_status() -> Result<FirewallStatus, String> {
 /// 启用/禁用防火墙（需 root）。
 #[allow(clippy::needless_return)]
 #[tauri::command]
-pub fn set_firewall(enable: bool) -> Result<String, String> {
+pub fn set_firewall(enable: bool, password: Option<String>) -> Result<String, String> {
     #[cfg(target_os = "linux")]
     {
         let action = if enable { "enable" } else { "disable" };
-        run_cmd("ufw", &[action])?;
+        run_privileged(password, "ufw", &[action])?;
         return Ok(if enable {
             "FIREWALL_ENABLE".into()
         } else {
@@ -830,6 +963,7 @@ pub fn set_firewall(enable: bool) -> Result<String, String> {
     }
     #[cfg(not(target_os = "linux"))]
     {
+        let _ = (enable, password);
         return Err("TUNING_UNSUPPORTED: 仅 Linux 支持防火墙管理".into());
     }
 }
@@ -1011,6 +1145,7 @@ pub fn clean_targets(
     target_ids: Vec<String>,
     dry_run: bool,
     confirmed: bool,
+    password: Option<String>,
 ) -> Result<CleanResult, String> {
     #[cfg(target_os = "linux")]
     {
@@ -1026,7 +1161,11 @@ pub fn clean_targets(
                     if dry_run {
                         executed.push(format!("[dry-run] {}", t.action));
                     } else {
-                        let _ = run_cmd("journalctl", &["--vacuum-time=7days"]);
+                        let _ = run_privileged(
+                            password.clone(),
+                            "journalctl",
+                            &["--vacuum-time=7days"],
+                        );
                         executed.push("[done] journalctl vacuum → 7d".to_string());
                         freed_mb += t.size_mb;
                     }
@@ -1035,7 +1174,8 @@ pub fn clean_targets(
                     if dry_run {
                         executed.push(format!("[dry-run] {}", t.action));
                     } else {
-                        let _ = run_cmd(
+                        let _ = run_privileged(
+                            password.clone(),
                             "find",
                             &["/var/log", "-name", "*.gz", "-mtime", "+30", "-delete"],
                         );
@@ -1075,7 +1215,11 @@ pub fn clean_targets(
                     if dry_run {
                         executed.push("[dry-run] apt-get autoremove --purge".to_string());
                     } else {
-                        let _ = run_cmd("apt-get", &["-y", "autoremove", "--purge"]);
+                        let _ = run_privileged(
+                            password.clone(),
+                            "apt-get",
+                            &["-y", "autoremove", "--purge"],
+                        );
                         executed.push("[done] apt autoremove --purge 已执行".to_string());
                     }
                 }
@@ -1086,7 +1230,11 @@ pub fn clean_targets(
                     if dry_run {
                         executed.push("[dry-run] docker system prune -a --volumes".to_string());
                     } else {
-                        let _ = run_cmd("docker", &["system", "prune", "-a", "--volumes", "-f"]);
+                        let _ = run_privileged(
+                            password.clone(),
+                            "docker",
+                            &["system", "prune", "-a", "--volumes", "-f"],
+                        );
                         executed.push("[done] docker system prune -a --volumes 已执行".to_string());
                     }
                 }
@@ -1283,7 +1431,8 @@ pub fn win_clean_paths(ids: Vec<String>) -> Result<u64, String> {
 /// WinSxS 组件库清理（DISM /StartComponentCleanup，需管理员）。
 #[allow(unused_variables, clippy::needless_return)]
 #[tauri::command]
-pub fn win_winsxs_cleanup(reset_base: bool) -> Result<String, String> {
+pub fn win_winsxs_cleanup(reset_base: bool, password: Option<String>) -> Result<String, String> {
+    let _ = password;
     #[cfg(target_os = "windows")]
     {
         let mut args = vec!["/online", "/Cleanup-Image", "/StartComponentCleanup"];
@@ -1349,7 +1498,8 @@ pub fn win_get_hibernation() -> Result<HibernationStatus, String> {
 /// 开关休眠。enable=true 开启 / enable=false 关闭（powercfg /hibernate on|off）。
 #[allow(unused_variables, clippy::needless_return)]
 #[tauri::command]
-pub fn win_set_hibernation(enable: bool) -> Result<String, String> {
+pub fn win_set_hibernation(enable: bool, password: Option<String>) -> Result<String, String> {
+    let _ = password;
     #[cfg(target_os = "windows")]
     {
         let arg = if enable { "on" } else { "off" };

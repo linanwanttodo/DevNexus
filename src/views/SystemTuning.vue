@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "../lib/toast.js";
 import { showConfirm } from "../lib/confirm.js";
+import { promptSudo } from "../lib/sudo.js";
 import { t, tFormat } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
 import AppIcon from "../components/AppIcon.vue";
@@ -27,14 +28,19 @@ const activeTab = computed(() => {
 });
 
 const overview = ref(null);
-// 是否以 root/管理员权限运行（决定 DNS/swap/时区/防火墙等系统级写操作是否可用）
+// 是否以 root/管理员权限运行（决定是否需弹窗输密码提权）
 const isRoot = computed(() => !!overview.value?.is_root);
 
-/** 需要 root 的操作前置检查：非 root 时给出提示并阻止执行 */
-function requireRoot() {
-  if (isRoot.value) return true;
-  showToast(t("tuningLinux.need_root"), "warning");
-  return false;
+/** 获取 sudo 密码：已是 root 则无需密码，否则弹窗让用户输入；取消返回 null */
+async function getSudoPassword(hint) {
+  if (isRoot.value) return undefined;
+  const pw = await promptSudo(hint || t("sudo.desc"));
+  if (pw === null || pw === undefined) return null;
+  if (!String(pw).trim()) {
+    showToast(t("sudo.placeholder"), "warning");
+    return null;
+  }
+  return String(pw);
 }
 
 // ── 磁盘清理（Linux） ──
@@ -161,21 +167,23 @@ async function loadLimits() {
 }
 
 async function createSwap() {
-  if (!requireRoot()) return;
   if (!(await showConfirm(tFormat("tuningLinux.swap_create_hint", { size: swapSize.value })))) return;
+  const password = await getSudoPassword(tFormat("tuningLinux.swap_create_hint", { size: swapSize.value }));
+  if (password === null) return;
   try {
-    const msg = await invoke("set_swap", { sizeMb: swapSize.value });
+    const msg = await invoke("set_swap", { sizeMb: swapSize.value, password });
     showToast(msg, "success");
     await loadSwap();
   } catch (err) { showToast(friendlyError(err), "error"); }
 }
 async function disableSwap() {
-  if (!requireRoot()) return;
   if (!swapInfo.value?.devices?.length) return;
   if (!(await showConfirm(t("tuningLinux.swap_disable")))) return;
+  const password = await getSudoPassword(t("tuningLinux.swap_disable"));
+  if (password === null) return;
   try {
     for (const d of swapInfo.value.devices) {
-      await invoke("disable_swap", { path: d.filename });
+      await invoke("disable_swap", { path: d.filename, password });
     }
     showToast("Swap disabled", "success");
     await loadSwap();
@@ -183,10 +191,11 @@ async function disableSwap() {
 }
 
 async function applyDns(preset) {
-  if (!requireRoot()) return;
+  const password = await getSudoPassword(t("sudo.desc"));
+  if (password === null) return;
   dnsBusy.value = true;
   try {
-    const msg = await invoke("set_dns", { preset });
+    const msg = await invoke("set_dns", { preset, password });
     if (msg.replace(/^DNS_/, "").length > 4) {
       showToast(t("tuningLinux.dns_apply") + " ✓", "success");
     }
@@ -196,11 +205,12 @@ async function applyDns(preset) {
 }
 
 async function setTz() {
-  if (!requireRoot()) return;
   if (!tzInput.value.trim()) return;
   if (!(await showConfirm(`${t("tuningLinux.tz_set")}: ${tzInput.value}`))) return;
+  const password = await getSudoPassword(`${t("tuningLinux.tz_set")}: ${tzInput.value}`);
+  if (password === null) return;
   try {
-    await invoke("set_timezone", { tz: tzInput.value });
+    await invoke("set_timezone", { tz: tzInput.value, password });
     showToast("Timezone set", "success");
     tzInput.value = "";
     await loadTz();
@@ -208,11 +218,12 @@ async function setTz() {
 }
 
 async function toggleFirewall() {
-  if (!requireRoot()) return;
   const enable = !(firewall.value?.ufw_active);
   if (!(await showConfirm(enable ? t("tuningLinux.firewall_enable") : t("tuningLinux.firewall_disable")))) return;
+  const password = await getSudoPassword(enable ? t("tuningLinux.firewall_enable") : t("tuningLinux.firewall_disable"));
+  if (password === null) return;
   try {
-    await invoke("set_firewall", { enable });
+    await invoke("set_firewall", { enable, password });
     showToast("OK", "success");
     await loadFirewall();
   } catch (err) { showToast(friendlyError(err), "error"); }
@@ -247,9 +258,15 @@ async function doClean(dryRun) {
   }
   // 二次确认弹窗
   if (!(await showConfirm(dryRun ? t("tuningLinux.dry_run") : t("tuningLinux.clean_targets")))) return;
+  // 需要提权时先弹窗要密码（非 dry-run 真正执行时）
+  let password;
+  if (!dryRun) {
+    password = await getSudoPassword(t("tuningLinux.clean_targets"));
+    if (password === null) return;
+  }
   cudBusy.value = true;
   try {
-    const res = await invoke("clean_targets", { targetIds: ids, dryRun, confirmed });
+    const res = await invoke("clean_targets", { targetIds: ids, dryRun, confirmed, password });
     if (!dryRun) {
       const freedMb = res.freed_mb || 0;
       showToast(tFormat("tuningLinux.freed_clean", { size: `${freedMb} MB` }), "success");
@@ -310,22 +327,24 @@ async function winClean() {
 }
 
 async function winWinsxs(resetBase) {
-  if (!requireRoot()) return;
   if (!(await showConfirm(resetBase ? t("winOpt.winsxs_reset_confirm") : t("winOpt.winsxs_confirm")))) return;
+  const password = await getSudoPassword(resetBase ? t("winOpt.winsxs_reset_confirm") : t("winOpt.winsxs_confirm"));
+  if (password === null) return;
   winJsxsBusy.value = true;
   try {
-    const msg = await invoke("win_winsxs_cleanup", { resetBase });
+    const msg = await invoke("win_winsxs_cleanup", { resetBase, password });
     showToast(msg, "success");
   } catch (err) { showToast(friendlyError(err), "error"); }
   finally { winJsxsBusy.value = false; }
 }
 
 async function winToggleHibernation() {
-  if (!requireRoot()) return;
   const enable = !(winHibernation.value?.enabled);
   if (!(await showConfirm(enable ? t("winOpt.turn_on") : t("winOpt.turn_off")))) return;
+  const password = await getSudoPassword(enable ? t("winOpt.turn_on") : t("winOpt.turn_off"));
+  if (password === null) return;
   try {
-    await invoke("win_set_hibernation", { enable });
+    await invoke("win_set_hibernation", { enable, password });
     winHibernation.value = await invoke("win_get_hibernation");
     showToast(enable ? t("winOpt.on") : t("winOpt.off"), "success");
   } catch (err) { showToast(friendlyError(err), "error"); }

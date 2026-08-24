@@ -277,6 +277,7 @@ pub fn run() {
             commands::tuning::optimize_disk,
             commands::tuning::clean_requires_sudo,
             commands::tuning::get_tuning_overview,
+            commands::tuning::verify_sudo_password,
             commands::tuning::get_swap_info,
             commands::tuning::set_swap,
             commands::tuning::disable_swap,

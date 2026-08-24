@@ -954,7 +954,7 @@
     "freed_clean": "预计释放 {size}",
     "unsupported_title": "该平台功能尚未实现",
     "unsupported_desc": "系统调优工具箱当前仅支持 Linux。macOS / Windows 版本正在开发中。",
-    "need_root": "需要以 root 管理员权限运行本应用才能使用 DNS / Swap / 时区 / 防火墙 / WinSxS / 休眠等系统级操作"
+    "need_root": "未以 root 运行，执行 DNS / Swap / 时区 / 防火墙 / 清理等系统级操作时将弹窗请求 sudo 密码（无需重启为 sudo）"
   },
   "winOpt": {
     "cleanup": "磁盘清理",
@@ -975,5 +975,12 @@
     "storage_hint": "点击刷新读取磁盘占用",
     "refresh_storage": "读取存储占用",
     "clean_confirm": "确定删除选中的清理项？"
+  },
+  "sudo": {
+    "title": "需要管理员权限",
+    "desc": "该操作需要管理员权限，请输入系统密码以继续（仅用于本次 sudo 提权，不会保存）。",
+    "placeholder": "输入系统密码",
+    "hint": "密码仅通过 sudo -S 传入，不会落盘或记录日志。",
+    "cancelled": "已取消"
   }
 }

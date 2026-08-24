@@ -947,7 +947,7 @@
     "freed_clean": "Estimated freed {size}",
     "unsupported_title": "Not implemented on this platform",
     "unsupported_desc": "The System Tune toolbox currently supports Linux only. macOS / Windows versions are in development.",
-    "need_root": "Run this app with root/admin privileges to use system-level operations (DNS / Swap / Timezone / Firewall / WinSxS / Hibernation)."
+    "need_root": "Not running as root — a sudo password prompt will appear when you run system-level actions (DNS / Swap / Timezone / Firewall / cleanup), no need to restart as sudo."
   },
   "winOpt": {
     "cleanup": "Disk Cleanup",
@@ -968,5 +968,12 @@
     "storage_hint": "Click refresh to read disk usage",
     "refresh_storage": "Read storage usage",
     "clean_confirm": "Delete the selected cleanup items?"
+  },
+  "sudo": {
+    "title": "Administrator required",
+    "desc": "This operation requires admin rights. Enter your system password to continue (used only for this sudo elevation, not stored).",
+    "placeholder": "Enter system password",
+    "hint": "Password is passed via sudo -S only, never stored or logged.",
+    "cancelled": "Cancelled"
   }
 }

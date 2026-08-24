@@ -7,8 +7,9 @@ import { getTheme, setIslandEnabled } from "./lib/stores.js";
 import { applyIslandState } from "./lib/island.js";
 import { router } from "./router.js";
 
-// 首屏只渲染主布局；ConfirmDialog / Sonner 为运行时交互组件，按需懒加载
+// 首屏只渲染主布局；ConfirmDialog / Sonner / SudoDialog 为运行时交互组件，按需懒加载
 const ConfirmDialog = defineAsyncComponent(() => import("./components/ConfirmDialog.vue"));
+const SudoDialog = defineAsyncComponent(() => import("./components/SudoDialog.vue"));
 const Sonner = defineAsyncComponent(() => import("./components/ui/sonner/Sonner.vue"));
 
 const theme = getTheme();
@@ -63,6 +64,7 @@ function require_tauri_listen() {
     </div>
 
     <ConfirmDialog />
+    <SudoDialog />
     <Sonner :theme="theme" position="top-center" rich-colors expand :toast-options="{ duration: 3500 }" />
   </div>
 </template>
