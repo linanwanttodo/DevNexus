@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const route = useRoute();
@@ -259,6 +261,82 @@ async function doOptimize() {
   finally { optimizing.value = false; }
 }
 
+// ── Windows 优化 ──
+const winCleanItems = ref([]);
+const winCleanSelected = ref({});
+const winCleanScanning = ref(false);
+const winCleaning = ref(false);
+const winJsxsBusy = ref(false);
+const winHibernation = ref(null);
+const winStartup = ref([]);
+const winStorage = ref([]);
+const winStorageBusy = ref(false);
+
+async function winScanCleanup() {
+  winCleanScanning.value = true;
+  winCleanSelected.value = {};
+  try {
+    winCleanItems.value = await invoke("win_scan_cleanup");
+  } catch (err) { showToast(friendlyError(err), "error"); }
+  finally { winCleanScanning.value = false; }
+}
+
+async function winClean() {
+  const ids = Object.entries(winCleanSelected.value).filter(([, v]) => v).map(([k]) => k);
+  if (!ids.length) return;
+  if (!(await showConfirm(t("winOpt.clean_confirm")))) return;
+  winCleaning.value = true;
+  try {
+    const freed = await invoke("win_clean_paths", { ids });
+    showToast(tFormat("systemTune.freed", { size: humanSize(freed) }), "success");
+    winCleanSelected.value = {};
+    await winScanCleanup();
+  } catch (err) { showToast(friendlyError(err), "error"); }
+  finally { winCleaning.value = false; }
+}
+
+async function winWinsxs(resetBase) {
+  if (!(await showConfirm(resetBase ? t("winOpt.winsxs_reset_confirm") : t("winOpt.winsxs_confirm")))) return;
+  winJsxsBusy.value = true;
+  try {
+    const msg = await invoke("win_winsxs_cleanup", { resetBase });
+    showToast(msg, "success");
+  } catch (err) { showToast(friendlyError(err), "error"); }
+  finally { winJsxsBusy.value = false; }
+}
+
+async function winToggleHibernation() {
+  const enable = !(winHibernation.value?.enabled);
+  if (!(await showConfirm(enable ? t("winOpt.turn_on") : t("winOpt.turn_off")))) return;
+  try {
+    await invoke("win_set_hibernation", { enable });
+    winHibernation.value = await invoke("win_get_hibernation");
+    showToast(enable ? t("winOpt.on") : t("winOpt.off"), "success");
+  } catch (err) { showToast(friendlyError(err), "error"); }
+}
+
+async function winLoadStartup() {
+  try {
+    winStartup.value = await invoke("win_list_startup");
+  } catch (err) { showToast(friendlyError(err), "error"); }
+}
+
+async function winSetStartup(entry, v) {
+  try {
+    await invoke("win_set_startup", { name: entry.name, hive: entry.hive, enable: v });
+    entry.enabled = v;
+    showToast(entry.name + (v ? " ✓" : " ✗"), "success");
+  } catch (err) { showToast(friendlyError(err), "error"); }
+}
+
+async function winLoadStorage() {
+  winStorageBusy.value = true;
+  try {
+    winStorage.value = await invoke("win_storage_usage");
+  } catch (err) { showToast(friendlyError(err), "error"); }
+  finally { winStorageBusy.value = false; }
+}
+
 function humanSize(n) {
   if (typeof n === "bigint") n = Number(n);
   if (n < 1024) return `${n} B`;
@@ -273,6 +351,7 @@ function riskBadge(risk) {
 
 watch(activeTab, (v) => {
   if (v === "linux") loadToolbox();
+  if (v === "windows") { winLoadStartup(); winLoadStorage(); }
 });
 
 onMounted(() => {
@@ -307,11 +386,11 @@ onMounted(() => {
         </TabsTrigger>
       </TabsList>
 
-      <!-- ── macOS/Windows 占位 ── -->
-      <TabsContent v-if="activeTab !== 'linux'" :value="activeTab" class="space-y-4">
+      <!-- ── macOS 占位 ── -->
+      <TabsContent value="macos" class="space-y-4">
         <Card>
           <CardContent class="py-16 flex flex-col items-center gap-4 text-center">
-            <AppIcon :name="activeTab === 'macos' ? 'apple' : 'monitor'" class="size-14 opacity-30" />
+            <AppIcon name="apple" class="size-14 opacity-30" />
             <h2 class="text-lg font-medium">{{ t("tuningLinux.unsupported_title") }}</h2>
             <p class="text-sm text-muted-foreground max-w-md">{{ t("tuningLinux.unsupported_desc") }}</p>
             <Button variant="outline" :disabled="optimizing" @click="doOptimize">
@@ -321,6 +400,115 @@ onMounted(() => {
             </Button>
           </CardContent>
         </Card>
+      </TabsContent>
+
+      <!-- ── Windows 优化 ── -->
+      <TabsContent value="windows" class="space-y-4">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <!-- 磁盘清理卡片 -->
+          <Card class="shadow-sm p-4 space-y-4">
+            <div class="flex items-center justify-between">
+              <h2 class="text-sm font-semibold flex items-center gap-2">
+                <AppIcon name="database" class="size-4" /> {{ t("winOpt.cleanup") }}
+              </h2>
+              <div class="flex gap-2">
+                <Button size="sm" variant="outline" :disabled="winCleanScanning" @click="winScanCleanup">
+                  <Spinner v-if="winCleanScanning" class="size-3.5" />
+                  <AppIcon v-else name="search" class="size-3.5" />
+                  {{ t("winOpt.scan") }}
+                </Button>
+                <Button size="sm" variant="destructive" :disabled="!Object.values(winCleanSelected).some(Boolean) || winCleaning" @click="winClean">
+                  {{ winCleaning ? t("systemTune.cleaning") : t("systemTune.clean_selected") }}
+                </Button>
+              </div>
+            </div>
+
+            <div v-if="!winCleanItems.length && !winCleanScanning" class="text-xs text-muted-foreground">
+              {{ t("winOpt.scan_hint") }}
+            </div>
+
+            <div v-else class="space-y-1.5">
+              <div v-for="it in winCleanItems" :key="it.id" class="flex items-center gap-2 rounded border px-2 py-1">
+                <Checkbox :checked="!!winCleanSelected[it.id]" @update:checked="(v) => (winCleanSelected[it.id] = v)" />
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs font-medium">{{ it.name }}</div>
+                  <div class="text-[11px] text-muted-foreground font-mono truncate">{{ it.path }}</div>
+                </div>
+                <Badge :variant="it.risk === 'warn' ? 'warning' : 'secondary'" class="text-[10px]">
+                  {{ it.risk === 'warn' ? t("tuningLinux.risk_warn") : t("tuningLinux.risk_safe") }}
+                </Badge>
+                <span class="text-xs text-muted-foreground font-mono shrink-0">{{ humanSize(it.bytes) }}</span>
+              </div>
+            </div>
+
+            <div class="pt-3 border-t space-y-2">
+              <h3 class="text-xs font-semibold">{{ t("winOpt.extra") }}</h3>
+              <div class="flex items-center gap-2">
+                <Button size="sm" variant="outline" :disabled="winJsxsBusy" @click="winWinsxs(false)">
+                  <Spinner v-if="winJsxsBusy" class="size-3.5" />
+                  <AppIcon v-else name="archive" class="size-3.5" />
+                  {{ t("winOpt.winsxs") }}
+                </Button>
+                <Button size="sm" variant="outline" :disabled="winJsxsBusy" @click="winWinsxs(true)">
+                  {{ t("winOpt.winsxs_reset") }}
+                </Button>
+              </div>
+              <div class="flex items-center justify-between rounded border px-2 py-1.5">
+                <div class="text-xs">
+                  <div>{{ t("winOpt.hibernation") }}</div>
+                  <div class="text-muted-foreground font-mono">
+                    {{ winHibernation?.enabled ? t("winOpt.on") : t("winOpt.off") }}
+                    <span v-if="winHibernation?.hiberfil_mb"> · {{ humanSize(winHibernation.hiberfil_mb * 1024 * 1024) }}</span>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" @click="winToggleHibernation">
+                  {{ winHibernation?.enabled ? t("winOpt.turn_off") : t("winOpt.turn_on") }}
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          <!-- 启动项 + 存储卡片 -->
+          <Card class="shadow-sm p-4 space-y-4">
+            <div class="flex items-center justify-between">
+              <h2 class="text-sm font-semibold flex items-center gap-2">
+                <AppIcon name="settings" class="size-4" /> {{ t("winOpt.startup") }}
+              </h2>
+              <Button size="sm" variant="outline" @click="winLoadStartup">
+                <AppIcon name="refresh" class="size-3.5" />
+              </Button>
+            </div>
+
+            <div v-if="!winStartup.length" class="text-xs text-muted-foreground">{{ t("winOpt.startup_hint") }}</div>
+            <div v-else class="space-y-1.5 max-h-52 overflow-y-auto">
+              <div v-for="(s, si) in winStartup" :key="si" class="flex items-center gap-2 rounded border px-2 py-1">
+                <span class="text-xs font-medium truncate flex-1">{{ s.name }}</span>
+                <Badge :variant="s.hive === 'HKLM' ? 'outline' : 'secondary'" class="text-[10px]">{{ s.hive }}</Badge>
+                <Switch :checked="s.enabled" @update:checked="(v) => winSetStartup(s, v)" />
+              </div>
+            </div>
+
+            <div class="pt-3 border-t space-y-2">
+              <h3 class="text-xs font-semibold">{{ t("systemTune.disk_usage") }}</h3>
+              <div v-if="!winStorage.length" class="text-xs text-muted-foreground">{{ t("winOpt.storage_hint") }}</div>
+              <div v-else class="space-y-2">
+                <div v-for="d in winStorage" :key="d.mount" class="space-y-1">
+                  <div class="text-xs font-medium">{{ d.mount }} <span class="text-muted-foreground font-normal">({{ d.format }})</span></div>
+                  <Progress :model-value="Math.round(d.used_bytes / d.total_bytes * 100)" class="h-2" />
+                  <div class="flex justify-between text-[11px] text-muted-foreground">
+                    <span>{{ humanSize(d.used_bytes) }} / {{ humanSize(d.total_bytes) }}</span>
+                    <span>{{ t("systemTune.free") }}: {{ humanSize(d.free_bytes) }}</span>
+                  </div>
+                </div>
+              </div>
+              <Button size="sm" variant="outline" :disabled="winStorageBusy" @click="winLoadStorage">
+                <Spinner v-if="winStorageBusy" class="size-3.5" />
+                <AppIcon v-else name="bar-chart" class="size-3.5" />
+                {{ t("winOpt.refresh_storage") }}
+              </Button>
+            </div>
+          </Card>
+        </div>
       </TabsContent>
 
       <!-- ── Linux 工具箱 ── -->

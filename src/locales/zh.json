@@ -954,5 +954,25 @@
     "freed_clean": "预计释放 {size}",
     "unsupported_title": "该平台功能尚未实现",
     "unsupported_desc": "系统调优工具箱当前仅支持 Linux。macOS / Windows 版本正在开发中。"
+  },
+  "winOpt": {
+    "cleanup": "磁盘清理",
+    "scan": "扫描",
+    "scan_hint": "点击「扫描」检测可清理的临时文件与缓存",
+    "extra": "高级清理",
+    "winsxs": "WinSxS 清理",
+    "winsxs_reset": "WinSxS 重置 (ResetBase)",
+    "winsxs_confirm": "将运行 DISM StartComponentCleanup 清理组件库（需管理员权限）。继续？",
+    "winsxs_reset_confirm": "将运行 DISM StartComponentCleanup /ResetBase 并移除所有已替换组件（不可逆）。建议在确认系统稳定后进行。继续？",
+    "hibernation": "休眠文件 (hiberfil.sys)",
+    "on": "已开启",
+    "off": "已关闭",
+    "turn_on": "开启休眠",
+    "turn_off": "关闭休眠（释放空间）",
+    "startup": "启动项",
+    "startup_hint": "点击刷新按钮读取注册表启动项",
+    "storage_hint": "点击刷新读取磁盘占用",
+    "refresh_storage": "读取存储占用",
+    "clean_confirm": "确定删除选中的清理项？"
   }
 }

@@ -1042,3 +1042,418 @@ pub fn clean_targets(
         return Err("TUNING_UNSUPPORTED: 仅 Linux 支持日志清理".into());
     }
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Windows 优化（phase 3 扩展）
+// 标杆参考：BleachBit（安全可解释 cleaners）、Win10Boost/OptWin（服务/注册表/电源）、
+// Microsoft DISM WinSxS。大部分操作通过 PowerShell / powercfg / dism 完成；
+// 启动项用 winreg 读写注册表。均带 dry-run 预览与危险确认。
+// ════════════════════════════════════════════════════════════════════
+
+/// Windows 可清理项（扫描返回）
+#[derive(Serialize)]
+pub struct WinCleanItem {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub bytes: u64,
+    pub risk: String, // safe | warn
+}
+
+/// 枚举 Windows 系统盘上常见可清理路径（temp / 缓存 / 预读 / 下载 / 回收站）。
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn win_scan_cleanup() -> Result<Vec<WinCleanItem>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::path::PathBuf;
+        let mut items = Vec::new();
+        let temp: PathBuf = std::env::var("TEMP").map(PathBuf::from).unwrap_or_default();
+        let local_appdata: PathBuf = std::env::var("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_default();
+        let windir: PathBuf = std::env::var("WINDIR")
+            .map(PathBuf::from)
+            .unwrap_or_default();
+
+        // 1. 临时文件 %TEMP%
+        if !temp.as_os_str().is_empty() && temp.exists() {
+            let mut fc = 0u64;
+            let bytes = dir_size(&temp, &mut fc);
+            if bytes > 0 {
+                items.push(WinCleanItem {
+                    id: "temp".into(),
+                    name: "临时文件 (%TEMP%)".into(),
+                    path: temp.to_string_lossy().to_string(),
+                    bytes,
+                    risk: "safe".into(),
+                });
+            }
+        }
+        // 2. 预读取缓存 %WINDIR%\Prefetch
+        let prefetch = windir.join("Prefetch");
+        if prefetch.exists() {
+            let mut fc = 0u64;
+            let bytes = dir_size(&prefetch, &mut fc);
+            if bytes > 0 {
+                items.push(WinCleanItem {
+                    id: "prefetch".into(),
+                    name: "预读取缓存 (Prefetch)".into(),
+                    path: prefetch.to_string_lossy().to_string(),
+                    bytes,
+                    risk: "safe".into(),
+                });
+            }
+        }
+        // 3. Windows Update 下载缓存 %WINDIR%\SoftwareDistribution\Download
+        let mud = windir.join("SoftwareDistribution").join("Download");
+        if mud.exists() {
+            let mut fc = 0u64;
+            let bytes = dir_size(&mud, &mut fc);
+            if bytes > 0 {
+                items.push(WinCleanItem {
+                    id: "wudl".into(),
+                    name: "Windows Update 下载缓存".into(),
+                    path: mud.to_string_lossy().to_string(),
+                    bytes,
+                    risk: "warn".into(),
+                });
+            }
+        }
+        // 4. 缩略图/图标缓存 %LOCALAPPDATA%\Microsoft\Windows\Explorer
+        let thumb = local_appdata.join("Microsoft\\Windows\\Explorer");
+        if thumb.exists() {
+            let mut fc = 0u64;
+            let bytes = dir_size(&thumb, &mut fc);
+            if bytes > 0 {
+                items.push(WinCleanItem {
+                    id: "thumb".into(),
+                    name: "缩略图/图标缓存".into(),
+                    path: thumb.to_string_lossy().to_string(),
+                    bytes,
+                    risk: "safe".into(),
+                });
+            }
+        }
+        // 5. 浏览器/常用 app 缓存（Chrome/Edge 若存在）
+        let home: PathBuf = std::env::var("USERPROFILE")
+            .map(PathBuf::from)
+            .unwrap_or_default();
+        for (id, name, rel) in [
+            (
+                "chrome",
+                "Chrome 缓存",
+                "AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cache",
+            ),
+            (
+                "edge",
+                "Edge 缓存",
+                "AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Cache",
+            ),
+            ("npm", "npm 缓存", "AppData\\Local\\npm-cache"),
+            ("pip", "pip 缓存", "AppData\\Local\\pip\\cache"),
+        ] {
+            let p = home.join(rel);
+            if p.exists() {
+                let mut fc = 0u64;
+                let bytes = dir_size(&p, &mut fc);
+                if bytes > 0 {
+                    items.push(WinCleanItem {
+                        id: id.into(),
+                        name: name.into(),
+                        path: p.to_string_lossy().to_string(),
+                        bytes,
+                        risk: "safe".into(),
+                    });
+                }
+            }
+        }
+        items.sort_by_key(|a| a.bytes);
+        items.reverse();
+        return Ok(items);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        return Err("TUNING_WIN_UNSUPPORTED: 此功能仅限 Windows".into());
+    }
+}
+
+/// 删除选中的 Windows 清理项，返回释放字节数。
+#[allow(unused_variables, clippy::needless_return)]
+#[tauri::command]
+pub fn win_clean_paths(ids: Vec<String>) -> Result<u64, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let all = win_scan_cleanup().unwrap_or_default();
+        let mut freed = 0u64;
+        for item in all {
+            if !ids.contains(&item.id) {
+                continue;
+            }
+            let p = std::path::PathBuf::from(&item.path);
+            if !p.exists() {
+                continue;
+            }
+            if let Ok(meta) = std::fs::metadata(&p) {
+                if meta.is_dir() {
+                    // 逐个清空内容而非整目录删除（保留目录结构，避免路径解析问题）
+                    if let Ok(rd) = std::fs::read_dir(&p) {
+                        for entry in rd.flatten() {
+                            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                                let _ = std::fs::remove_dir_all(entry.path());
+                            } else {
+                                let _ = std::fs::remove_file(entry.path());
+                            }
+                        }
+                    }
+                    freed += item.bytes;
+                }
+            }
+        }
+        return Ok(freed);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        return Err("TUNING_WIN_UNSUPPORTED: 此功能仅限 Windows".into());
+    }
+}
+
+/// WinSxS 组件库清理（DISM /StartComponentCleanup，需管理员）。
+#[allow(unused_variables, clippy::needless_return)]
+#[tauri::command]
+pub fn win_winsxs_cleanup(reset_base: bool) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut args = vec!["/online", "/Cleanup-Image", "/StartComponentCleanup"];
+        if reset_base {
+            args.push("/ResetBase");
+        }
+        let out = std::process::Command::new("Dism")
+            .args(&args)
+            .output()
+            .map_err(|e| format!("DISM_FAILED: {e}"))?;
+        let tail = String::from_utf8_lossy(&out.stderr);
+        Ok(format!(
+            "WINSXS_DONE (ntstatus {}): {}",
+            out.status.code().unwrap_or(-1),
+            tail.lines().next_back().unwrap_or("")
+        ))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        return Err("TUNING_WIN_UNSUPPORTED: 此功能仅限 Windows".into());
+    }
+}
+
+/// 休眠文件 (hiberfil.sys) 状态与开关。true=开启，false=关闭(释放约等于内存大小的空间)。
+#[derive(Serialize)]
+pub struct HibernationStatus {
+    pub enabled: bool,
+    pub hiberfil_mb: u64,
+}
+
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn win_get_hibernation() -> Result<HibernationStatus, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let out = std::process::Command::new("powercfg")
+            .args(["/a"])
+            .output()
+            .ok();
+        let enabled = out
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains("Hibernation"))
+            .unwrap_or(false);
+        let mut hiberfil_mb = 0u64;
+        // hiberfil.sys 位于系统盘根（如 C:\hiberfil.sys）
+        let root = std::path::PathBuf::from("C:\\");
+        let hf = root.join("hiberfil.sys");
+        if hf.exists() {
+            if let Ok(m) = std::fs::metadata(&hf) {
+                hiberfil_mb = m.len() / 1024 / 1024;
+            }
+        }
+        return Ok(HibernationStatus {
+            enabled,
+            hiberfil_mb,
+        });
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        return Err("TUNING_WIN_UNSUPPORTED: 此功能仅限 Windows".into());
+    }
+}
+
+/// 开关休眠。enable=true 开启 / enable=false 关闭（powercfg /hibernate on|off）。
+#[allow(unused_variables, clippy::needless_return)]
+#[tauri::command]
+pub fn win_set_hibernation(enable: bool) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let arg = if enable { "on" } else { "off" };
+        let out = std::process::Command::new("powercfg")
+            .args(["/hibernate", arg])
+            .output()
+            .map_err(|e| format!("POWERCFG_FAILED: {e}"))?;
+        Ok(format!(
+            "HIBERNATION_{} (ntstatus {})",
+            arg,
+            out.status.code().unwrap_or(-1)
+        ))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        return Err("TUNING_WIN_UNSUPPORTED: 此功能仅限 Windows".into());
+    }
+}
+
+/// 一条启动项
+#[derive(Serialize)]
+pub struct WinStartupEntry {
+    pub name: String,
+    pub command: String,
+    pub hive: String, // "HKCU" | "HKLM"
+    pub enabled: bool,
+}
+
+/// 列出当前用户与机器级启动项（来自注册表 Run 键）。
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn win_list_startup() -> Result<Vec<WinStartupEntry>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::*;
+        use winreg::RegKey;
+        let mut out = Vec::new();
+        let runs = [
+            (
+                "HKCU".to_string(),
+                RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(
+                    "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                    KEY_READ,
+                ),
+            ),
+            (
+                "HKLM".to_string(),
+                RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey_with_flags(
+                    "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                    KEY_READ,
+                ),
+            ),
+        ];
+        for (hive, key) in runs {
+            if let Ok(key) = key {
+                for name in key.enum_names().flatten() {
+                    if let Ok(command) = key.get_value::<String, _>(&name) {
+                        out.push(WinStartupEntry {
+                            name: name.clone(),
+                            command,
+                            hive: hive.clone(),
+                            enabled: true, // Run 键存在即启用
+                        });
+                    }
+                }
+            }
+        }
+        return Ok(out);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        return Err("TUNING_WIN_UNSUPPORTED: 此功能仅限 Windows".into());
+    }
+}
+
+/// 禁用/启用某个启动项：写入 StartupApproved\Run 状态字节（禁用=0x03，启用=0x02）。
+#[allow(unused_variables, clippy::needless_return)]
+#[tauri::command]
+pub fn win_set_startup(name: String, hive: String, enable: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::*;
+        use winreg::RegKey;
+        let hkey = if hive == "HKLM" {
+            HKEY_LOCAL_MACHINE
+        } else {
+            HKEY_CURRENT_USER
+        };
+        let approved_path =
+            "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run";
+        let root = RegKey::predef(hkey);
+        let approved = match root.open_subkey_with_flags(approved_path, KEY_SET_VALUE | KEY_READ) {
+            Ok(k) => k,
+            Err(_) => {
+                root.create_subkey(approved_path)
+                    .map_err(|e| e.to_string())?
+                    .0
+            }
+        };
+        let state: Vec<u8> = if enable {
+            vec![0x02, 0x00]
+        } else {
+            vec![0x03, 0x00]
+        };
+        approved
+            .set_value(
+                &name,
+                &winreg::RegValue {
+                    bytes: state,
+                    vtype: winreg::RegType::REG_BINARY,
+                },
+            )
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        return Err("TUNING_WIN_UNSUPPORTED: 此功能仅限 Windows".into());
+    }
+}
+
+/// Windows 存储占用概览（PowerShell Get-CimInstance，替代已弃用的 wmic）。
+#[allow(clippy::needless_return)]
+#[tauri::command]
+pub fn win_storage_usage() -> Result<Vec<DiskUsage>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let script = "Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | Select-Object DeviceID,Size,FreeSpace,@{N='Fmt';E={$_.FileSystem}} | ConvertTo-Json";
+        let out = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", script])
+            .output()
+            .map_err(|e| format!("PS_FAILED: {e}"))?;
+        let txt = String::from_utf8_lossy(&out.stdout);
+        let mut res = Vec::new();
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&txt) {
+            let arrs = match v.as_array() {
+                Some(a) => a.clone(),
+                None => vec![v],
+            };
+            for o in arrs {
+                let mount = o
+                    .get("DeviceID")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let total = o.get("Size").and_then(|x| x.as_u64()).unwrap_or(0);
+                let free = o.get("FreeSpace").and_then(|x| x.as_u64()).unwrap_or(0);
+                let format = o
+                    .get("Fmt")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                if total > 0 {
+                    res.push(DiskUsage {
+                        mount,
+                        total_bytes: total,
+                        used_bytes: total.saturating_sub(free),
+                        free_bytes: free,
+                        format,
+                    });
+                }
+            }
+        }
+        return Ok(res);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        return Err("TUNING_WIN_UNSUPPORTED: 此功能仅限 Windows".into());
+    }
+}

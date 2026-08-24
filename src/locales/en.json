@@ -947,5 +947,25 @@
     "freed_clean": "Estimated freed {size}",
     "unsupported_title": "Not implemented on this platform",
     "unsupported_desc": "The System Tune toolbox currently supports Linux only. macOS / Windows versions are in development."
+  },
+  "winOpt": {
+    "cleanup": "Disk Cleanup",
+    "scan": "Scan",
+    "scan_hint": "Click 'Scan' to detect cleanable temp files and caches",
+    "extra": "Advanced Cleanup",
+    "winsxs": "WinSxS Cleanup",
+    "winsxs_reset": "WinSxS Reset (ResetBase)",
+    "winsxs_confirm": "Run DISM StartComponentCleanup to clean the component store? (requires admin)",
+    "winsxs_reset_confirm": "Run DISM StartComponentCleanup /ResetBase and remove all superseded components? This is irreversible. Continue?",
+    "hibernation": "Hibernation file (hiberfil.sys)",
+    "on": "Enabled",
+    "off": "Disabled",
+    "turn_on": "Enable hibernation",
+    "turn_off": "Disable (free space)",
+    "startup": "Startup items",
+    "startup_hint": "Click refresh to read registry startup entries",
+    "storage_hint": "Click refresh to read disk usage",
+    "refresh_storage": "Read storage usage",
+    "clean_confirm": "Delete the selected cleanup items?"
   }
 }
