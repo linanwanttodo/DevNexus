@@ -572,6 +572,61 @@ pub struct SwapDevice {
     pub used_mb: u64,
 }
 
+/// 记录单个清理步骤的执行结果：成功记 `[done]` 并返回 true；失败记 `[failed]`
+/// （含原因）并返回 false——调用方只有在本函数返回 true 时才允许计入释放空间。
+pub(crate) fn record_step(
+    executed: &mut Vec<String>,
+    label: &str,
+    res: &Result<String, String>,
+) -> bool {
+    match res {
+        Ok(_) => {
+            executed.push(format!("[done] {label}"));
+            true
+        }
+        Err(e) => {
+            executed.push(format!("[failed] {label}: {e}"));
+            false
+        }
+    }
+}
+
+/// swap 文件路径的黑名单前缀（绝对路径 + 无遍历的前提下，仍拒绝系统关键目录）
+const SWAP_FORBIDDEN_PREFIXES: &[&str] = &[
+    "/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/boot", "/proc", "/sys", "/dev", "/run",
+    "/opt", "/root",
+];
+
+/// 校验 swap 文件路径：必须为绝对路径、无 `..` 遍历分量，
+/// 且不得位于系统关键目录之下（防止以 root 权限 fallocate/chmod/mkswap 破坏系统文件）。
+pub(crate) fn validate_swap_path(p: &str) -> Result<(), String> {
+    if p.is_empty() || p.len() > 4096 {
+        return Err(format!("Invalid swap path: {p:?}"));
+    }
+    if p.chars().any(|c| c.is_control()) {
+        return Err("Swap path contains control characters".to_string());
+    }
+    let path = PathBuf::from(p);
+    if !path.is_absolute() {
+        return Err(format!("Swap path must be absolute: {p}"));
+    }
+    for comp in path.components() {
+        use std::path::Component;
+        if matches!(comp, Component::ParentDir | Component::CurDir) {
+            return Err(format!("Swap path traversal is not allowed: {p}"));
+        }
+    }
+    for prefix in SWAP_FORBIDDEN_PREFIXES {
+        // 精确匹配或目录边界匹配（/etc2 不算 /etc 下）
+        if p == *prefix || p.starts_with(&format!("{prefix}/")) {
+            return Err(format!(
+                "Refusing to create swap under system directory: {p}"
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 fn run_cmd(prog: &str, args: &[&str]) -> Result<String, String> {
     let out = std::process::Command::new(prog)
@@ -723,6 +778,9 @@ pub fn set_swap(
     #[cfg(target_os = "linux")]
     {
         let p = path.unwrap_or_else(|| "/swapfile".to_string());
+        // 以 root 执行 fallocate/chmod/mkswap 前必须校验路径，
+        // 防止对 /etc/shadow 等系统文件执行破坏性操作
+        validate_swap_path(&p)?;
         run_privileged(
             password.clone(),
             "fallocate",
@@ -746,6 +804,7 @@ pub fn set_swap(
 pub fn disable_swap(path: String, password: Option<String>) -> Result<String, String> {
     #[cfg(target_os = "linux")]
     {
+        validate_swap_path(&path)?;
         run_privileged(password, "swapoff", &[&path])?;
         return Ok(format!("SWAP_OFF: {path} disabled"));
     }
@@ -1161,26 +1220,29 @@ pub fn clean_targets(
                     if dry_run {
                         executed.push(format!("[dry-run] {}", t.action));
                     } else {
-                        let _ = run_privileged(
+                        let res = run_privileged(
                             password.clone(),
                             "journalctl",
                             &["--vacuum-time=7days"],
                         );
-                        executed.push("[done] journalctl vacuum → 7d".to_string());
-                        freed_mb += t.size_mb;
+                        // 只有命令确实成功才计入释放空间，失败必须如实上报
+                        if record_step(&mut executed, "journalctl vacuum → 7d", &res) {
+                            freed_mb += t.size_mb;
+                        }
                     }
                 }
                 "varlog" => {
                     if dry_run {
                         executed.push(format!("[dry-run] {}", t.action));
                     } else {
-                        let _ = run_privileged(
+                        let res = run_privileged(
                             password.clone(),
                             "find",
                             &["/var/log", "-name", "*.gz", "-mtime", "+30", "-delete"],
                         );
-                        executed.push("[done] /var/log *.gz (mtime+30) 已清理".to_string());
-                        freed_mb += t.size_mb;
+                        if record_step(&mut executed, "/var/log *.gz (mtime+30) 已清理", &res) {
+                            freed_mb += t.size_mb;
+                        }
                     }
                 }
                 "usercache" => {
@@ -1199,8 +1261,13 @@ pub fn clean_targets(
                             let p = std::path::PathBuf::from(&p);
                             if p.exists() {
                                 let mut fc = 0u64;
-                                freed += dir_size(&p, &mut fc);
-                                let _ = fs::remove_dir_all(&p);
+                                let size = dir_size(&p, &mut fc);
+                                match fs::remove_dir_all(&p) {
+                                    Ok(()) => freed += size,
+                                    Err(e) => {
+                                        executed.push(format!("[failed] 清理 {sub} 缓存: {e}"))
+                                    }
+                                }
                             }
                         }
                         executed.push(format!("[done] 清理了 {freed} 字节的语言依赖缓存"));
@@ -1215,12 +1282,12 @@ pub fn clean_targets(
                     if dry_run {
                         executed.push("[dry-run] apt-get autoremove --purge".to_string());
                     } else {
-                        let _ = run_privileged(
+                        let res = run_privileged(
                             password.clone(),
                             "apt-get",
                             &["-y", "autoremove", "--purge"],
                         );
-                        executed.push("[done] apt autoremove --purge 已执行".to_string());
+                        record_step(&mut executed, "apt autoremove --purge 已执行", &res);
                     }
                 }
                 "docker" => {
@@ -1230,12 +1297,16 @@ pub fn clean_targets(
                     if dry_run {
                         executed.push("[dry-run] docker system prune -a --volumes".to_string());
                     } else {
-                        let _ = run_privileged(
+                        let res = run_privileged(
                             password.clone(),
                             "docker",
                             &["system", "prune", "-a", "--volumes", "-f"],
                         );
-                        executed.push("[done] docker system prune -a --volumes 已执行".to_string());
+                        record_step(
+                            &mut executed,
+                            "docker system prune -a --volumes 已执行",
+                            &res,
+                        );
                     }
                 }
                 _ => {}
@@ -1667,5 +1738,53 @@ pub fn win_storage_usage() -> Result<Vec<DiskUsage>, String> {
     #[cfg(not(target_os = "windows"))]
     {
         return Err("TUNING_WIN_UNSUPPORTED: 此功能仅限 Windows".into());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_record_step_ok() {
+        let mut executed = Vec::new();
+        let ok = record_step(&mut executed, "journalctl vacuum", &Ok("".into()));
+        assert!(ok);
+        assert_eq!(executed, vec!["[done] journalctl vacuum".to_string()]);
+    }
+
+    #[test]
+    fn test_record_step_failure_reported_not_done() {
+        let mut executed = Vec::new();
+        let ok = record_step(
+            &mut executed,
+            "docker prune",
+            &Err("SUDO_AUTH_FAILED: 密码错误".into()),
+        );
+        assert!(!ok, "failed step must not count as success");
+        assert!(
+            executed[0].starts_with("[failed] docker prune"),
+            "got: {:?}",
+            executed
+        );
+        assert!(executed[0].contains("SUDO_AUTH_FAILED"));
+    }
+
+    #[test]
+    fn test_validate_swap_path_accepts_common_locations() {
+        assert!(validate_swap_path("/swapfile").is_ok());
+        assert!(validate_swap_path("/swap/swapfile2").is_ok());
+        assert!(validate_swap_path("/home/u/swapfile").is_ok());
+        assert!(validate_swap_path("/var/swapfile").is_ok());
+    }
+
+    #[test]
+    fn test_validate_swap_path_rejects_dangerous() {
+        assert!(validate_swap_path("/etc/shadow").is_err());
+        assert!(validate_swap_path("/usr/bin/ls").is_err());
+        assert!(validate_swap_path("/boot/vmlinuz").is_err());
+        assert!(validate_swap_path("relative/swap").is_err());
+        assert!(validate_swap_path("/safe/../etc/shadow").is_err());
+        assert!(validate_swap_path("").is_err());
     }
 }

@@ -79,9 +79,27 @@ pub fn export_migration(selected: ExportSelection) -> Result<String, String> {
     serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())
 }
 
+/// 迁移清单读取上限
+const MAX_MIGRATION_FILE_BYTES: u64 = 10 * 1024 * 1024;
+
+/// 校验迁移文件路径：绝对、无遍历，且必须是 .json 文件。
+/// 防止该命令被滥用为任意路径读/写原语（如读取密钥文件）。
+fn validate_migration_path(raw: &str) -> Result<std::path::PathBuf, String> {
+    let p = crate::utils::path_guard::validate_abs_sane_path(raw)?;
+    if !p
+        .extension()
+        .map(|e| e.eq_ignore_ascii_case("json"))
+        .unwrap_or(false)
+    {
+        return Err(format!("Migration file must be a .json file: {raw}"));
+    }
+    Ok(p)
+}
+
 /// 将所有环境导出并保存到指定路径
 #[tauri::command]
 pub fn save_export_file(path: String) -> Result<String, String> {
+    let p = validate_migration_path(&path)?;
     let all_envs = crate::commands::environment::list_environments();
     let env_names: Vec<String> = all_envs.iter().map(|e| e.name.clone()).collect();
 
@@ -90,12 +108,12 @@ pub fn save_export_file(path: String) -> Result<String, String> {
         versions: vec![],
     })?;
 
-    std::fs::write(&path, &json).map_err(|e| format!("Failed to write file: {}", e))?;
+    std::fs::write(&p, &json).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(format!(
         "Exported {} environments to {}",
         all_envs.len(),
-        path
+        p.display()
     ))
 }
 
@@ -113,7 +131,15 @@ pub fn parse_migration_manifest(json: String) -> Result<MigrationManifest, Strin
 /// 从文件路径读取并解析迁移清单
 #[tauri::command]
 pub fn load_migration_file(path: String) -> Result<MigrationManifest, String> {
-    let json = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let p = validate_migration_path(&path)?;
+    let meta = std::fs::metadata(&p).map_err(|e| format!("Failed to stat file: {}", e))?;
+    if meta.len() > MAX_MIGRATION_FILE_BYTES {
+        return Err(format!(
+            "Migration file too large ({} bytes > {MAX_MIGRATION_FILE_BYTES})",
+            meta.len()
+        ));
+    }
+    let json = std::fs::read_to_string(&p).map_err(|e| format!("Failed to read file: {}", e))?;
     parse_migration_manifest(json)
 }
 
@@ -301,5 +327,16 @@ mod tests {
     #[test]
     fn test_parse_whitespace_fails() {
         assert!(parse_migration_manifest("   \n\t  ".into()).is_err());
+    }
+
+    #[test]
+    fn test_validate_migration_path() {
+        assert!(validate_migration_path("/tmp/migration.json").is_ok());
+        assert!(validate_migration_path("C:\\Users\\u\\m.JSON").is_ok());
+        // 非扩展名/任意路径拒绝：防止被当作任意读文件原语
+        assert!(validate_migration_path("/home/u/.ssh/id_rsa").is_err());
+        assert!(validate_migration_path("/etc/passwd").is_err());
+        assert!(validate_migration_path("../rel.json").is_err());
+        assert!(validate_migration_path("/x/../etc/shadow.json").is_err());
     }
 }

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 import { open } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
 import {
   listConnections,
   saveConnection,
@@ -263,7 +263,7 @@ async function onConfirmExport() {
     const { documentDir } = await import("@tauri-apps/api/path");
     const downloadsPath = await documentDir();
     const outPath = `${downloadsPath}/devnexus_ssh_config_${Date.now()}.txt`;
-    await writeTextFile(outPath, config);
+    await invoke("local_write_text", { path: outPath, content: config });
     showToast(tFormat("ssh.export_done", { path: outPath }), "success");
   } catch (err) {
     showToast(friendlyError(err), "error");
@@ -286,7 +286,7 @@ async function importKeyFile() {
   }
   if (!path) return;
   try {
-    const content = await readTextFile(path);
+    const content = await invoke("local_read_text", { path });
     if (!content.trim()) {
       showToast(t("ssh.key_file_empty"), "warning");
       return;

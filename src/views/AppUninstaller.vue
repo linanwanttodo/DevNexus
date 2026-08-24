@@ -227,7 +227,11 @@ async function cleanSelected(appName) {
 
   cleaningResidues.value = appName;
   try {
-    const result = await invoke("clean_specific_residues", { items: paths });
+    const result = await invoke("clean_specific_residues", {
+      appName,
+      packageName: appName,
+      items: paths,
+    });
     showToast(result);
     await scanResidues({ name: appName });
   } catch (err) {

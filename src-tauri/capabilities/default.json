@@ -34,22 +34,6 @@
     "updater:allow-check",
     "updater:allow-download-and-install",
     "process:default",
-    "process:allow-restart",
-    {
-      "identifier": "fs:allow-write-file",
-      "allow": [
-        {
-          "path": "**"
-        }
-      ]
-    },
-    {
-      "identifier": "fs:allow-read-text-file",
-      "allow": [
-        {
-          "path": "**"
-        }
-      ]
-    }
+    "process:allow-restart"
   ]
 }

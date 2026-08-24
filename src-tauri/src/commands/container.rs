@@ -85,9 +85,31 @@ fn validate_exec_command(command: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Run a docker command and return stdout, stderr separately. Times out after 120s.
+/// 长耗时 docker 操作（pull/build/push 等）的宽限超时
+const DOCKER_LONG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(900);
+
+/// 根据子命令选择超时：镜像传输/构建类操作允许 15 分钟，其余用默认 60s。
+fn docker_timeout_for(args: &[&str]) -> std::time::Duration {
+    const LONG_OPS: &[&str] = &["pull", "push", "build", "load", "save", "import", "export"];
+    if let Some(first) = args.first() {
+        if LONG_OPS.contains(first) {
+            return DOCKER_LONG_TIMEOUT;
+        }
+    }
+    crate::utils::exec::DEFAULT_TIMEOUT
+}
+
+/// Run a docker command and return stdout, stderr separately.
+/// Timeout depends on the subcommand (see `docker_timeout_for`).
 fn run_docker(args: &[&str]) -> Result<(String, String), String> {
-    let r = crate::utils::exec::run_checked("docker", args)?;
+    let r = crate::utils::exec::run("docker", args, docker_timeout_for(args))?;
+    if r.status != 0 {
+        return Err(if r.stderr.trim().is_empty() {
+            r.stdout.trim().to_string()
+        } else {
+            r.stderr.trim().to_string()
+        });
+    }
     Ok((r.stdout, r.stderr))
 }
 
@@ -541,7 +563,31 @@ pub fn compose_logs(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_json_lines, validate_container_id, validate_exec_command, ALLOWED_ACTIONS};
+    use super::{
+        docker_timeout_for, parse_json_lines, validate_container_id, validate_exec_command,
+        ALLOWED_ACTIONS,
+    };
+    use std::time::Duration;
+
+    #[test]
+    fn test_long_docker_ops_get_generous_timeout() {
+        let long = Duration::from_secs(900);
+        assert_eq!(docker_timeout_for(&["pull", "nginx:latest"]), long);
+        assert_eq!(docker_timeout_for(&["build", "-t", "x", "."]), long);
+        assert_eq!(docker_timeout_for(&["push", "x"]), long);
+    }
+
+    #[test]
+    fn test_short_docker_ops_keep_default_timeout() {
+        assert_eq!(
+            docker_timeout_for(&["ps", "--format", "{{json .}}"]),
+            crate::utils::exec::DEFAULT_TIMEOUT
+        );
+        assert_eq!(
+            docker_timeout_for(&["--version"]),
+            crate::utils::exec::DEFAULT_TIMEOUT
+        );
+    }
 
     #[derive(serde::Deserialize, Debug, PartialEq)]
     struct SampleLine {

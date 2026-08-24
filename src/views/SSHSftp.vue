@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { save } from "@tauri-apps/plugin-dialog";
-import { writeFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
 import {
   listConnections,
   openSftp,
@@ -173,7 +173,11 @@ async function runAiAction(action) {
           const b64 = await readSftpFile(sftpId.value, action.path, offset, CHUNK);
           const bytes = b64ToBytes(b64);
           if (bytes.length === 0) break;
-          await writeFile(local, bytes, { append: offset > 0, create: true });
+          await invoke("sftp_write_local_chunk", {
+        path: local,
+        dataB64: bytesToBase64(bytes),
+        append: offset > 0,
+      });
           offset += bytes.length;
           transfer.value.done = offset;
         }
@@ -304,7 +308,11 @@ async function download(entry) {
       const b64 = await readSftpFile(sftpId.value, remote, offset, CHUNK);
       const bytes = b64ToBytes(b64);
       if (bytes.length === 0) break; // 提前 EOF（文件被截断）
-      await writeFile(local, bytes, { append: offset > 0, create: true });
+      await invoke("sftp_write_local_chunk", {
+        path: local,
+        dataB64: bytesToBase64(bytes),
+        append: offset > 0,
+      });
       offset += bytes.length;
       transfer.value.done = offset;
     }

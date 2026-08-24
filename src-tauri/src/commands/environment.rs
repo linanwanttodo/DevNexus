@@ -251,6 +251,8 @@ pub fn list_environments() -> Vec<Environment> {
 /// 添加环境变量到 PATH
 #[tauri::command]
 pub fn add_to_path(env_name: String, path: String) -> Result<String, String> {
+    // 名称会写入 rc 注释/展示文案，统一做字符白名单（防换行逃逸注入）
+    crate::utils::validate_rc_key(&env_name)?;
     add_to_path_impl(&env_name, &path)
 }
 

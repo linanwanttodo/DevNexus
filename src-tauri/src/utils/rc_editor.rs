@@ -18,6 +18,7 @@ pub fn detect_shell_rc(home: &Path) -> PathBuf {
 /// 先调用 `crate::utils::validate_rc_value` 校验 value；若 rc 中尚未包含 key 则追加，
 /// 否则将包含 key 的行替换为新的 export 行。返回 `Ok(true)` 表示新增，`Ok(false)` 表示已替换。
 pub fn set_export_line(home: &Path, key: &str, value: &str) -> Result<bool, String> {
+    crate::utils::validate_rc_key(key)?;
     crate::utils::validate_rc_value(value)?;
     let rc_path = detect_shell_rc(home);
     let export_line = format!("\nexport {}=\"{}\"\n", key, value);
@@ -50,6 +51,8 @@ pub fn set_export_line(home: &Path, key: &str, value: &str) -> Result<bool, Stri
 /// 返回 `Ok(true)` 表示写入发生。
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn set_path_line(home: &Path, env_name: &str, path: &str) -> Result<bool, String> {
+    // env_name 会写入 `# DevNexus: {env_name}` 注释行，必须校验防止换行逃逸注入
+    crate::utils::validate_rc_key(env_name)?;
     crate::utils::validate_rc_value(path)?;
     let rc_path = detect_shell_rc(home);
     let export_line = format!(

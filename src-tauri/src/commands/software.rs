@@ -182,29 +182,32 @@ pub async fn uninstall_software_deep_with_source(
         return result;
     }
 
-    // (b) 获取所有可能的清理路径（复用 residue_scanner::known_paths 单一数据源）
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_default();
-    let cleanup_paths =
-        crate::residue_scanner::known_paths::get_cleanup_paths(&app_name, &package_name, &home);
+    // (b)-(c) 获取清理路径并删除（文件系统阻塞操作，放入 spawn_blocking）
+    let app = app_name.clone();
+    let pkg = package_name.clone();
+    let (cleaned_dirs, error_dirs) =
+        tokio::task::spawn_blocking(move || -> (Vec<String>, Vec<String>) {
+            let home = std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .unwrap_or_default();
+            // (b) 获取所有可能的清理路径（复用 residue_scanner::known_paths 单一数据源）
+            let cleanup_paths =
+                crate::residue_scanner::known_paths::get_cleanup_paths(&app, &pkg, &home);
 
-    // (c) 遍历删除所有存在的目录
-    let mut cleaned_dirs: Vec<String> = Vec::new();
-    let mut error_dirs: Vec<String> = Vec::new();
-
-    for path in &cleanup_paths {
-        if path.exists() {
-            match std::fs::remove_dir_all(path) {
-                Ok(()) => {
-                    cleaned_dirs.push(path.display().to_string());
-                }
-                Err(e) => {
-                    error_dirs.push(format!("{} ({})", path.display(), e));
+            let mut cleaned_dirs: Vec<String> = Vec::new();
+            let mut error_dirs: Vec<String> = Vec::new();
+            for path in &cleanup_paths {
+                if path.exists() {
+                    match std::fs::remove_dir_all(path) {
+                        Ok(()) => cleaned_dirs.push(path.display().to_string()),
+                        Err(e) => error_dirs.push(format!("{} ({})", path.display(), e)),
+                    }
                 }
             }
-        }
-    }
+            (cleaned_dirs, error_dirs)
+        })
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?;
 
     // (d) 构造结果消息（至此卸载已成功）
     let mut message = result.clone().unwrap_or_default();
@@ -492,8 +495,17 @@ fn parse_pm_list_output(pm_name: &str, stdout: &str) -> Vec<(String, String)> {
 
 /// 列出系统上所有已安装应用（跨平台，多包管理器支持）
 /// 用于"应用卸载管理器"模块
+///
+/// 实现说明：函数体全部为阻塞操作（.desktop 遍历、图标读取、PM 子进程调用），
+/// 整体放入 spawn_blocking 执行，避免阻塞 tokio runtime。
 #[tauri::command]
 pub async fn list_installed_apps() -> Result<Vec<InstalledApp>, String> {
+    tokio::task::spawn_blocking(list_installed_apps_blocking)
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?
+}
+
+fn list_installed_apps_blocking() -> Result<Vec<InstalledApp>, String> {
     let mut all_apps: Vec<InstalledApp> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
@@ -1427,8 +1439,8 @@ pub async fn install_software_from_url(
 
     // 下载（M2 修复：连接/总超时 + 流式写入 + 大小上限，避免挂起与内存爆炸）
     const MAX_DOWNLOAD_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GiB
-    let filename = url.rsplit('/').next().unwrap_or("download");
-    let filepath = temp_dir.join(filename);
+    let filename = url.rsplit('/').next().unwrap_or("download").to_string();
+    let filepath = temp_dir.join(&filename);
 
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(15))
@@ -1450,8 +1462,11 @@ pub async fn install_software_from_url(
         }
     }
 
-    let mut out =
-        std::fs::File::create(&filepath).map_err(|e| format!("Failed to create file: {}", e))?;
+    // 异步写盘（tokio::fs 内部将阻塞 IO 卸载到专用线程池）
+    use tokio::io::AsyncWriteExt;
+    let mut out = tokio::fs::File::create(&filepath)
+        .await
+        .map_err(|e| format!("Failed to create file: {}", e))?;
     let mut stream = response.bytes_stream();
     let mut downloaded: u64 = 0;
     while let Some(chunk) = stream.next().await {
@@ -1464,12 +1479,42 @@ pub async fn install_software_from_url(
                 downloaded, MAX_DOWNLOAD_BYTES
             ));
         }
-        std::io::Write::write_all(&mut out, &chunk)
+        out.write_all(&chunk)
+            .await
             .map_err(|e| format!("Failed to save file: {}", e))?;
     }
 
+    // 解压/安装/建链为纯阻塞操作（tar/unzip/hdiutil 子进程 + 文件拷贝），
+    // 整体放入 spawn_blocking，避免长时间霸占异步 worker
+    let install_fp = filepath.clone();
+    let install_target = install_dir.clone();
+    let software_name = def.name.to_string();
+    let default_cmd = def.cmd;
+    tokio::task::spawn_blocking(move || {
+        extract_and_install(
+            &install_fp,
+            &install_target,
+            &filename,
+            &software_name,
+            default_cmd,
+        )
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
+
+    Ok(format!("Successfully installed {} v{}", def.name, version))
+}
+
+/// 解压下载产物到安装目录并建立 bin 链接（同步阻塞实现，调用方需放入 spawn_blocking）。
+fn extract_and_install(
+    filepath: &std::path::Path,
+    install_dir: &std::path::Path,
+    filename: &str,
+    software_name: &str,
+    default_cmd: &str,
+) -> Result<(), String> {
     // 创建安装目录
-    std::fs::create_dir_all(&install_dir)
+    std::fs::create_dir_all(install_dir)
         .map_err(|e| format!("Failed to create install dir: {}", e))?;
 
     // 解压
@@ -1519,7 +1564,7 @@ pub async fn install_software_from_url(
         if !output.status.success() {
             // fallback: 用 Rust zip 库解压
             let file =
-                std::fs::File::open(&filepath).map_err(|e| format!("Failed to open zip: {}", e))?;
+                std::fs::File::open(filepath).map_err(|e| format!("Failed to open zip: {}", e))?;
             let mut archive =
                 zip::ZipArchive::new(file).map_err(|e| format!("Failed to read zip: {}", e))?;
             for i in 0..archive.len() {
@@ -1542,7 +1587,7 @@ pub async fn install_software_from_url(
                 });
                 let outpath = install_dir.join(&sanitized);
                 // 确保路径没有逃逸出 install_dir
-                if !outpath.starts_with(&install_dir) {
+                if !outpath.starts_with(install_dir) {
                     continue;
                 }
                 if entry.is_dir() {
@@ -1561,14 +1606,14 @@ pub async fn install_software_from_url(
     } else if filename_lower.ends_with(".dmg") {
         #[cfg(target_os = "macos")]
         {
-            let mount_point = format!("/Volumes/{}", def.name);
+            let mount_point = format!("/Volumes/{}", software_name);
             let _ = Command::new("hdiutil")
                 .args(["attach", &filepath.to_string_lossy()])
                 .output();
             let _ = Command::new("cp")
                 .args([
                     "-R",
-                    &format!("{}/{}", mount_point, def.name),
+                    &format!("{}/{}", mount_point, software_name),
                     &install_dir.to_string_lossy(),
                 ])
                 .output();
@@ -1582,27 +1627,27 @@ pub async fn install_software_from_url(
         }
     } else {
         // 可执行文件直接复制
-        std::fs::copy(&filepath, install_dir.join(filename))
+        std::fs::copy(filepath, install_dir.join(filename))
             .map_err(|e| format!("Failed to copy file: {}", e))?;
     }
 
     // 清理临时文件
-    std::fs::remove_file(&filepath).ok();
+    std::fs::remove_file(filepath).ok();
 
     // 创建符号链接到 bin 目录
     let install_base = get_install_base_dir();
     let bin_dir = install_base.join("bin");
     std::fs::create_dir_all(&bin_dir).map_err(|e| format!("Failed to create bin dir: {}", e))?;
 
-    let binary_name = match def.name {
+    let binary_name = match software_name {
         "Visual Studio Code" => "code",
         "Neovim" => "nvim",
         "Node.js" => "node",
         "Python 3" => "python3",
-        _ => def.cmd,
+        _ => default_cmd,
     };
 
-    if let Some(binary_path) = find_binary_in_dir(&install_dir, binary_name) {
+    if let Some(binary_path) = find_binary_in_dir(install_dir, binary_name) {
         let symlink_path = bin_dir.join(binary_name);
         let _ = std::fs::remove_file(&symlink_path);
         #[cfg(unix)]
@@ -1620,7 +1665,7 @@ pub async fn install_software_from_url(
         }
     }
 
-    Ok(format!("Successfully installed {} v{}", def.name, version))
+    Ok(())
 }
 
 /// 扫描应用残留（预览模式，不执行任何删除）
@@ -1639,14 +1684,15 @@ pub async fn force_uninstall_software(
     package_name: String,
     app_name: String,
 ) -> Result<String, String> {
-    use crate::residue_scanner::snapshot;
     use std::time::Duration;
 
     let mut messages: Vec<String> = Vec::new();
     let name_lower = app_name.to_lowercase();
 
-    // 1) 杀死相关进程
-    let killed = kill_processes_by_name(&name_lower);
+    // 1) 杀死相关进程（进程遍历为阻塞系统调用，放入 spawn_blocking）
+    let killed = tokio::task::spawn_blocking(move || kill_processes_by_name(&name_lower))
+        .await
+        .unwrap_or(0);
     if killed > 0 {
         messages.push(format!("Killed {} process(es)", killed));
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -1668,8 +1714,28 @@ pub async fn force_uninstall_software(
         return Ok(messages.join("\n"));
     }
 
+    // 3)-8) 扫描残留 + 快照 + 逐项删除：全部为阻塞文件系统操作，
+    // 整体放入 spawn_blocking，返回汇总行（由调用方拼进消息）
+    let app = app_name.clone();
+    let pkg = package_name.clone();
+    let summary_lines = tokio::task::spawn_blocking(move || -> Vec<String> {
+        force_uninstall_residues_blocking(&app, &pkg)
+    })
+    .await
+    .unwrap_or_else(|e| vec![format!("Residue cleanup task error: {}", e)]);
+    messages.extend(summary_lines);
+
+    // 9) 总结
+    Ok(messages.join("\n"))
+}
+
+/// 强制卸载的残留清理部分（阻塞实现）：扫描 → 快照 → 删除文件/目录/快捷方式/服务。
+/// 返回待追加到结果消息的行。
+fn force_uninstall_residues_blocking(app_name: &str, package_name: &str) -> Vec<String> {
+    use crate::residue_scanner::snapshot;
+
     // 3) 获取所有已知的残留路径（含关键词扫描）
-    let scan = crate::residue_scanner::scan_for_residues(&app_name, &package_name);
+    let scan = crate::residue_scanner::scan_for_residues(app_name, package_name);
 
     // 4) 快照记录
     let all_paths: Vec<std::path::PathBuf> = scan
@@ -1736,29 +1802,54 @@ pub async fn force_uninstall_software(
         }
     }
 
-    // 9) 总结
-    let mut result = messages.join("\n");
-    result.push_str(&format!("\n\nCleaned {} items", cleaned.len()));
+    // 汇总
+    let mut lines = vec![format!("\nCleaned {} items", cleaned.len())];
     if !failed.is_empty() {
-        result.push_str(&format!("\nFailed to clean {} items", failed.len()));
+        lines.push(format!("Failed to clean {} items", failed.len()));
         for f in failed.iter().take(10) {
-            result.push_str(&format!("\n  - {}", f));
+            lines.push(format!("  - {}", f));
         }
         if failed.len() > 10 {
-            result.push_str(&format!("\n  ... and {} more", failed.len() - 10));
+            lines.push(format!("  ... and {} more", failed.len() - 10));
+        }
+    }
+    lines
+}
+
+/// 仅清理指定的残留项目（不执行卸载），用于用户在扫描预览后选择性清理。
+///
+/// 安全约束：服务端按 app_name/package_name 重新扫描残留，
+/// 只删除「出现在最新扫描结果中且标记为 is_safe_to_delete」的路径。
+/// 前端传入的其他任意路径一律拒绝（防止被滥用为任意删除原语）。
+#[tauri::command]
+pub fn clean_specific_residues(
+    app_name: String,
+    package_name: String,
+    items: Vec<String>,
+) -> Result<String, String> {
+    let scan = crate::residue_scanner::scan_for_residues(&app_name, &package_name);
+    let mut allowed: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for item in scan
+        .directories
+        .iter()
+        .chain(scan.files.iter())
+        .chain(scan.shortcuts.iter())
+        .chain(scan.services.iter())
+    {
+        if item.is_safe_to_delete {
+            allowed.insert(item.path.clone());
         }
     }
 
-    Ok(result)
-}
-
-/// 仅清理指定的残留项目（不执行卸载），用于用户在扫描预览后选择性清理
-#[tauri::command]
-pub fn clean_specific_residues(items: Vec<String>) -> Result<String, String> {
     let mut cleaned = Vec::new();
     let mut failed = Vec::new();
+    let mut rejected = 0usize;
 
     for path in &items {
+        if !allowed.contains(path) {
+            rejected += 1;
+            continue;
+        }
         let p = std::path::Path::new(path);
         if !p.exists() {
             continue;
@@ -1790,6 +1881,14 @@ pub fn clean_specific_residues(items: Vec<String>) -> Result<String, String> {
         for f in failed.iter().take(10) {
             result.push_str(&format!("\n  - {}", f));
         }
+    }
+    if rejected > 0 {
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        result.push_str(&format!(
+            "Rejected {rejected} item(s): not in current residue scan results"
+        ));
     }
     if result.is_empty() {
         result.push_str("No items to clean.");

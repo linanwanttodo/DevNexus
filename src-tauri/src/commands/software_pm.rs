@@ -8,6 +8,25 @@ use std::process::Command;
 
 use super::software_data::map_package_name;
 
+/// 校验前端传入的包名：仅允许包管理器 ID 常见字符，拒绝空串、
+/// 选项注入（前导 `-`）、shell 元字符与超长输入。
+pub(crate) fn validate_package_name(name: &str) -> Result<(), String> {
+    if name.is_empty() || name.len() > 128 {
+        return Err(format!("Invalid package name: {name:?}"));
+    }
+    if name.starts_with('-') {
+        // 防止被包管理器解析为命令行选项（如 apt --allow-unauthenticated）
+        return Err(format!("Package name must not start with '-': {name:?}"));
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "._+-".contains(c))
+    {
+        return Err(format!("Package name contains unsafe characters: {name:?}"));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct PackageManager {
     pub name: &'static str,
@@ -220,6 +239,7 @@ fn run_elevated(binary: &str, args: &[&str]) -> Result<std::process::Output, Str
 /// 安装软件执行体（跨平台，多包管理器支持）
 /// 命令入口 install_software 位于 software.rs，仅做透传
 pub(crate) async fn install_software_exec(package_name: String) -> Result<String, String> {
+    validate_package_name(&package_name)?;
     let managers = detect_package_managers();
 
     if managers.is_empty() {
@@ -307,6 +327,7 @@ pub(crate) async fn uninstall_with_source_hint(
     package_name: String,
     source_hint: Option<String>,
 ) -> Result<String, String> {
+    validate_package_name(&package_name)?;
     let managers = detect_package_managers();
 
     if managers.is_empty() {
@@ -512,4 +533,33 @@ fn get_managed_base_dir() -> Option<std::path::PathBuf> {
             .map(|h| std::path::PathBuf::from(h).join(".local/share/devnexus/software"))
     }?;
     Some(base)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_package_name_accepts_real_ids() {
+        assert!(validate_package_name("nodejs").is_ok());
+        assert!(validate_package_name("python3-pip").is_ok());
+        assert!(validate_package_name("Microsoft.VisualStudioCode").is_ok());
+        assert!(validate_package_name("Python.Python.3.12").is_ok());
+        assert!(validate_package_name("openjdk-17-jdk").is_ok());
+        assert!(validate_package_name("rust+nightly").is_ok());
+    }
+
+    #[test]
+    fn test_validate_package_name_rejects_injection() {
+        // 选项注入：以 - 开头的参数会被 apt/pkexec 当作选项
+        assert!(validate_package_name("--proxy-server=evil").is_err());
+        assert!(validate_package_name("-y").is_err());
+        // shell 元字符（即使走参数向量也应拒绝）
+        assert!(validate_package_name("curl;evil.sh").is_err());
+        assert!(validate_package_name("a&b").is_err());
+        assert!(validate_package_name("$(id)").is_err());
+        assert!(validate_package_name("a\nb").is_err());
+        assert!(validate_package_name("").is_err());
+        assert!(validate_package_name(&"x".repeat(200)).is_err());
+    }
 }
