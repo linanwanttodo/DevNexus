@@ -95,8 +95,25 @@ fn default_candidates() -> Vec<(String, String)> {
     {
         out.push(("Linux 包缓存 (apt)".into(), "/var/cache/apt".into()));
         out.push(("Linux 临时".into(), "/tmp".into()));
-        out.push(("用户缓存".into(), format!("{home}/.cache")));
         out.push(("旧内核/日志".into(), "/var/log".into()));
+        // 用户缓存 ~/.cache：**逐个分开**成独立勾选项，
+        // 特别是编程语言依赖缓存（npm/pip/cargo 等）绝不默认清除，
+        // 由用户按需勾选，避免误清导致重装依赖。
+        let known: &[(&str, &str)] = &[
+            ("npm 依赖缓存", "npm"),
+            ("pnpm 依赖缓存", "pnpm"),
+            ("yarn 依赖缓存", "yarn"),
+            ("pip 依赖缓存", "pip"),
+            ("uv 依赖缓存", "uv"),
+            ("poetry 依赖缓存", "poetry"),
+            ("Cargo 依赖缓存 (rustup/cargo registry)", "cargo"),
+            ("Go 模块缓存", "go-build"),
+            ("Bun 依赖缓存", "bun"),
+        ];
+        let cache = format!("{home}/.cache");
+        for (name, sub) in known {
+            out.push((name.to_string(), format!("{cache}/{sub}")));
+        }
     }
     #[cfg(target_os = "macos")]
     {
@@ -885,11 +902,11 @@ pub fn scan_cleanup_targets() -> Result<Vec<CleanupTarget>, String> {
         if cache_mb > 0 {
             out.push(CleanupTarget {
                 id: "usercache".into(),
-                name: "用户缓存 ~/.cache".into(),
-                description: format!("{cache_mb} MB 缓存"),
+                name: "编程语言依赖缓存 (npm/pip/cargo...)".into(),
+                description: format!("{cache_mb} MB（仅清理已知子目录，需勾选后确认）"),
                 size_mb: cache_mb,
                 risk: "warn".into(),
-                action: "rm -rf ~/.cache/*".into(),
+                action: "清理 ~/.cache/npm pip cargo 等子目录（非全部）".into(),
             });
         }
         // 4. 旧内核（Debian/Ubuntu）
@@ -1001,9 +1018,24 @@ pub fn clean_targets(
                         executed.push(format!("[dry-run] {}", t.action));
                     } else {
                         let home = std::env::var("HOME").unwrap_or_default();
-                        let _ = fs::remove_dir_all(format!("{home}/.cache"));
-                        executed.push("[done] ~/.cache 已清理".to_string());
-                        freed_mb += t.size_mb;
+                        // 只清理已知的编程语言依赖缓存子目录，避免误清整个 ~/.cache
+                        let known_subs: &[&str] = &[
+                            "npm", "pnpm", "yarn", "pip", "uv", "poetry", "cargo", "go-build",
+                            "bun",
+                        ];
+                        let mut freed = 0u64;
+                        for sub in known_subs {
+                            let p = format!("{home}/.cache/{sub}");
+                            let p = std::path::PathBuf::from(&p);
+                            if p.exists() {
+                                let mut fc = 0u64;
+                                freed += dir_size(&p, &mut fc);
+                                let _ = fs::remove_dir_all(&p);
+                            }
+                        }
+                        executed.push(format!("[done] 清理了 {freed} 字节的语言依赖缓存"));
+                        freed_mb += freed / 1024 / 1024;
+                        // 不清理 ~/.cache 其他内容，留待用户自行决定
                     }
                 }
                 "oldkernel" => {
