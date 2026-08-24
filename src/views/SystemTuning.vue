@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 
 const route = useRoute();
 
@@ -27,6 +27,15 @@ const activeTab = computed(() => {
 });
 
 const overview = ref(null);
+// 是否以 root/管理员权限运行（决定 DNS/swap/时区/防火墙等系统级写操作是否可用）
+const isRoot = computed(() => !!overview.value?.is_root);
+
+/** 需要 root 的操作前置检查：非 root 时给出提示并阻止执行 */
+function requireRoot() {
+  if (isRoot.value) return true;
+  showToast(t("tuningLinux.need_root"), "warning");
+  return false;
+}
 
 // ── 磁盘清理（Linux） ──
 const candidates = ref([]);
@@ -152,6 +161,7 @@ async function loadLimits() {
 }
 
 async function createSwap() {
+  if (!requireRoot()) return;
   if (!(await showConfirm(tFormat("tuningLinux.swap_create_hint", { size: swapSize.value })))) return;
   try {
     const msg = await invoke("set_swap", { sizeMb: swapSize.value });
@@ -160,6 +170,7 @@ async function createSwap() {
   } catch (err) { showToast(friendlyError(err), "error"); }
 }
 async function disableSwap() {
+  if (!requireRoot()) return;
   if (!swapInfo.value?.devices?.length) return;
   if (!(await showConfirm(t("tuningLinux.swap_disable")))) return;
   try {
@@ -172,6 +183,7 @@ async function disableSwap() {
 }
 
 async function applyDns(preset) {
+  if (!requireRoot()) return;
   dnsBusy.value = true;
   try {
     const msg = await invoke("set_dns", { preset });
@@ -184,6 +196,7 @@ async function applyDns(preset) {
 }
 
 async function setTz() {
+  if (!requireRoot()) return;
   if (!tzInput.value.trim()) return;
   if (!(await showConfirm(`${t("tuningLinux.tz_set")}: ${tzInput.value}`))) return;
   try {
@@ -195,6 +208,7 @@ async function setTz() {
 }
 
 async function toggleFirewall() {
+  if (!requireRoot()) return;
   const enable = !(firewall.value?.ufw_active);
   if (!(await showConfirm(enable ? t("tuningLinux.firewall_enable") : t("tuningLinux.firewall_disable")))) return;
   try {
@@ -296,6 +310,7 @@ async function winClean() {
 }
 
 async function winWinsxs(resetBase) {
+  if (!requireRoot()) return;
   if (!(await showConfirm(resetBase ? t("winOpt.winsxs_reset_confirm") : t("winOpt.winsxs_confirm")))) return;
   winJsxsBusy.value = true;
   try {
@@ -306,6 +321,7 @@ async function winWinsxs(resetBase) {
 }
 
 async function winToggleHibernation() {
+  if (!requireRoot()) return;
   const enable = !(winHibernation.value?.enabled);
   if (!(await showConfirm(enable ? t("winOpt.turn_on") : t("winOpt.turn_off")))) return;
   try {
@@ -371,20 +387,7 @@ onMounted(() => {
     </div>
 
     <Tabs :default-value="activeTab" :model-value="activeTab" class="w-full">
-      <TabsList class="mb-4">
-        <TabsTrigger value="linux" @click="$router.push('/tuning/linux')">
-          <AppIcon name="terminal" class="size-4" />
-          {{ t("tuningLinux.nav") }}
-        </TabsTrigger>
-        <TabsTrigger value="macos" @click="$router.push('/tuning/macos')">
-          <AppIcon name="apple" class="size-4" />
-          {{ t("systemTune.mac") }}
-        </TabsTrigger>
-        <TabsTrigger value="windows" @click="$router.push('/tuning/windows')">
-          <AppIcon name="monitor" class="size-4" />
-          {{ t("systemTune.win") }}
-        </TabsTrigger>
-      </TabsList>
+      <!-- 平台切换已由侧边栏子导航完成，页面顶部不再重复展示 -->
 
       <!-- ── macOS 占位 ── -->
       <TabsContent value="macos" class="space-y-4">
@@ -513,6 +516,11 @@ onMounted(() => {
 
       <!-- ── Linux 工具箱 ── -->
       <TabsContent value="linux" class="space-y-4">
+        <!-- 非 root 时提示大部分系统级操作不可用 -->
+        <div v-if="!isRoot && overview" class="flex items-center gap-2 rounded border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
+          <AppIcon name="shield" class="size-4 shrink-0" />
+          <span>{{ t("tuningLinux.need_root") }}</span>
+        </div>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <!-- 工具箱卡片 -->
           <Card class="shadow-sm p-4 space-y-5">

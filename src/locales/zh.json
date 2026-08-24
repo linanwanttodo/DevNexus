@@ -953,7 +953,8 @@
     "executed": "已执行：",
     "freed_clean": "预计释放 {size}",
     "unsupported_title": "该平台功能尚未实现",
-    "unsupported_desc": "系统调优工具箱当前仅支持 Linux。macOS / Windows 版本正在开发中。"
+    "unsupported_desc": "系统调优工具箱当前仅支持 Linux。macOS / Windows 版本正在开发中。",
+    "need_root": "需要以 root 管理员权限运行本应用才能使用 DNS / Swap / 时区 / 防火墙 / WinSxS / 休眠等系统级操作"
   },
   "winOpt": {
     "cleanup": "磁盘清理",

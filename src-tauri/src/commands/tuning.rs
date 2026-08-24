@@ -495,6 +495,33 @@ pub struct TuningOverview {
     pub platform: String,
     pub supported: Vec<String>,
     pub message: Option<String>,
+    /// 是否以 root/管理员权限运行（决定 sysctl 类写操作是否可用）
+    pub is_root: bool,
+}
+
+/// 是否拥有 root/管理员权限（决定 sysctl 类写操作是否可用）。
+fn running_as_root() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        // /etc/shadow 仅 root 可读：能读取即视为提权。
+        return std::fs::read("/etc/shadow").is_ok();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        return Command::new("net")
+            .args(["session"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // /etc/master.passwd 仅 root 可读。
+        return std::fs::read("/etc/master.passwd").is_ok();
+    }
+    #[allow(unreachable_code)]
+    false
 }
 
 #[allow(clippy::needless_return)]
@@ -503,8 +530,10 @@ pub fn get_tuning_overview() -> Result<TuningOverview, String> {
     let platform = std::env::consts::OS.to_string();
     #[cfg(target_os = "linux")]
     {
+        let is_root = running_as_root();
         return Ok(TuningOverview {
             platform,
+            is_root,
             supported: vec![
                 "swap".into(),
                 "dns".into(),

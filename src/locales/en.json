@@ -946,7 +946,8 @@
     "executed": "Executed: ",
     "freed_clean": "Estimated freed {size}",
     "unsupported_title": "Not implemented on this platform",
-    "unsupported_desc": "The System Tune toolbox currently supports Linux only. macOS / Windows versions are in development."
+    "unsupported_desc": "The System Tune toolbox currently supports Linux only. macOS / Windows versions are in development.",
+    "need_root": "Run this app with root/admin privileges to use system-level operations (DNS / Swap / Timezone / Firewall / WinSxS / Hibernation)."
   },
   "winOpt": {
     "cleanup": "Disk Cleanup",
