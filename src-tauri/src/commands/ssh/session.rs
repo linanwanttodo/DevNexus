@@ -80,37 +80,49 @@ pub struct TerminalHandle {
 pub struct TerminalBuffer {
     pub lines: VecDeque<String>,
     pub capacity: usize,
+    pending: String,
 }
 
 impl TerminalBuffer {
     pub fn new(capacity: usize) -> Self {
         Self {
-            lines: VecDeque::with_capacity(capacity.min(64)),
+            lines: VecDeque::with_capacity(capacity),
             capacity,
+            pending: String::new(),
         }
     }
 
-    /// 追加一段输出：按换行切分；保留正在进行的末行（无结尾换行）以便连续拼接。
+    /// 追加一段输出：按换行切分；\r 视为回车覆盖（移除）。
+    /// 未以换行结尾的末尾片段暂存为 pending，下次 append 时与首段拼接，
+    /// 正确处理 PTY 分片输出（如 "hel" + "lo\n" → "hello"）。
     pub fn append(&mut self, text: &str) {
-        // 先在末尾片段上拼接（上次未换行的残留）
-        let carry: String = self.lines.pop_back().unwrap_or_default();
-        let mut current = carry;
-        for (i, part) in text.split('\n').enumerate() {
-            if i == 0 {
-                // 与残留拼接成完整首行
-                current.push_str(part);
-                self.push_line(current.clone());
-                current = String::new();
-            } else {
-                self.push_line(part.to_string());
-            }
+        let sanitized = text.replace('\r', "");
+        if sanitized.is_empty() {
+            return;
         }
-        // 若原始文本不以 '\n' 结尾，最后一行是进行中片段，作为残留保留但不单独成行
-        if !text.ends_with('\n') {
-            // 上一 push_line 已把 current+part 推入；需要把最后一行弹回作为 carry
-            if let Some(last) = self.lines.pop_back() {
-                // 末行重新作为残留；下一 append 会再与之拼接
-                self.lines.push_back(last);
+        // 将上次的 pending 与本次文本拼接后统一按 \n 切分
+        let combined = if self.pending.is_empty() {
+            sanitized
+        } else {
+            let mut s = std::mem::take(&mut self.pending);
+            s.push_str(&sanitized);
+            s
+        };
+        let ends_with_newline = combined.ends_with('\n');
+        let mut parts: Vec<&str> = combined.split('\n').collect();
+        if ends_with_newline {
+            // 末尾空串（split 产生）不作为行
+            parts.pop();
+            for p in parts {
+                self.push_line(p.to_string());
+            }
+        } else {
+            // 最后一部分为未闭合的 pending
+            if let Some(last) = parts.pop() {
+                for p in parts {
+                    self.push_line(p.to_string());
+                }
+                self.pending = last.to_string();
             }
         }
     }
@@ -122,19 +134,22 @@ impl TerminalBuffer {
         }
     }
 
-    /// 返回最近 `n` 行拼接（不带 ANSI 清理，由调用方处理）
+    /// 返回最近 `n` 行拼接（含尚未换行的 pending 片段，不带 ANSI 清理，由调用方处理）
     pub fn recent(&self, n: usize) -> String {
-        let start = self.lines.len().saturating_sub(n);
-        self.lines
-            .iter()
-            .skip(start)
-            .cloned()
-            .collect::<Vec<_>>()
-            .join("\n")
+        let mut all: Vec<String> = self.lines.iter().cloned().collect();
+        if !self.pending.is_empty() {
+            all.push(self.pending.clone());
+        }
+        let start = all.len().saturating_sub(n);
+        all[start..].join("\n")
     }
 
     pub fn all(&self) -> String {
-        self.lines.iter().cloned().collect::<Vec<_>>().join("\n")
+        let mut all: Vec<String> = self.lines.iter().cloned().collect();
+        if !self.pending.is_empty() {
+            all.push(self.pending.clone());
+        }
+        all.join("\n")
     }
 }
 
@@ -925,6 +940,45 @@ mod tests {
             check_host_key(&known, "new:22", "SHA256:zzz").unwrap(),
             HostKeyCheck::Unknown
         ));
+    }
+
+    #[test]
+    fn test_terminal_buffer_fragmented_append() {
+        let mut buf = TerminalBuffer::new(10);
+        buf.append("hel");
+        buf.append("lo world\n");
+        assert!(buf.all().contains("hello world"));
+        assert!(!buf.all().contains("hel\nlo"));
+    }
+
+    #[test]
+    fn test_terminal_buffer_no_empty_lines() {
+        let mut buf = TerminalBuffer::new(10);
+        buf.append("foo\n");
+        buf.append("bar\n");
+        assert_eq!(buf.lines.len(), 2);
+        assert_eq!(buf.lines[0], "foo");
+        assert_eq!(buf.lines[1], "bar");
+    }
+
+    #[test]
+    fn test_terminal_buffer_carriage_return_stripped() {
+        let mut buf = TerminalBuffer::new(10);
+        buf.append("foo\r\nbar\r\n");
+        assert_eq!(buf.lines.len(), 2);
+        assert_eq!(buf.lines[0], "foo");
+        assert_eq!(buf.lines[1], "bar");
+    }
+
+    #[test]
+    fn test_terminal_buffer_capacity() {
+        let mut buf = TerminalBuffer::new(2);
+        buf.append("a\n");
+        buf.append("b\n");
+        buf.append("c\n");
+        assert_eq!(buf.lines.len(), 2);
+        assert_eq!(buf.lines[0], "b");
+        assert_eq!(buf.lines[1], "c");
     }
 
     #[test]

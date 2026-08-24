@@ -89,9 +89,9 @@ export const aiListModels = () => invoke("ssh_ai_list_models");
 // 发送一条消息，返回 { reply, commands, dangerous, model, provider }
 export const aiChat = (params) =>
   invoke("ssh_ai_chat", params);
-// 在指定终端执行一条命令
-export const aiExecute = (termId, command) =>
-  invoke("ssh_ai_execute", { termId, command });
+// 在指定终端执行一条命令（confirmed=true 时放行危险命令的后端二次校验）
+export const aiExecute = (termId, command, confirmed = false) =>
+  invoke("ssh_ai_execute", { termId, command, confirmed });
 // 读取终端最近输出（调试/上下文查看）
 export const aiGetBuffer = (termId, lines) =>
   invoke("ssh_ai_get_buffer", { termId, lines });

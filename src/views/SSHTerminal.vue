@@ -136,10 +136,13 @@ async function sendAiMessage() {
       model: aiSelectedModel.value || null,
     });
     const reply = res.reply || "";
+    const cmds = res.commands || [];
+    const flags = res.dangerous_flags || cmds.map(() => !!res.dangerous);
     const assistantMsg = {
       role: "assistant",
       content: "",
-      commands: res.commands || [],
+      commands: cmds,
+      dangerous_flags: flags,
       dangerous: !!res.dangerous,
       model: res.model,
       provider: res.provider,
@@ -187,14 +190,14 @@ async function runAiCommand(cmd, dangerous) {
     pendingDanger.value = { command: cmd, reply: null };
     return;
   }
-  await execCommand(cmd);
+  await execCommand(cmd, false);
 }
 
-async function execCommand(cmd) {
+async function execCommand(cmd, confirmed = false) {
   const tid = activeTermId();
   if (!tid) return;
   try {
-    await aiExecute(tid, cmd);
+    await aiExecute(tid, cmd, confirmed);
     showToast(t("ssh.ai.executed"));
   } catch (err) {
     showToast(friendlyError(err), "error");
@@ -205,7 +208,7 @@ function confirmDanger() {
   if (pendingDanger.value) {
     const cmd = pendingDanger.value.command;
     pendingDanger.value = null;
-    execCommand(cmd);
+    execCommand(cmd, true);
   }
 }
 function cancelDanger() {
@@ -839,10 +842,10 @@ async function removeSocks(id) {
                   v-for="(cmd, ci) in m.commands"
                   :key="ci"
                   class="ai-cmd"
-                  :class="{ danger: m.dangerous }"
+                  :class="{ danger: (m.dangerous_flags ? m.dangerous_flags[ci] : m.dangerous) }"
                 >
                   <code>{{ cmd }}</code>
-                  <Button size="sm" variant="outline" @click="runAiCommand(cmd, m.dangerous)">
+                  <Button size="sm" variant="outline" @click="runAiCommand(cmd, m.dangerous_flags ? m.dangerous_flags[ci] : m.dangerous)">
                     <AppIcon name="play" class="size-3.5" />
                     {{ t("ssh.ai.run") }}
                   </Button>

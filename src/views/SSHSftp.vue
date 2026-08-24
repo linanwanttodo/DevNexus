@@ -139,19 +139,41 @@ function scrollAi() {
   if (box) box.scrollTop = box.scrollHeight;
 }
 
+function isValidRemotePath(p) {
+  return typeof p === 'string' && p.startsWith('/') && !p.includes('..') && p.length <= 4096 && !/[\0\n\r]/.test(p);
+}
+
 async function runAiAction(action) {
   if (!sftpId.value) return;
+  // 前端二次校验：后端已过滤非法动作，这里再做一次防御
+  const validActions = new Set(['navigate', 'rename', 'delete', 'open']);
+  if (!validActions.has(action.action)) {
+    showToast(`Unsupported action: ${action.action}`, 'error');
+    return;
+  }
   try {
     if (action.action === "navigate" && action.path) {
+      if (!isValidRemotePath(action.path)) {
+        showToast(t('ssh.invalid_path') || 'Invalid path', 'error');
+        return;
+      }
       await cd(action.path);
     } else if (action.action === "rename" && action.from && action.to) {
-      if (await showConfirm(tFormat("ssh.rename_confirm", { name: action.from }))) {
+      if (!isValidRemotePath(action.from) || !isValidRemotePath(action.to)) {
+        showToast(t('ssh.invalid_path') || 'Invalid path', 'error');
+        return;
+      }
+      if (await showConfirm(tFormat("ssh.rename_confirm", { from: action.from, to: action.to, name: action.from }))) {
         await renameSftp(sftpId.value, action.from, action.to);
         await refresh();
       }
     } else if (action.action === "delete" && action.path) {
-      const name = action.path.split("/").pop() || action.path;
-      if (await showConfirm(tFormat("ssh.delete_confirm", { name }))) {
+      if (!isValidRemotePath(action.path)) {
+        showToast(t('ssh.invalid_path') || 'Invalid path', 'error');
+        return;
+      }
+      // 完整路径展示，防止 basename 误导（如删除 /）
+      if (await showConfirm(tFormat("ssh.delete_confirm", { name: action.path }))) {
         await deleteSftp(sftpId.value, action.path, !!action.is_dir);
         await refresh();
       }
@@ -766,7 +788,7 @@ onBeforeUnmount(() => {
             <div class="sftp-ai-msg-text">{{ m.content }}</div>
             <div v-if="m.actions && m.actions.length" class="sftp-ai-actions">
               <div v-for="(act, ai) in m.actions" :key="ai" class="sftp-ai-action">
-                <code class="sftp-ai-action-code">{{ act.action }} {{ act.path || '' }}</code>
+                <code class="sftp-ai-action-code">{{ act.action === 'rename' ? `${act.action} ${act.from} → ${act.to}` : `${act.action} ${act.path || ''}${act.is_dir ? ' (dir)' : ''}` }}</code>
                 <Button size="sm" variant="outline" @click="runAiAction(act)">
                   <AppIcon name="play" class="size-3.5" />
                   {{ t("ssh.ai.run") }}

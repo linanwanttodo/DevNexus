@@ -2,6 +2,8 @@ pub mod crypto;
 pub mod error;
 pub mod exec;
 pub mod rc_editor;
+#[allow(dead_code)]
+pub mod timeouts;
 
 pub fn data_dir() -> std::path::PathBuf {
     let dir = if cfg!(target_os = "macos") {
