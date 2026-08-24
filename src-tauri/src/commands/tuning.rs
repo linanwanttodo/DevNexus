@@ -549,6 +549,7 @@ pub fn get_tuning_overview() -> Result<TuningOverview, String> {
     {
         return Ok(TuningOverview {
             platform,
+            is_root: running_as_root(),
             supported: vec![],
             message: Some("TUNING_UNSUPPORTED: 系统调优工具箱当前仅支持 Linux".into()),
         });

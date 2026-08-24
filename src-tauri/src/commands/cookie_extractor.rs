@@ -376,10 +376,13 @@ fn get_chrome_cookie_path() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     {
         if let Ok(home) = std::env::var("HOME") {
-            let path = PathBuf::from(home)
-                .join("Library/Application Support/Google/Chrome/Default/Cookies");
-            if path.exists() {
-                return Some(path);
+            let base =
+                PathBuf::from(home).join("Library/Application Support/Google/Chrome/Default");
+            for rel in ["Network/Cookies", "Cookies"] {
+                let p = base.join(rel);
+                if p.exists() {
+                    return Some(p);
+                }
             }
         }
     }
@@ -387,9 +390,12 @@ fn get_chrome_cookie_path() -> Option<PathBuf> {
     #[cfg(target_os = "linux")]
     {
         if let Ok(home) = std::env::var("HOME") {
-            let path = PathBuf::from(home).join(".config/google-chrome/Default/Cookies");
-            if path.exists() {
-                return Some(path);
+            let base = PathBuf::from(home).join(".config/google-chrome/Default");
+            for rel in ["Network/Cookies", "Cookies"] {
+                let p = base.join(rel);
+                if p.exists() {
+                    return Some(p);
+                }
             }
         }
     }
@@ -405,17 +411,24 @@ fn get_chrome_cookie_path() -> Option<PathBuf> {
         }
     }
 
-    // 检查 Chromium
+    // 检查 Chromium（Linux / macOS）
     if let Ok(ref home) = std::env::var("HOME") {
-        let path = PathBuf::from(home).join(".config/chromium/Default/Cookies");
-        if path.exists() {
-            return Some(path);
+        for rel in ["Network/Cookies", "Cookies"] {
+            let p = PathBuf::from(home)
+                .join(".config/chromium/Default")
+                .join(rel);
+            if p.exists() {
+                return Some(p);
+            }
         }
         // Snap 安装的 Chromium
-        let snap_path =
-            PathBuf::from(home).join("snap/chromium/current/.config/chromium/Default/Cookies");
-        if snap_path.exists() {
-            return Some(snap_path);
+        for rel in ["Network/Cookies", "Cookies"] {
+            let p = PathBuf::from(home)
+                .join("snap/chromium/current/.config/chromium/Default")
+                .join(rel);
+            if p.exists() {
+                return Some(p);
+            }
         }
     }
 
@@ -426,10 +439,14 @@ fn get_edge_cookie_path() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     {
         if let Ok(home) = std::env::var("HOME") {
-            let path = PathBuf::from(home)
-                .join("Library/Application Support/Microsoft Edge/Default/Cookies");
-            if path.exists() {
-                return Some(path);
+            let base =
+                PathBuf::from(home).join("Library/Application Support/Microsoft Edge/Default");
+            // 现代 Chromium(Edge 80+) 用 Network\Cookies；旧版用 Cookies
+            for rel in ["Network/Cookies", "Cookies"] {
+                let p = base.join(rel);
+                if p.exists() {
+                    return Some(p);
+                }
             }
         }
     }
@@ -437,9 +454,12 @@ fn get_edge_cookie_path() -> Option<PathBuf> {
     #[cfg(target_os = "linux")]
     {
         if let Ok(home) = std::env::var("HOME") {
-            let path = PathBuf::from(home).join(".config/microsoft-edge/Default/Cookies");
-            if path.exists() {
-                return Some(path);
+            let base = PathBuf::from(home).join(".config/microsoft-edge/Default");
+            for rel in ["Network/Cookies", "Cookies"] {
+                let p = base.join(rel);
+                if p.exists() {
+                    return Some(p);
+                }
             }
         }
     }
@@ -447,10 +467,13 @@ fn get_edge_cookie_path() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-            let path =
-                PathBuf::from(localappdata).join("Microsoft\\Edge\\User Data\\Default\\Cookies");
-            if path.exists() {
-                return Some(path);
+            let base = PathBuf::from(localappdata).join("Microsoft\\Edge\\User Data\\Default");
+            // 现代 Edge 用 Network\Cookies；旧版用 Cookies
+            for rel in ["Network\\Cookies", "Cookies"] {
+                let p = base.join(rel);
+                if p.exists() {
+                    return Some(p);
+                }
             }
         }
     }
