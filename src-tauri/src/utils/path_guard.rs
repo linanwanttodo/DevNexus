@@ -59,10 +59,20 @@ mod tests {
 
     #[test]
     fn accepts_absolute_paths() {
-        assert!(validate_abs_sane_path("/home/user/downloads/a.json").is_ok());
-        assert!(validate_abs_sane_path("/tmp/devnexus-install/node.tar.gz").is_ok());
-        assert!(validate_abs_sane_path("C:\\Users\\u\\Downloads\\a.json").is_ok());
-        assert!(validate_abs_sane_path("/home/u/.ssh/id_ed25519").is_ok()); // 合法功能需要
+        // Linux/macOS：原生 POSIX 绝对路径
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(validate_abs_sane_path("/home/user/downloads/a.json").is_ok());
+            assert!(validate_abs_sane_path("/tmp/devnexus-install/node.tar.gz").is_ok());
+            assert!(validate_abs_sane_path("/home/u/.ssh/id_ed25519").is_ok()); // 合法功能需要
+        }
+        // Windows：盘符或 UNC 风格绝对路径
+        #[cfg(target_os = "windows")]
+        {
+            assert!(validate_abs_sane_path("C:\\Users\\u\\Downloads\\a.json").is_ok());
+            assert!(validate_abs_sane_path("D:\\devnexus-install\\node.tar.gz").is_ok());
+            assert!(validate_abs_sane_path("C:\\Users\\u\\.ssh\\id_ed25519").is_ok());
+        }
     }
 
     #[test]
@@ -81,13 +91,31 @@ mod tests {
 
     #[test]
     fn rejects_traversal_components() {
-        assert!(validate_abs_sane_path("/home/user/../../etc/shadow").is_err());
-        assert!(validate_abs_sane_path("/safe/../secret").is_err());
+        // `..` 检测在路径规范化层（Path::components），POSIX / Windows 写法均适用
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(validate_abs_sane_path("/home/user/../../etc/shadow").is_err());
+            assert!(validate_abs_sane_path("/safe/../secret").is_err());
+        }
+        #[cfg(target_os = "windows")]
+        {
+            assert!(validate_abs_sane_path("C:\\safe\\..\\secret").is_err());
+            assert!(validate_abs_sane_path("C:\\home\\user\\..\\..\\etc\\shadow").is_err());
+        }
     }
 
     #[test]
     fn rejects_control_characters() {
-        assert!(validate_abs_sane_path("/tmp/a\nb").is_err());
-        assert!(validate_abs_sane_path("/tmp/a\0b").is_err());
+        // 控制字符检测在字符串层，路径前缀不影响
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(validate_abs_sane_path("/tmp/a\nb").is_err());
+            assert!(validate_abs_sane_path("/tmp/a\0b").is_err());
+        }
+        #[cfg(target_os = "windows")]
+        {
+            assert!(validate_abs_sane_path("C:\\tmp\\a\nb").is_err());
+            assert!(validate_abs_sane_path("C:\\tmp\\a\0b").is_err());
+        }
     }
 }

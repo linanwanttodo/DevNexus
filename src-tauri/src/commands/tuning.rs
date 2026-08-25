@@ -1785,19 +1785,42 @@ mod tests {
 
     #[test]
     fn test_validate_swap_path_accepts_common_locations() {
-        assert!(validate_swap_path("/swapfile").is_ok());
-        assert!(validate_swap_path("/swap/swapfile2").is_ok());
-        assert!(validate_swap_path("/home/u/swapfile").is_ok());
-        assert!(validate_swap_path("/var/swapfile").is_ok());
+        // 平台原生绝对路径
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(validate_swap_path("/swapfile").is_ok());
+            assert!(validate_swap_path("/swap/swapfile2").is_ok());
+            assert!(validate_swap_path("/home/u/swapfile").is_ok());
+            assert!(validate_swap_path("/var/swapfile").is_ok());
+        }
+        #[cfg(target_os = "windows")]
+        {
+            // swap 在 Windows 上产品层不启用，但路径校验函数本身是纯逻辑、可在 Windows 上跑测试
+            assert!(validate_swap_path("C:\\swapfile").is_ok());
+            assert!(validate_swap_path("C:\\swap\\swapfile2").is_ok());
+            assert!(validate_swap_path("D:\\Users\\u\\swapfile").is_ok());
+        }
     }
 
     #[test]
     fn test_validate_swap_path_rejects_dangerous() {
-        assert!(validate_swap_path("/etc/shadow").is_err());
-        assert!(validate_swap_path("/usr/bin/ls").is_err());
-        assert!(validate_swap_path("/boot/vmlinuz").is_err());
-        assert!(validate_swap_path("relative/swap").is_err());
-        assert!(validate_swap_path("/safe/../etc/shadow").is_err());
+        // Linux/macOS：SWAP_FORBIDDEN_PREFIXES 是 POSIX 风格，可测拒绝 /etc 等
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(validate_swap_path("/etc/shadow").is_err());
+            assert!(validate_swap_path("/usr/bin/ls").is_err());
+            assert!(validate_swap_path("/boot/vmlinuz").is_err());
+            assert!(validate_swap_path("relative/swap").is_err());
+            assert!(validate_swap_path("/safe/../etc/shadow").is_err());
+        }
+        // Windows：SWAP_FORBIDDEN_PREFIXES 是 POSIX 风格（无 Windows 危险目录匹配），
+        // 因此只验证"相对路径 / .. 遍历 / 空"这三条与平台无关的拒绝规则。
+        #[cfg(target_os = "windows")]
+        {
+            assert!(validate_swap_path("relative\\swap").is_err());
+            assert!(validate_swap_path("C:\\safe\\..\\Windows\\System32").is_err());
+            assert!(validate_swap_path("C:\\foo\\.\\bar").is_err());
+        }
         assert!(validate_swap_path("").is_err());
     }
 }

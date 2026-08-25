@@ -331,12 +331,24 @@ mod tests {
 
     #[test]
     fn test_validate_migration_path() {
-        assert!(validate_migration_path("/tmp/migration.json").is_ok());
-        assert!(validate_migration_path("C:\\Users\\u\\m.JSON").is_ok());
-        // 非扩展名/任意路径拒绝：防止被当作任意读文件原语
-        assert!(validate_migration_path("/home/u/.ssh/id_rsa").is_err());
-        assert!(validate_migration_path("/etc/passwd").is_err());
+        // 平台原生绝对路径
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(validate_migration_path("/tmp/migration.json").is_ok());
+            assert!(validate_migration_path("/home/u/.ssh/id_rsa").is_err());
+            assert!(validate_migration_path("/etc/passwd").is_err());
+            assert!(validate_migration_path("/x/../etc/shadow.json").is_err());
+        }
+        #[cfg(target_os = "windows")]
+        {
+            assert!(validate_migration_path("C:\\Users\\u\\m.JSON").is_ok());
+            // .ssh 私钥（无 .json 扩展名 → 被扩展名校验拒绝）
+            assert!(validate_migration_path("C:\\Users\\u\\.ssh\\id_rsa").is_err());
+            // .. 遍历（被 path_guard 拒绝）
+            assert!(validate_migration_path("C:\\x\\..\\Windows\\shadow.json").is_err());
+        }
+        // 与平台无关的拒绝规则
         assert!(validate_migration_path("../rel.json").is_err());
-        assert!(validate_migration_path("/x/../etc/shadow.json").is_err());
+        assert!(validate_migration_path("plain.txt").is_err());
     }
 }
