@@ -456,6 +456,7 @@ pub fn optimize_disk() -> Result<String, String> {
 
 /// 递归删除目录树中的 .DS_Store 文件（macOS 专用，其他平台为空操作）。
 #[allow(unused_variables)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn cleanup_ds_store(base: &str) {
     #[cfg(target_os = "macos")]
     {
