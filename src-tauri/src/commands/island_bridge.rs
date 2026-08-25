@@ -229,6 +229,7 @@ mod imp {
         Err("media control not supported on this platform".into())
     }
 
+    #[allow(dead_code)]
     pub fn start_notification_listener(_app: tauri::AppHandle) {
         // 非 Linux：不启动通知监听
     }
@@ -281,11 +282,11 @@ pub fn ensure_started() {
     }
     let _ = STARTED.set(());
     // 通知监听仅 Linux；工作区跟随亦仅在 Linux 实际工作（见各 cfg 实现）
-    let Some(app) = HANDLE.get() else {
-        return;
-    };
     #[cfg(target_os = "linux")]
     {
+        let Some(app) = HANDLE.get() else {
+            return;
+        };
         imp::start_notification_listener(app.clone());
         start_workspace_follower(app.clone());
     }

@@ -131,12 +131,15 @@ fn default_candidates() -> Vec<(String, String)> {
     }
     #[cfg(target_os = "windows")]
     {
+        // Windows 上 HOME 极少设置；用 USERPROFILE 作为 home 风格的根，
+        // 主要清理项仍以 LOCALAPPDATA / TEMP 为主。
         let appdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
         out.push((
             "Windows 临时".into(),
             format!("{}\\Temp", std::env::var("TEMP").unwrap_or_default()),
         ));
         out.push(("缓存目录".into(), appdata));
+        out.push(("用户家目录".into(), home));
     }
     out
 }
@@ -574,6 +577,11 @@ pub struct SwapDevice {
 
 /// 记录单个清理步骤的执行结果：成功记 `[done]` 并返回 true；失败记 `[failed]`
 /// （含原因）并返回 false——调用方只有在本函数返回 true 时才允许计入释放空间。
+///
+/// `#[cfg_attr]` 保留其在单元测试（所有平台）中的可访问性，同时在
+/// 非 Linux 平台的生产构建里允许被标记为 dead_code——Linux 外的清理流程
+/// 走的是平台专用分支，不会调用本函数。
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 pub(crate) fn record_step(
     executed: &mut Vec<String>,
     label: &str,
@@ -592,6 +600,7 @@ pub(crate) fn record_step(
 }
 
 /// swap 文件路径的黑名单前缀（绝对路径 + 无遍历的前提下，仍拒绝系统关键目录）
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 const SWAP_FORBIDDEN_PREFIXES: &[&str] = &[
     "/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/boot", "/proc", "/sys", "/dev", "/run",
     "/opt", "/root",
@@ -599,6 +608,7 @@ const SWAP_FORBIDDEN_PREFIXES: &[&str] = &[
 
 /// 校验 swap 文件路径：必须为绝对路径、无 `..` 遍历分量，
 /// 且不得位于系统关键目录之下（防止以 root 权限 fallocate/chmod/mkswap 破坏系统文件）。
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 pub(crate) fn validate_swap_path(p: &str) -> Result<(), String> {
     if p.is_empty() || p.len() > 4096 {
         return Err(format!("Invalid swap path: {p:?}"));
@@ -723,7 +733,7 @@ pub fn verify_sudo_password(password: String) -> Result<bool, String> {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = password;
-        return Err("TUNING_UNSUPPORTED: 仅 Linux 支持 sudo 校验".into());
+        Err("TUNING_UNSUPPORTED: 仅 Linux 支持 sudo 校验".into())
     }
 }
 
@@ -1198,7 +1208,7 @@ pub struct CleanResult {
     pub dry_run: bool,
 }
 
-#[allow(clippy::needless_return)]
+#[allow(clippy::needless_return, unused_variables)]
 #[tauri::command]
 pub fn clean_targets(
     target_ids: Vec<String>,
@@ -1626,7 +1636,7 @@ pub fn win_list_startup() -> Result<Vec<WinStartupEntry>, String> {
         ];
         for (hive, key) in runs {
             if let Ok(key) = key {
-                for name in key.enum_names().flatten() {
+                for (name, _value) in key.enum_values().flatten() {
                     if let Ok(command) = key.get_value::<String, _>(&name) {
                         out.push(WinStartupEntry {
                             name: name.clone(),
@@ -1675,12 +1685,14 @@ pub fn win_set_startup(name: String, hive: String, enable: bool) -> Result<(), S
         } else {
             vec![0x03, 0x00]
         };
+        // winreg 0.52：ToRegValue 不为 &[u8] 实现，所以用 set_raw_value +
+        // 显式构造的 RegValue（RegType 枚举位于 winreg::enums）。
         approved
-            .set_value(
+            .set_raw_value(
                 &name,
                 &winreg::RegValue {
                     bytes: state,
-                    vtype: winreg::RegType::REG_BINARY,
+                    vtype: winreg::enums::RegType::REG_BINARY,
                 },
             )
             .map_err(|e| e.to_string())
