@@ -1814,12 +1814,13 @@ mod tests {
             assert!(validate_swap_path("/safe/../etc/shadow").is_err());
         }
         // Windows：SWAP_FORBIDDEN_PREFIXES 是 POSIX 风格（无 Windows 危险目录匹配），
-        // 因此只验证"相对路径 / .. 遍历 / 空"这三条与平台无关的拒绝规则。
+        // 因此只验证"相对路径 / .. 遍历 / 空"这几条与平台无关的拒绝规则。
+        // 注：Path::components() 会把路径中段的 "." 规范化掉，故不用 ".\\" 用例。
         #[cfg(target_os = "windows")]
         {
             assert!(validate_swap_path("relative\\swap").is_err());
             assert!(validate_swap_path("C:\\safe\\..\\Windows\\System32").is_err());
-            assert!(validate_swap_path("C:\\foo\\.\\bar").is_err());
+            assert!(validate_swap_path("C:\\swap with\nnewline").is_err());
         }
         assert!(validate_swap_path("").is_err());
     }
