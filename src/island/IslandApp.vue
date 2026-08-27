@@ -23,7 +23,6 @@ import {
   Timer,
   Music2,
   Wallet,
-  Sun,
   Cpu,
   Database,
 } from "@lucide/vue";
@@ -119,26 +118,6 @@ function startMediaPoll() {
 function restartMediaPoll() {
   if (mediaTimer) clearInterval(mediaTimer);
   startMediaPoll();
-}
-
-// ═══════════════ 系统 HUD（音量/亮度）═══════════════
-const hud = ref(null); // { volumePercent, brightnessPercent }
-let hudTimer = null;
-
-async function pollHud() {
-  try {
-    hud.value = await invoke("island_get_hud");
-  } catch {
-    hud.value = null;
-  }
-}
-
-function startHudPoll() {
-  pollHud();
-  hudTimer = setInterval(() => {
-    if (document.hidden) return;
-    pollHud();
-  }, 10000);
 }
 
 // ═══════════════ 系统状态（CPU/内存）═══════════════
@@ -283,7 +262,7 @@ function startKeyPoll() {
       lastBalanceKey = k;
       loadBalance();
     }
-  }, 5000);
+  }, 10000);
 }
 
 /** 展示用的总余额（优先人民币） */
@@ -309,8 +288,8 @@ const displayMediaArtist = computed(() => {
 });
 
 // ═══════════════ 模块切换（滚轮循环）═══════════════
-// 0 = 时间, 1 = DeepSeek 余额, 2 = 倒计时, 3 = 媒体控制, 4 = 系统 HUD(音量/亮度),
-// 5 = 系统状态(CPU/内存)；一次只显示一个
+// 0 = 时间, 1 = DeepSeek 余额, 2 = 倒计时, 3 = 媒体控制,
+// 4 = 系统状态(CPU/内存)；一次只显示一个
 const activeModule = ref(0);
 
 const modules = [
@@ -318,7 +297,6 @@ const modules = [
   { key: "balance", icon: Wallet },
   { key: "timer", icon: Timer },
   { key: "media", icon: Music2 },
-  { key: "hud", icon: Music2 },
   { key: "status", icon: Timer },
 ];
 
@@ -367,15 +345,26 @@ function showBanner(app, title, body, kind = "system") {
       }
     }, 3000);
   } else {
-    // 本地事件（倒计时完成等）：强制展开展示，5 秒后自动收起
-    expanded.value = true;
+    // 本地事件（倒计时完成等）：强制展开展示。
+    // 收起由统一的 scheduleCollapse 负责（鼠标不在则 AUTO_COLLAPSE_MS 后收起），
+    // 不在这里额外设置 5s 自动收起，避免和 collapseTimer 竞争造成框/内容时序错位。
     if (bannerTimer) clearTimeout(bannerTimer);
     bannerTimer = setTimeout(() => {
       if (bannerSeq === seq) {
         banner.value = null;
-        expanded.value = false;
+        // banner 消失后若鼠标不在，重新触发收起计时（给用户看清横幅后再收）
+        if (!hovering) scheduleCollapse();
       }
-    }, 5000);
+    }, 4000);
+    // 展开框以显示横幅（若已展开则保持）
+    if (!expanded.value) {
+      expanded.value = true;
+    }
+    // 重置收起倒计时：banner 期间鼠标若不在，5s 后才收起（banner 4s 后先消失）
+    clearCollapseTimer();
+    if (!hovering) {
+      scheduleCollapse();
+    }
   }
 }
 
@@ -438,6 +427,35 @@ async function onPointerMove(e) {
     movePending = false;
   }
 }
+
+// ═══════════════ 输入穿透区域同步（X11 透明窗口点击穿透）═══════════════
+// 透明窗口默认整个矩形拦截点击；Rust 侧用 GDK input shape 把输入区限制为
+// 胶囊覆盖区。胶囊几何随展开/收起变化，前端在状态切换后上报逻辑坐标。
+let shapeTimer = null;
+
+function reportInputShape() {
+  const c = document.querySelector(".capsule");
+  if (!c) return;
+  const r = c.getBoundingClientRect();
+  invoke("island_set_input_shape", {
+    x: r.x,
+    y: r.y,
+    width: r.width,
+    height: r.height,
+  }).catch(() => {});
+}
+
+function syncInputShape() {
+  clearTimeout(shapeTimer);
+  if (expanded.value) {
+    reportInputShape();
+  } else {
+    // 收起弹簧动画 0.4s：等动画结束再收缩输入区，避免可见胶囊点不到
+    shapeTimer = setTimeout(reportInputShape, 500);
+  }
+}
+
+watch(expanded, syncInputShape);
 
 // ═══════════════ 跨工作区可见（延迟重试）═══════════════
 // 发布版 webview 加载快，首次执行时 GTK 窗口可能尚未 realize，
@@ -506,11 +524,13 @@ async function hideIsland() {
 // ═══════════════ 两态交互（悬停展开 / 移出收起 / 点击切换 + 自动收起）═══════════════
 // 悬停：鼠标进入胶囊短暂延迟后展开（防误触），移出后收起。
 // 点击：切换展开/收起（拖拽结束后 clickSuppressed 会抑制本次 click）。
-// 自动收起：展开后若鼠标不在岛上，3 秒后自动恢复小胶囊；
-// 鼠标悬停期间保持展开（不启动倒计时），离开后才开始 3 秒倒计时，
-// 3 秒内返回则取消。符合用户诉求："鼠标放上面一直显示，离开 3 秒后再缩小"。
+// 自动收起：展开后若鼠标不在岛上，5 秒后自动恢复小胶囊；
+// 鼠标悬停期间保持展开（不启动倒计时），离开后才开始 5 秒倒计时，
+// 5 秒内返回则取消。符合用户诉求："鼠标放上面一直显示，离开 5 秒后再缩小"。
 // 窗口尺寸恒定，展开/收起完全由胶囊 CSS spring 动画过渡，无窗口 resize 抖动。
-const AUTO_COLLAPSE_MS = 3000;
+// 关键约束：banner 的存在不阻止收起计时——框与内容必须同步收缩，
+// 分开控制会导致"内容消失但框还撑着"的视觉错位。
+const AUTO_COLLAPSE_MS = 5000;
 let collapseTimer = null;
 let hovering = false; // 鼠标当前是否在岛上（不存 ref，避免无谓渲染）
 
@@ -521,13 +541,22 @@ function clearCollapseTimer() {
   }
 }
 
-/** 离开后 3 秒自动收起；悬停中或展开前不启动 */
+/** 离开后 AUTO_COLLAPSE_MS 自动收起；悬停中不启动 */
 function scheduleCollapse() {
   clearCollapseTimer();
-  if (!expanded.value || banner.value || hovering) return;
+  // 注意：不再因 banner.value 跳过——banner 存在时框仍应随鼠标离开倒计时收起，
+  // 否则鼠标离开→内容因 v-if/v-else 切换消失，但框要等 banner 自己的 5s 计时器，
+  // 造成"内容没了框还大着"的视觉错位。
+  if (!expanded.value || hovering) return;
   collapseTimer = setTimeout(() => {
     collapseTimer = null;
     expanded.value = false;
+    // 收起框时同步清除 banner，避免框收起后横幅内容残留
+    banner.value = null;
+    if (bannerTimer) {
+      clearTimeout(bannerTimer);
+      bannerTimer = null;
+    }
   }, AUTO_COLLAPSE_MS);
 }
 
@@ -543,18 +572,18 @@ async function setExpanded(val) {
 
 function onMouseEnter() {
   hovering = true;
-  if (banner.value) return; // 横幅显示期间不响应悬停展开（通知已强制展开）
   clearTimeout(hoverTimer);
   clearCollapseTimer(); // 悬停中：取消任何待执行的自动收起
+  // 有 banner 时仍允许悬停展开（用户把鼠标移过来说明想看/操作）
   hoverTimer = setTimeout(() => setExpanded(true), 120);
 }
 
 function onMouseLeave() {
   hovering = false;
   clearTimeout(hoverTimer);
-  if (banner.value) return; // 横幅显示期间不收起：通知由自身计时器统一收起
+  // 无论有没有 banner，鼠标离开就启动收起倒计时——框和内容同步收缩
   if (expanded.value) {
-    scheduleCollapse(); // 离开后 3 秒收起（期间返回则取消）
+    scheduleCollapse(); // 离开后 AUTO_COLLAPSE_MS 收起（期间返回则取消）
   }
 }
 
@@ -574,9 +603,14 @@ async function onBannerClick() {
   banner.value = null;
   if (bannerTimer) clearTimeout(bannerTimer);
   bannerTimer = null;
-  if (expanded.value && wasLocal) {
-    expanded.value = false; // 窗口恒定，收起由胶囊 CSS 动画完成
+  if (wasLocal) {
+    // 点击本地事件横幅：立即收起框并打开主窗口
+    expanded.value = false;
+    clearCollapseTimer();
     await openMainWindow();
+  } else {
+    // 点击系统通知横幅：只关闭横幅，框由鼠标状态决定（悬停保持，不在则开始倒计时）
+    if (!hovering) scheduleCollapse();
   }
 }
 
@@ -585,7 +619,13 @@ function closeBanner() {
   banner.value = null;
   if (bannerTimer) clearTimeout(bannerTimer);
   bannerTimer = null;
-  expanded.value = false;
+  // 框的收起由鼠标状态决定：悬停保持展开，不在则开始倒计时
+  if (!hovering && expanded.value) {
+    scheduleCollapse();
+  } else if (!hovering) {
+    expanded.value = false;
+    clearCollapseTimer();
+  }
 }
 
 let unlistenNotify = null;
@@ -594,9 +634,9 @@ onMounted(async () => {
   startClock();
   startMediaPoll();
   startKeyPoll(); // 读取设置页保存的 DeepSeek Key 查询余额，并轮询 key 变化
-  startHudPoll();
   startSysPoll();
   await resizeWindow(); // 先定尺寸再定位：避免与下方位置恢复竞态，保证默认落在顶部居中
+  reportInputShape();
   try {
     // 系统通知监听（Rust 侧 BecomeMonitor 转发）
     unlistenNotify = await listen("island-notify", (ev) => {
@@ -643,7 +683,6 @@ onBeforeUnmount(() => {
   if (mediaTimer) clearInterval(mediaTimer);
   if (timerTick) clearInterval(timerTick);
   if (keyPollTimer) clearInterval(keyPollTimer);
-  if (hudTimer) clearInterval(hudTimer);
   if (sysTimer) clearInterval(sysTimer);
   if (bannerTimer) clearTimeout(bannerTimer);
   if (collapseTimer) clearTimeout(collapseTimer);
@@ -824,42 +863,8 @@ watch(activeModule, () => {
           </div>
         </div>
 
-        <!-- 模块4：系统 HUD（音量 / 亮度） -->
-        <div v-else-if="activeModule === 4" class="module module-hud">
-          <template v-if="hud">
-            <div class="hud-item">
-              <span class="hud-icon" title="Volume">
-                <Play :size="14" />
-              </span>
-              <div class="hud-track">
-                <div
-                  class="hud-fill"
-                  :style="{ width: (hud.volumePercent ?? 0) + '%' }"
-                ></div>
-              </div>
-              <span class="hud-val">{{ hud.volumePercent != null ? Math.round(hud.volumePercent) : "--" }}%</span>
-            </div>
-            <div class="hud-item">
-              <span class="hud-icon" title="Brightness">
-                <Sun :size="14" />
-              </span>
-              <div class="hud-track">
-                <div
-                  class="hud-fill"
-                  :style="{ width: (hud.brightnessPercent ?? 0) + '%' }"
-                ></div>
-              </div>
-              <span class="hud-val">{{ hud.brightnessPercent != null ? Math.round(hud.brightnessPercent) : "--" }}%</span>
-            </div>
-          </template>
-          <div v-else class="med-empty">
-            <Music2 :size="16" />
-            <span>系统 HUD 不可用</span>
-          </div>
-        </div>
-
-        <!-- 模块5：系统状态（CPU / 内存） -->
-        <div v-else-if="activeModule === 5" class="module module-status">
+        <!-- 模块4：系统状态（CPU / 内存） -->
+        <div v-else-if="activeModule === 4" class="module module-status">
           <template v-if="sysStatus">
             <div class="hud-item">
               <span class="hud-icon" title="CPU">

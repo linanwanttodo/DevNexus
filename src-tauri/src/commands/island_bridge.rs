@@ -277,6 +277,15 @@ static HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new(
 pub fn ensure_started() {
     use std::sync::OnceLock;
     static STARTED: OnceLock<()> = OnceLock::new();
+    // 灵动岛未启用时不启动任何后台跟随：工作区轮询在 XWayland 上会放大
+    // _NET_CURRENT_DESKTOP 抖动，而该抖动会让 mutter 把主窗口误判为
+    // "在其他工作区"并置为 Iconic——即用户反馈的"窗口贴死在桌面点不动"。
+    // 注意：此检查必须放在 STARTED 消耗之前——否则岛关闭期间任何无关命令
+    // 先触发本函数，之后用户再开启灵动岛时后台线程将永不启动。
+    #[cfg(target_os = "linux")]
+    if !island_get_enabled() {
+        return;
+    }
     if STARTED.get().is_some() {
         return;
     }
@@ -370,13 +379,23 @@ fn move_island_to_desktop(app: &tauri::AppHandle, desktop: u32) {
 pub fn start_workspace_follower(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         let mut last: Option<u32> = None;
+        // 防抖：XWayland 上 _NET_CURRENT_DESKTOP 偶发单帧跳变（外部弹窗/
+        // 工作区事件），连续两次读到同一值才真正执行搬移，过滤一次性抖动。
+        let mut pending: Option<u32> = None;
         loop {
             let cur = current_desktop();
             if cur != last {
-                last = cur;
-                if let Some(d) = cur {
-                    move_island_to_desktop(&app, d);
+                if pending == cur {
+                    last = cur;
+                    pending = None;
+                    if let Some(d) = cur {
+                        move_island_to_desktop(&app, d);
+                    }
+                } else {
+                    pending = cur;
                 }
+            } else {
+                pending = None;
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
@@ -414,35 +433,58 @@ fn set_sticky_x11(_window: &tauri::Window) -> Result<(), String> {
 }
 
 /// X11 下透明窗口默认**整个矩形**都接收鼠标事件，透明边缘也会拦截点击。
-/// 用 GDK input shape 把岛窗口的输入区域限制为胶囊覆盖区（窗口顶部居中），
-/// 其余透明区域点击穿透——防止岛窗口覆盖主窗口标题栏/内容时抢走点击
-/// （"界面显示但点不动"的根因之一）。岛窗口自身仍可拖拽/点击（胶囊在内）。
+/// 用 GDK input shape 把输入区域限制为胶囊覆盖区，其余透明区域点击穿透——
+/// 防止岛窗口覆盖主窗口标题栏/内容时抢走点击。
+/// 胶囊几何由前端按当前状态（收起 240x40 / 展开 384x108）上报逻辑坐标，
+/// 这里乘 scale_factor 换算成设备像素——之前硬编码 384x72 设备像素，
+/// HiDPI（scale=2）下只覆盖左上四分之一，展开态下半部也超出区域，
+/// 导致大面积点击穿透、悬停/拖拽失灵。
 #[cfg(target_os = "linux")]
-fn set_island_input_shape(window: &tauri::Window) -> Result<(), String> {
+fn apply_input_shape(
+    window: &tauri::Window,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
     use gtk::prelude::*; // GtkWindowExt::window()
     let gtk_win = window.gtk_window().map_err(|e| e.to_string())?;
     let gdk_win = gtk_win.window().ok_or("no gdk window")?;
-    // 窗口恒定 400x116；胶囊 top:4、水平居中，收起 240x40 / 展开最高 ~384x68。
-    // 输入区域取覆盖胶囊所有状态的矩形：顶部居中 384x72，其余透明区穿透。
-    const WIN_W: i32 = 400;
-    const CAPSULE_W: i32 = 384;
-    const CAPSULE_H: i32 = 72;
-    let rect = gtk::gdk::cairo::RectangleInt::new((WIN_W - CAPSULE_W) / 2, 0, CAPSULE_W, CAPSULE_H);
+    let s = window.scale_factor().map_err(|e| e.to_string())?;
+    let rect = gtk::gdk::cairo::RectangleInt::new(
+        (x * s).floor() as i32,
+        (y * s).floor() as i32,
+        (width * s).ceil() as i32,
+        (height * s).ceil() as i32,
+    );
     let region = gtk::gdk::cairo::Region::create_rectangle(&rect);
     gdk_win.input_shape_combine_region(&region, 0, 0);
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
-fn set_island_input_shape(_window: &tauri::Window) -> Result<(), String> {
-    Ok(())
+/// 前端在挂载与展开/收起切换后上报胶囊逻辑几何，动态更新点击穿透区域
+#[tauri::command]
+pub fn island_set_input_shape(
+    window: tauri::Window,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        apply_input_shape(&window, x, y, width, height)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (&window, x, y, width, height);
+        Ok(())
+    }
 }
 
 /// 让指定岛窗口在所有工作区可见（X11 直接写 STICKY，不依赖 GTK stick）
 #[tauri::command]
 pub fn island_set_sticky(window: tauri::Window) -> Result<(), String> {
-    // 一并设置输入形状（透明区点击穿透），与 sticky 共用窗口访问，幂等。
-    let _ = set_island_input_shape(&window);
     set_sticky_x11(&window)
 }
 

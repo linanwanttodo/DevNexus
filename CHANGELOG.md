@@ -24,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SSH AI：回复流式打字、快捷命令 chips、强化危险命令识别
 - 系统调优模块：磁盘缓存扫描与安全清理、排除项管理、三平台一键优化
 
+### Changed (English)
+- Hot-path debug logging in `get_system_info` migrated from stderr prints to
+  `tracing::debug!/error!`, eliminating stderr noise on every dashboard load / poll
+- Hardware status cache TTL comment corrected (implementation uses a unified 30s cache)
+
+### 变更（中文）
+- `get_system_info` 热路径调试日志由 stderr 打印迁移至 `tracing::debug!/error!`，
+  消除仪表板每次加载与共享轮询时的 stderr 噪音
+- 修正硬件状态缓存 TTL 注释（实现为统一 30s 缓存）
+
 ---
 
 ## [1.3.12] - 2026-08-16

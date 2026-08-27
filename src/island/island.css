@@ -499,8 +499,7 @@ body {
   opacity: 0.85;
 }
 
-/* 展开态 HUD/状态模块更醒目 */
-.capsule.expanded .module-hud,
+/* 展开态状态模块更醒目 */
 .capsule.expanded .module-status {
   gap: 12px;
 }

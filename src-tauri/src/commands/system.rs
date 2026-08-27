@@ -232,7 +232,7 @@ fn lock_system() -> Result<MutexGuard<'static, System>, String> {
     match system().lock() {
         Ok(guard) => Ok(guard),
         Err(poisoned) => {
-            eprintln!("[DevNexus] system info mutex was poisoned; recovering");
+            tracing::warn!("[DevNexus] system info mutex was poisoned; recovering");
             Ok(poisoned.into_inner())
         }
     }
@@ -252,20 +252,20 @@ pub struct ResourceUsage {
 
 #[tauri::command]
 pub fn get_system_info() -> Result<SystemInfo, String> {
-    eprintln!("[DevNexus] get_system_info: called");
-    // 静态信息缓存命中则直接返回，避免每次启动都枚举磁盘/读系统文件
+    // 静态信息缓存命中则直接返回，避免每次启动都枚举磁盘/读系统文件。
+    // 热路径（Dashboard 挂载 / 轮询共享）不打 stderr 日志，统一走 tracing::debug!
     if let Some(cached) = load_cached_system_info() {
-        eprintln!("[DevNexus] get_system_info: cache hit");
+        tracing::debug!("[DevNexus] get_system_info: cache hit");
         return Ok(cached);
     }
-    eprintln!("[DevNexus] get_system_info: cache miss, collecting...");
+    tracing::debug!("[DevNexus] get_system_info: cache miss, collecting...");
     let result = collect_system_info();
     match &result {
         Ok(info) => {
             save_system_info_cache(info);
-            eprintln!("[DevNexus] get_system_info: ok, cache saved");
+            tracing::debug!("[DevNexus] get_system_info: ok, cache saved");
         }
-        Err(e) => eprintln!("[DevNexus] get_system_info: ERROR: {e}"),
+        Err(e) => tracing::error!("[DevNexus] get_system_info: ERROR: {e}"),
     }
     result
 }
@@ -349,7 +349,8 @@ pub fn get_resource_usage() -> Result<ResourceUsage, String> {
 /// 收集硬件状态。各部分独立容错：某一部分失败不影响其他部分。
 #[tauri::command]
 pub fn get_hardware_status() -> Result<HardwareStatus, String> {
-    // 合并缓存：GPU/电池高成本探测结果缓存 10s；CPU 温度缓存 3s
+    // 统一缓存 30s：GPU 探测（nvidia-smi 子进程）与电池探测是高成本调用，
+    // CPU 温度对秒级精度无需求；共享一份 TTL 避免多次锁定/判断分支
     static CACHE: OnceLock<Mutex<Option<(std::time::Instant, HardwareStatus)>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(None));
     if let Ok(guard) = cache.lock() {

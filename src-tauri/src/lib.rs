@@ -249,6 +249,38 @@ pub fn run() {
             // 托盘 DeepSeek 余额自动刷新：启动后立即查询并周期性更新菜单文字
             commands::tray::start_balance_refresh(app_handle.clone());
 
+            // ── 启动期防"壁纸化"看门狗（Linux/XWayland）──
+            // 已确诊根因：XWayland 的 _NET_CURRENT_DESKTOP 会在无人操作时抖动
+            // （GNOME 工作区事件 / fcitx 输入法弹窗等外部发起），mutter 重算窗口
+            // workspace 归属时，会把 frameless 主窗口误判为"在其他工作区"而置为
+            // Iconic——窗口仍显示最后一帧（compositor 缓存），但不再接收输入与
+            // 激活请求：用户看到的是"点不动、拖不动、贴死在桌面上"。
+            // 防御：启动后 45s 内轮询 is_minimized()，一旦发现主窗口被偷偠
+            // Iconic 化（此阶段用户不可能主动最小化），立即 unminimize+focus 自愈。
+            // 45s 后自动退出：之后的正常最小化/恢复完全交给用户与托盘逻辑。
+            #[cfg(target_os = "linux")]
+            {
+                let guard = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let start = std::time::Instant::now();
+                    while start.elapsed() < std::time::Duration::from_secs(45) {
+                        tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+                        use tauri::Manager as _;
+                        if let Some(w) = guard.get_webview_window("main") {
+                            if w.is_visible().unwrap_or(false) && w.is_minimized().unwrap_or(false)
+                            {
+                                tracing::warn!(
+                                    "[DevNexus] main window wrongly iconified during \
+                                     boot grace — restoring (anti-wallpaper watchdog)"
+                                );
+                                let _ = w.unminimize();
+                                let _ = w.set_focus();
+                            }
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -423,6 +455,7 @@ pub fn run() {
             commands::island_bridge::island_media_status,
             commands::island_bridge::island_media_control,
             commands::island_bridge::island_set_sticky,
+            commands::island_bridge::island_set_input_shape,
             commands::island_bridge::island_get_hud,
             commands::island_bridge::island_get_enabled,
             commands::island_bridge::island_set_enabled,
