@@ -60,6 +60,68 @@ pub fn local_mkdir_all(path: String) -> Result<String, String> {
     Ok(p.display().to_string())
 }
 
+/// 本地目录条目（SFTP 双栏浏览器的本地侧）
+#[derive(serde::Serialize)]
+pub struct LocalEntry {
+    pub name: String,
+    pub is_dir: bool,
+    pub size: u64,
+    pub mtime: i64,
+}
+
+/// 列出本地目录内容（SFTP 双栏浏览器本地侧导航用）。
+/// 符号链接跟随其目标元数据；不可读条目跳过而非整体失败。
+#[tauri::command]
+pub fn local_list_dir(path: String) -> Result<Vec<LocalEntry>, String> {
+    let p = path_guard::validate_abs_sane_path(&path)?;
+    if !p.is_dir() {
+        return Err(format!("Not a directory: {}", p.display()));
+    }
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(&p).map_err(|e| format!("READ_DIR {}: {e}", p.display()))? {
+        let Ok(entry) = entry else { continue };
+        let Ok(meta) = entry.metadata() else { continue };
+        out.push(LocalEntry {
+            name: entry.file_name().to_string_lossy().to_string(),
+            is_dir: meta.is_dir(),
+            size: meta.len(),
+            mtime: meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0),
+        });
+    }
+    out.sort_by(|a, b| {
+        (b.is_dir as u8)
+            .cmp(&(a.is_dir as u8))
+            .then(a.name.cmp(&b.name))
+    });
+    Ok(out)
+}
+
+/// 分块读取本地二进制文件（base64 返回）。用于双栏模式下本地 → 远端上传。
+#[tauri::command]
+pub fn local_read_file_chunk(path: String, offset: u64, length: usize) -> Result<String, String> {
+    use std::io::{Read, Seek, SeekFrom};
+    const MAX_CHUNK: usize = 8 * 1024 * 1024;
+    if length == 0 || length > MAX_CHUNK {
+        return Err(format!("INVALID_LENGTH: must be in 1..={MAX_CHUNK}"));
+    }
+    let p = path_guard::validate_abs_sane_path(&path)?;
+    let mut f = std::fs::File::open(&p).map_err(|e| format!("OPEN {}: {e}", p.display()))?;
+    if offset > 0 {
+        f.seek(SeekFrom::Start(offset))
+            .map_err(|e| format!("SEEK: {e}"))?;
+    }
+    let mut buf = vec![0u8; length];
+    let n = f.read(&mut buf).map_err(|e| format!("READ: {e}"))?;
+    buf.truncate(n);
+    use base64::{engine::general_purpose, Engine as _};
+    Ok(general_purpose::STANDARD.encode(&buf))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

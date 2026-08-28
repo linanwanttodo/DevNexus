@@ -14,6 +14,10 @@ export const exportOpenSshConfig = (connIds) =>
   invoke("ssh_export_openssh_config", { connIds });
 // 本地目录创建（SFTP 目录递归下载时还原远端结构用）
 export const mkdirLocal = (path) => invoke("local_mkdir_all", { path });
+// 本地目录浏览 / 二进制分块读取（SFTP 双栏模式本地侧 → 远端上传用）
+export const listLocalDir = (path) => invoke("local_list_dir", { path });
+export const readLocalFileChunk = (path, offset, length) =>
+  invoke("local_read_file_chunk", { path, offset, length });
 
 // ---- 会话 / host key 首连确认 ----
 export const testConnection = (connectionId) =>

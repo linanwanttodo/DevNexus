@@ -368,6 +368,8 @@ pub fn run() {
             commands::local_files::local_read_text,
             commands::local_files::local_write_text,
             commands::local_files::local_mkdir_all,
+            commands::local_files::local_list_dir,
+            commands::local_files::local_read_file_chunk,
             commands::password_manager::add_password,
             commands::password_manager::list_passwords,
             commands::password_manager::get_password,

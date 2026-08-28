@@ -11,6 +11,8 @@ import {
   writeSftpFile,
   mkdirSftp,
   mkdirLocal,
+  listLocalDir,
+  readLocalFileChunk,
   renameSftp,
   deleteSftp,
   statSftp,
@@ -67,9 +69,39 @@ const loadingDir = ref(false);
 const cwd = ref("/");
 const entries = ref([]);
 
-// 传输进度：{ kind: 'up' | 'down', name, done, total }
-const transfer = ref(null);
+// ── 传输队列 ──
+// 所有上传/下载顺序执行；面板按任务独立展示进度，完成的任务几秒后自动消失。
+const transfers = ref([]); // { id, kind: 'up'|'down', name, done, total, status: 'active'|'done'|'error' }
 const CHUNK = 256 * 1024;
+let transferSeq = 0;
+let opChain = Promise.resolve(); // 串行化：避免并发 SFTP 传输争抢带宽/乱序写
+const busy = computed(() => transfers.value.some((t) => t.status === "active"));
+
+/** 加入传输队列（顺序执行）。返回响应式任务对象，op(item) 内更新 item.done */
+function enqueueTransfer(kind, name, total, op) {
+  const item = { id: ++transferSeq, kind, name, done: 0, total, status: "active" };
+  transfers.value.push(item);
+  const run = async () => {
+    try {
+      await op(item);
+      item.status = "done";
+      setTimeout(() => {
+        transfers.value = transfers.value.filter((t) => t.id !== item.id);
+      }, 4000);
+    } catch (err) {
+      item.status = "error";
+      showToast(friendlyError(err), "error");
+    }
+  };
+  opChain = opChain.then(run).catch(() => {});
+  return item;
+}
+
+// ── 本地侧（双栏模式）──
+const dualPane = ref(localStorage.getItem("ssh-sftp-dual") !== "0");
+const localCwd = ref("");
+const localEntries = ref([]);
+const localLoading = ref(false);
 
 // 输入对话框（新建文件夹 / 重命名）：{ title, value, onOk }
 const prompt = ref(null);
@@ -181,44 +213,38 @@ async function runAiAction(action) {
         await refresh();
       }
     } else if (action.action === "open" && action.path) {
-      // 尝试下载该文件（复用下载逻辑）
+      // 尝试下载该文件（复用下载队列）
       const name = action.path.split("/").pop() || action.path;
-      const total = null;
-      let local;
-      try {
-        local = await save({ defaultPath: name });
-      } catch {
-        return;
-      }
-      if (!local) return;
-      let offset = 0;
-      transfer.value = { kind: "down", name, done: 0, total: total || 0 };
-      try {
+      enqueueTransfer("down", name, 0, async (item) => {
+        let local;
+        try {
+          local = await save({ defaultPath: name });
+        } catch {
+          return;
+        }
+        if (!local) return;
+        let offset = 0;
         while (true) {
           const b64 = await readSftpFile(sftpId.value, action.path, offset, CHUNK);
           const bytes = b64ToBytes(b64);
           if (bytes.length === 0) break;
           await invoke("sftp_write_local_chunk", {
-        path: local,
-        dataB64: bytesToBase64(bytes),
-        append: offset > 0,
-      });
+            path: local,
+            dataB64: bytesToBase64(bytes),
+            append: offset > 0,
+          });
           offset += bytes.length;
-          transfer.value.done = offset;
+          item.done = offset;
+          item.total = Math.max(item.total, offset);
         }
         showToast(t("ssh.download") + " ✓ " + name, "success");
-      } catch (err) {
-        showToast(friendlyError(err), "error");
-      } finally {
-        transfer.value = null;
-      }
+      });
     }
   } catch (err) {
     showToast(friendlyError(err), "error");
   }
 }
 
-const busy = computed(() => transfer.value !== null);
 const sortedEntries = computed(() =>
   [...entries.value].sort((a, b) => {
     if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
@@ -275,6 +301,7 @@ async function connect() {
     sftpId.value = await openSftp(connId.value);
     await cd("/");
     touchConnection(connId.value).catch(() => {}); // 记录最近使用时间
+    if (dualPane.value && !localCwd.value) openLocalHome();
   } catch (err) {
     sftpId.value = null;
     showToast(friendlyError(err), "error");
@@ -317,22 +344,20 @@ async function refresh() {
   if (sftpId.value && !busy.value) await cd(cwd.value);
 }
 
-async function download(entry) {
-  if (busy.value || entry.is_dir) return;
+function download(entry) {
+  if (busy.value || entry.is_dir || !sftpId.value) return;
   const remote = join(cwd.value, entry.name);
-  let local;
-  try {
-    local = await save({ defaultPath: entry.name });
-  } catch {
-    return; // 对话框失败/取消
-  }
-  if (!local) return;
+  enqueueTransfer("down", entry.name, entry.size, async (item) => {
+    let local;
+    try {
+      local = await save({ defaultPath: entry.name });
+    } catch {
+      return; // 对话框失败/取消
+    }
+    if (!local) return;
 
-  const total = entry.size;
-  let offset = 0;
-  transfer.value = { kind: "down", name: entry.name, done: 0, total };
-  try {
-    while (offset < total) {
+    let offset = 0;
+    while (offset < item.total) {
       const b64 = await readSftpFile(sftpId.value, remote, offset, CHUNK);
       const bytes = b64ToBytes(b64);
       if (bytes.length === 0) break; // 提前 EOF（文件被截断）
@@ -342,17 +367,13 @@ async function download(entry) {
         append: offset > 0,
       });
       offset += bytes.length;
-      transfer.value.done = offset;
+      item.done = offset;
     }
     showToast(t("ssh.download") + " ✓ " + entry.name, "success");
-  } catch (err) {
-    showToast(friendlyError(err), "error");
-  } finally {
-    transfer.value = null;
-  }
+  });
 }
 
-// ── 目录递归下载 ──
+// ── 目录递归下载（远端 → 本地选目录）──
 // 先遍历远端目录树收集文件清单，再逐个分块下载到本地并还原目录结构。
 // 进度按累计字节数展示（total = 清单内所有文件大小之和）。
 async function walkRemote(dir, acc) {
@@ -368,26 +389,24 @@ async function walkRemote(dir, acc) {
   }
 }
 
-async function downloadDir(entry) {
-  if (busy.value) return;
-  let localRoot;
-  try {
-    localRoot = await openDialog({ directory: true, title: t("ssh.download_folder") });
-  } catch {
-    return; // 对话框失败/取消
-  }
-  if (!localRoot) return;
+function downloadDir(entry) {
+  if (busy.value || !sftpId.value) return;
+  enqueueTransfer("down", entry.name + "/", 0, async (item) => {
+    let localRoot;
+    try {
+      localRoot = await openDialog({ directory: true, title: t("ssh.download_folder") });
+    } catch {
+      return; // 对话框失败/取消
+    }
+    if (!localRoot) return;
 
-  const root = join(cwd.value, entry.name);
-  const base = localRoot.endsWith("/") ? localRoot.slice(0, -1) : localRoot;
-  const localDir = `${base}/${entry.name}`;
-  transfer.value = { kind: "down", name: entry.name, done: 0, total: 0 };
-  try {
+    const root = join(cwd.value, entry.name);
+    const base = localRoot.endsWith("/") ? localRoot.slice(0, -1) : localRoot;
+    const localDir = `${base}/${entry.name}`;
     const files = [];
     await walkRemote(root, files);
-    transfer.value.total = files.reduce((s, f) => s + f.size, 0);
+    item.total = files.reduce((s, f) => s + f.size, 0);
     await mkdirLocal(localDir); // 远端根目录本身也建一份，保持所选名字一致
-    let done = 0;
     for (const f of files) {
       // 相对远端根的路径 → 本地目标路径（POSIX 风格两端一致）
       const rel = f.remote.slice(root.length + 1);
@@ -405,43 +424,240 @@ async function downloadDir(entry) {
           append: offset > 0,
         });
         offset += bytes.length;
-        done += bytes.length;
-        transfer.value.done = done;
+        item.done += bytes.length;
       }
     }
     showToast(t("ssh.download") + " ✓ " + entry.name, "success");
+  });
+}
+
+// ── 本地侧导航（双栏模式）──
+async function cdLocal(p) {
+  localLoading.value = true;
+  try {
+    localEntries.value = await listLocalDir(p);
+    localCwd.value = p;
   } catch (err) {
     showToast(friendlyError(err), "error");
   } finally {
-    transfer.value = null;
+    localLoading.value = false;
+  }
+}
+function goUpLocal() {
+  if (localCwd.value && localCwd.value !== "/") cdLocal(parentOf(localCwd.value));
+}
+function refreshLocal() {
+  if (localCwd.value) cdLocal(localCwd.value);
+}
+function enterLocal(e) {
+  if (e.is_dir && localCwd.value) cdLocal(join(localCwd.value, e.name));
+}
+function openLocalHome() {
+  // 初始打开本机主目录（不可用时回退根目录）
+  import("@tauri-apps/api/path")
+    .then((m) => m.homeDir())
+    .then((h) => cdLocal(h || "/"))
+    .catch(() => cdLocal("/"));
+}
+function toggleDualPane() {
+  dualPane.value = !dualPane.value;
+  localStorage.setItem("ssh-sftp-dual", dualPane.value ? "1" : "0");
+  if (dualPane.value && !localCwd.value) openLocalHome();
+}
+const localCrumbs = computed(() => {
+  if (!localCwd.value) return [];
+  const parts = localCwd.value.split("/").filter(Boolean);
+  const out = [{ name: "/", path: "/" }];
+  let acc = "";
+  for (const p of parts) {
+    acc += "/" + p;
+    out.push({ name: p, path: acc });
+  }
+  return out;
+});
+const localSorted = computed(() =>
+  [...localEntries.value].sort((a, b) => {
+    if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  })
+);
+
+// ── 跨栏拖拽（远端行 ⇄ 本地栏）──
+function onRemoteDragStart(ev, e) {
+  ev.dataTransfer.setData(
+    "text/ssh-remote",
+    JSON.stringify({ path: join(cwd.value, e.name), is_dir: e.is_dir, name: e.name, size: e.size })
+  );
+  ev.dataTransfer.effectAllowed = "copy";
+}
+function onLocalDragStart(ev, e) {
+  ev.dataTransfer.setData(
+    "text/ssh-local",
+    JSON.stringify({ path: join(localCwd.value, e.name), is_dir: e.is_dir, name: e.name, size: e.size })
+  );
+  ev.dataTransfer.effectAllowed = "copy";
+}
+function onDropToLocal(e) {
+  const data = e.dataTransfer?.getData("text/ssh-remote");
+  if (!data || !localCwd.value) return;
+  try {
+    downloadTo(JSON.parse(data), localCwd.value);
+  } catch {
+    // 非法数据忽略
   }
 }
 
-async function upload(file) {
+/** 下载远端条目到指定本地目录（双栏拖拽用，无对话框）。目录递归还原结构。 */
+function downloadTo(info, localDir) {
+  if (busy.value || !sftpId.value) return;
+  if (info.is_dir) {
+    enqueueTransfer("down", info.name + "/", 0, async (item) => {
+      const root = info.path;
+      const base = localDir.endsWith("/") ? localDir.slice(0, -1) : localDir;
+      const localD = `${base}/${info.name}`;
+      const files = [];
+      const walk = async (dir) => {
+        const list = await listSftpDir(sftpId.value, dir);
+        for (const e2 of list) {
+          if (e2.name === "." || e2.name === "..") continue;
+          const rp = join(dir, e2.name);
+          if (e2.is_dir) await walk(rp);
+          else files.push({ remote: rp, size: e2.size });
+        }
+      };
+      await walk(root);
+      item.total = files.reduce((s, f) => s + f.size, 0);
+      await mkdirLocal(localD);
+      for (const f of files) {
+        const rel = f.remote.slice(root.length + 1);
+        const localPath = `${localD}/${rel}`;
+        const parent = localPath.slice(0, localPath.lastIndexOf("/"));
+        await mkdirLocal(parent);
+        let offset = 0;
+        while (offset < f.size) {
+          const b64 = await readSftpFile(sftpId.value, f.remote, offset, CHUNK);
+          const bytes = b64ToBytes(b64);
+          if (bytes.length === 0) break;
+          await invoke("sftp_write_local_chunk", {
+            path: localPath,
+            dataB64: bytesToBase64(bytes),
+            append: offset > 0,
+          });
+          offset += bytes.length;
+          item.done += bytes.length;
+        }
+      }
+      showToast(t("ssh.download") + " ✓ " + info.name, "success");
+    });
+    return;
+  }
+  enqueueTransfer("down", info.name, info.size || 0, async (item) => {
+    const base = localDir.endsWith("/") ? localDir.slice(0, -1) : localDir;
+    const localPath = `${base}/${info.name}`;
+    let offset = 0;
+    while (true) {
+      const b64 = await readSftpFile(sftpId.value, info.path, offset, CHUNK);
+      const bytes = b64ToBytes(b64);
+      if (bytes.length === 0) break;
+      await invoke("sftp_write_local_chunk", {
+        path: localPath,
+        dataB64: bytesToBase64(bytes),
+        append: offset > 0,
+      });
+      offset += bytes.length;
+      item.done = offset;
+      item.total = Math.max(item.total, offset);
+    }
+    refreshLocal();
+    showToast(t("ssh.download") + " ✓ " + info.name, "success");
+  });
+}
+
+function upload(file) {
   if (busy.value) return;
-  const data = new Uint8Array(await file.arrayBuffer());
-  const remote = join(cwd.value, file.name);
-  const total = data.byteLength;
-  transfer.value = { kind: "up", name: file.name, done: 0, total };
-  try {
+  const total = file.size;
+  enqueueTransfer("up", file.name, total, async (item) => {
+    const data = new Uint8Array(await file.arrayBuffer());
+    const remote = join(cwd.value, file.name);
     let offset = 0;
     while (offset < total) {
       const chunk = data.subarray(offset, offset + CHUNK);
       await writeSftpFile(sftpId.value, remote, bytesToBase64(chunk), offset);
       offset += chunk.length;
-      transfer.value.done = offset;
+      item.done = offset;
     }
     showToast(t("ssh.upload") + " ✓ " + file.name, "success");
     await refresh();
-  } catch (err) {
-    showToast(friendlyError(err), "error");
-  } finally {
-    transfer.value = null;
-  }
+  });
+}
+
+/** 本地路径 → 远端当前目录（双栏模式：本地行拖到远程栏 / 双击上传按钮）。
+ *  文件分块读取上传；目录先递归收集清单，远端 mkdir + 逐文件写入。 */
+function uploadFromLocal(localPath, isDir, name) {
+  if (busy.value || !sftpId.value) return;
+  const remoteRoot = join(cwd.value, name);
+  enqueueTransfer("up", name, 0, async (item) => {
+    const files = [];
+    if (isDir) {
+      const walk = async (dir) => {
+        const list = await listLocalDir(dir);
+        for (const e of list) {
+          const p = `${dir.endsWith("/") ? dir.slice(0, -1) : dir}/${e.name}`;
+          if (e.is_dir) await walk(p);
+          else files.push({ path: p, size: e.size });
+        }
+      };
+      await walk(localPath);
+      item.total = files.reduce((s, f) => s + f.size, 0);
+      await mkdirSftp(sftpId.value, remoteRoot);
+      for (const f of files) {
+        const rel = f.path.slice(localPath.length + 1);
+        const remotePath = `${remoteRoot}/${rel}`;
+        const parent = remotePath.slice(0, remotePath.lastIndexOf("/"));
+        await mkdirSftp(sftpId.value, parent);
+        let offset = 0;
+        while (offset < f.size) {
+          const b64 = await readLocalFileChunk(f.path, offset, CHUNK);
+          const bytes = b64ToBytes(b64);
+          if (bytes.length === 0) break;
+          await writeSftpFile(sftpId.value, remotePath, bytesToBase64(bytes), offset);
+          offset += bytes.length;
+          item.done += bytes.length;
+        }
+      }
+    } else {
+      const st = await statSftp(sftpId.value, remoteRoot).catch(() => null);
+      item.total = st ? st.size : 0;
+      let offset = 0;
+      while (true) {
+        const b64 = await readLocalFileChunk(localPath, offset, CHUNK);
+        const bytes = b64ToBytes(b64);
+        if (bytes.length === 0) break;
+        await writeSftpFile(sftpId.value, remoteRoot, bytesToBase64(bytes), offset);
+        offset += bytes.length;
+        item.done = offset;
+        item.total = Math.max(item.total, offset);
+      }
+    }
+    showToast(t("ssh.upload") + " ✓ " + name, "success");
+    await refresh();
+  });
 }
 
 function onDrop(e) {
-  if (!sftpId.value || busy.value) return;
+  if (!sftpId.value) return;
+  // 1) 本地侧（双栏）拖入的条目 → 上传到远端当前目录
+  const localData = e.dataTransfer?.getData("text/ssh-local");
+  if (localData) {
+    try {
+      const info = JSON.parse(localData);
+      uploadFromLocal(info.path, !!info.is_dir, info.name);
+    } catch {
+      // 非法数据忽略
+    }
+    return;
+  }
+  // 2) 操作系统拖入的文件 → 逐个入队上传
   const files = [...(e.dataTransfer?.files || [])];
   for (const f of files) upload(f);
 }
@@ -617,11 +833,9 @@ async function onHostkeyReject() {
   }
 }
 
-const transferPercent = computed(() =>
-  transfer.value && transfer.value.total > 0
-    ? Math.round((transfer.value.done / transfer.value.total) * 100)
-    : 0
-);
+function transferPercent(item) {
+  return item && item.total > 0 ? Math.round((item.done / item.total) * 100) : 0;
+}
 
 onMounted(async () => {
   unlistenHostkey = await onHostkeyPrompt((p) => {
@@ -668,6 +882,16 @@ onBeforeUnmount(() => {
           <AppIcon name="close-circle-fill" class="size-4" />
           {{ t("ssh.disconnect") }}
         </Button>
+        <Button
+          variant="outline"
+          :title="t('ssh.dual_pane')"
+          :class="{ 'bg-accent': dualPane }"
+          :disabled="!sftpId"
+          @click="toggleDualPane"
+        >
+          <AppIcon name="monitor" class="size-4" />
+          {{ t("ssh.dual_pane") }}
+        </Button>
       </div>
     </div>
 
@@ -686,6 +910,80 @@ onBeforeUnmount(() => {
 
     <!-- 文件浏览器 -->
     <div v-else class="sftp-ai-layout">
+      <!-- 本地侧（双栏模式） -->
+      <Card
+        v-if="dualPane"
+        class="shadow-sm local-pane flex-1 min-w-0"
+        @dragover.prevent
+        @drop.prevent="onDropToLocal"
+      >
+        <CardContent class="p-0">
+          <div class="sftp-toolbar">
+            <span class="local-tag">{{ t("ssh.local_pane") }}</span>
+            <div class="crumbs">
+              <template v-for="(crumb, i) in localCrumbs" :key="crumb.path">
+                <button type="button" class="crumb" @click="cdLocal(crumb.path)">
+                  {{ crumb.name === "/" ? " / " : crumb.name }}
+                </button>
+                <span v-if="i < localCrumbs.length - 1" class="crumb-sep">/</span>
+              </template>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <Button size="sm" variant="ghost" :title="t('ssh.up')" @click="goUpLocal">
+                <AppIcon name="arrow-up" class="size-4" />
+              </Button>
+              <Button size="sm" variant="ghost" :title="t('ssh.home_dir')" @click="openLocalHome">
+                <AppIcon name="monitor" class="size-4" />
+              </Button>
+              <Button size="sm" variant="ghost" :title="t('ssh.refresh')" @click="refreshLocal">
+                <AppIcon name="refresh" class="size-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div v-if="localLoading" class="flex justify-center py-10">
+            <Spinner />
+          </div>
+          <Empty v-else-if="localEntries.length === 0" class="py-10">
+            <EmptyContent>
+              <EmptyDescription>{{ t("ssh.empty_dir") }}</EmptyDescription>
+            </EmptyContent>
+          </Empty>
+          <Table v-else>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{{ t("ssh.name") }}</TableHead>
+                <TableHead class="w-[110px]">{{ t("ssh.size") }}</TableHead>
+                <TableHead class="w-[180px]">{{ t("ssh.modified") }}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="e in localSorted"
+                :key="e.name"
+                class="entry-row"
+                :class="{ dir: e.is_dir }"
+                draggable="true"
+                @dblclick="enterLocal(e)"
+                @dragstart="onLocalDragStart($event, e)"
+              >
+                <TableCell>
+                  <div class="flex items-center gap-2">
+                    <AppIcon :name="e.is_dir ? 'folder' : 'file'" class="size-4 opacity-60" />
+                    <span>{{ e.name }}</span>
+                  </div>
+                </TableCell>
+                <TableCell class="text-muted-foreground text-xs">
+                  {{ e.is_dir ? "-" : humanSize(e.size) }}
+                </TableCell>
+                <TableCell class="text-muted-foreground text-xs">{{ fmtTime(e.mtime) }}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <!-- 远程侧 -->
       <Card class="shadow-sm drop-zone flex-1 min-w-0" @dragover.prevent @drop.prevent="onDrop">
       <CardContent class="p-0">
         <!-- 工具栏 -->
@@ -748,7 +1046,9 @@ onBeforeUnmount(() => {
               :key="e.name"
               class="entry-row"
               :class="{ dir: e.is_dir }"
+              draggable="true"
               @dblclick="enter(e)"
+              @dragstart="onRemoteDragStart($event, e)"
             >
               <TableCell>
                 <span class="entry-name" @click="enter(e)">
@@ -883,15 +1183,25 @@ onBeforeUnmount(() => {
     </aside>
   </div>
 
-    <!-- 传输进度 -->
-    <div v-if="transfer" class="transfer-bar">
-      <AppIcon :name="transfer.kind === 'up' ? 'upload' : 'download'" class="size-4 shrink-0" />
-      <span class="transfer-name">{{ transfer.name }}</span>
-      <span class="transfer-kind">
-        {{ transfer.kind === "up" ? t("ssh.uploading") : t("ssh.downloading") }}
-      </span>
-      <Progress :model-value="transferPercent" class="flex-1" />
-      <span class="transfer-pct">{{ transferPercent }}%</span>
+    <!-- 传输队列 -->
+    <div v-if="transfers.length" class="transfer-bar">
+      <div v-for="item in transfers" :key="item.id" class="transfer-item">
+        <AppIcon :name="item.kind === 'up' ? 'upload' : 'download'" class="size-4 shrink-0" />
+        <span class="transfer-name">{{ item.name }}</span>
+        <span class="transfer-kind">
+          {{ item.status === "error"
+            ? t("ssh.transfer_failed")
+            : item.status === "done"
+              ? "✓"
+              : item.kind === "up"
+                ? t("ssh.uploading")
+                : t("ssh.downloading") }}
+        </span>
+        <Progress :model-value="transferPercent(item)" class="flex-1" />
+        <span class="transfer-pct">
+          {{ item.status === "error" ? "✗" : transferPercent(item) + "%" }}
+        </span>
+      </div>
     </div>
 
     <!-- 新建文件夹 / 重命名 -->
@@ -1107,13 +1417,37 @@ onBeforeUnmount(() => {
   bottom: 8px;
   margin-top: 12px;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 14px;
   border-radius: 8px;
   border: 1px solid var(--color-border);
   background-color: var(--color-card);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* 队列中的单个传输任务 */
+.transfer-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 双栏模式：本地侧标识 */
+.local-tag {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-muted-foreground, #888);
+  background: var(--color-accent, rgba(127, 127, 127, 0.15));
+}
+
+.local-pane :deep(.crumbs) {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .transfer-name {
