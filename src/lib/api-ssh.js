@@ -12,6 +12,8 @@ export const touchConnection = (id) => invoke("ssh_touch_connection", { id });
 export const importOpenSshConfig = () => invoke("ssh_import_open_ssh_config");
 export const exportOpenSshConfig = (connIds) =>
   invoke("ssh_export_openssh_config", { connIds });
+// 本地目录创建（SFTP 目录递归下载时还原远端结构用）
+export const mkdirLocal = (path) => invoke("local_mkdir_all", { path });
 
 // ---- 会话 / host key 首连确认 ----
 export const testConnection = (connectionId) =>
@@ -35,6 +37,7 @@ export const closeTerminal = (sessionId) =>
 // ---- SFTP ----
 export const openSftp = (connectionId) =>
   invoke("ssh_sftp_open", { connectionId });
+export const closeSftp = (sftpId) => invoke("ssh_sftp_close", { sftpId });
 export const listSftpDir = (sftpId, path) =>
   invoke("ssh_sftp_list_dir", { sftpId, path });
 export const readSftpFile = (sftpId, path, offset, length) =>

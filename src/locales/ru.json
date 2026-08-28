@@ -745,6 +745,8 @@
     "open_terminal": "Открыть терминал",
     "upload": "Загрузить",
     "download": "Скачать",
+    "download_folder": "Скачать папку",
+    "invalid_path": "Недопустимый путь",
     "refresh": "Обновить",
     "new_folder": "Новая папка",
     "rename": "Переименовать",

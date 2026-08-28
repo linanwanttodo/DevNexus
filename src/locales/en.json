@@ -745,6 +745,8 @@
     "open_terminal": "Open Terminal",
     "upload": "Upload",
     "download": "Download",
+    "download_folder": "Download folder",
+    "invalid_path": "Invalid path",
     "refresh": "Refresh",
     "new_folder": "New Folder",
     "rename": "Rename",

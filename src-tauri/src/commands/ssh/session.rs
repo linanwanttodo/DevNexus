@@ -311,6 +311,18 @@ impl SshSessionManager {
         }
         None
     }
+
+    /// 按 ID 移除并关闭 SFTP 通道（不影响 SSH 会话本身，同连接的终端继续可用）
+    pub async fn remove_sftp(&self, sftp_id: &str) -> bool {
+        let sessions = self.sessions.lock().await;
+        for entry in sessions.values() {
+            let mut map = entry.sftp_sessions.lock().await;
+            if map.remove(sftp_id).is_some() {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 /// 通过跳板机建立到目标的 SSH 传输层（ProxyJump 单跳）。

@@ -1,14 +1,16 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, save } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import {
   listConnections,
   openSftp,
+  closeSftp,
   listSftpDir,
   readSftpFile,
   writeSftpFile,
   mkdirSftp,
+  mkdirLocal,
   renameSftp,
   deleteSftp,
   statSftp,
@@ -16,6 +18,7 @@ import {
   copyRecursiveSftp,
   rmRecursiveSftp,
   searchSftp,
+  touchConnection,
   onHostkeyPrompt,
   acceptHostkey,
   rejectHostkey,
@@ -154,13 +157,13 @@ async function runAiAction(action) {
   try {
     if (action.action === "navigate" && action.path) {
       if (!isValidRemotePath(action.path)) {
-        showToast(t('ssh.invalid_path') || 'Invalid path', 'error');
+        showToast(t("ssh.invalid_path"), "error");
         return;
       }
       await cd(action.path);
     } else if (action.action === "rename" && action.from && action.to) {
       if (!isValidRemotePath(action.from) || !isValidRemotePath(action.to)) {
-        showToast(t('ssh.invalid_path') || 'Invalid path', 'error');
+        showToast(t("ssh.invalid_path"), "error");
         return;
       }
       if (await showConfirm(tFormat("ssh.rename_confirm", { from: action.from, to: action.to, name: action.from }))) {
@@ -169,7 +172,7 @@ async function runAiAction(action) {
       }
     } else if (action.action === "delete" && action.path) {
       if (!isValidRemotePath(action.path)) {
-        showToast(t('ssh.invalid_path') || 'Invalid path', 'error');
+        showToast(t("ssh.invalid_path"), "error");
         return;
       }
       // 完整路径展示，防止 basename 误导（如删除 /）
@@ -271,6 +274,7 @@ async function connect() {
   try {
     sftpId.value = await openSftp(connId.value);
     await cd("/");
+    touchConnection(connId.value).catch(() => {}); // 记录最近使用时间
   } catch (err) {
     sftpId.value = null;
     showToast(friendlyError(err), "error");
@@ -280,8 +284,10 @@ async function connect() {
 }
 
 async function disconnect() {
-  // 后端暂无 ssh_sftp_close：SFTP 句柄随 SSH 会话生命周期回收，
-  // 这里仅丢弃前端引用（不能调 ssh_close——会误杀同连接的终端会话）
+  // 主动关闭后端 SFTP 通道（仅 SFTP，不影响同连接的终端会话）
+  if (sftpId.value) {
+    closeSftp(sftpId.value).catch(() => {});
+  }
   sftpId.value = null;
   entries.value = [];
   cwd.value = "/";
@@ -337,6 +343,71 @@ async function download(entry) {
       });
       offset += bytes.length;
       transfer.value.done = offset;
+    }
+    showToast(t("ssh.download") + " ✓ " + entry.name, "success");
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  } finally {
+    transfer.value = null;
+  }
+}
+
+// ── 目录递归下载 ──
+// 先遍历远端目录树收集文件清单，再逐个分块下载到本地并还原目录结构。
+// 进度按累计字节数展示（total = 清单内所有文件大小之和）。
+async function walkRemote(dir, acc) {
+  const list = await listSftpDir(sftpId.value, dir);
+  for (const e of list) {
+    if (e.name === "." || e.name === "..") continue;
+    const remote = join(dir, e.name);
+    if (e.is_dir) {
+      await walkRemote(remote, acc);
+    } else {
+      acc.push({ remote, size: e.size });
+    }
+  }
+}
+
+async function downloadDir(entry) {
+  if (busy.value) return;
+  let localRoot;
+  try {
+    localRoot = await openDialog({ directory: true, title: t("ssh.download_folder") });
+  } catch {
+    return; // 对话框失败/取消
+  }
+  if (!localRoot) return;
+
+  const root = join(cwd.value, entry.name);
+  const base = localRoot.endsWith("/") ? localRoot.slice(0, -1) : localRoot;
+  const localDir = `${base}/${entry.name}`;
+  transfer.value = { kind: "down", name: entry.name, done: 0, total: 0 };
+  try {
+    const files = [];
+    await walkRemote(root, files);
+    transfer.value.total = files.reduce((s, f) => s + f.size, 0);
+    await mkdirLocal(localDir); // 远端根目录本身也建一份，保持所选名字一致
+    let done = 0;
+    for (const f of files) {
+      // 相对远端根的路径 → 本地目标路径（POSIX 风格两端一致）
+      const rel = f.remote.slice(root.length + 1);
+      const localPath = `${localDir}/${rel}`;
+      const parent = localPath.slice(0, localPath.lastIndexOf("/"));
+      await mkdirLocal(parent);
+      let offset = 0;
+      while (offset < f.size) {
+        const b64 = await readSftpFile(sftpId.value, f.remote, offset, CHUNK);
+        const bytes = b64ToBytes(b64);
+        if (bytes.length === 0) break; // 提前 EOF
+        await invoke("sftp_write_local_chunk", {
+          path: localPath,
+          dataB64: bytesToBase64(bytes),
+          append: offset > 0,
+        });
+        offset += bytes.length;
+        done += bytes.length;
+        transfer.value.done = done;
+      }
     }
     showToast(t("ssh.download") + " ✓ " + entry.name, "success");
   } catch (err) {
@@ -719,12 +790,11 @@ onBeforeUnmount(() => {
                   <AppIcon name="move" class="size-3.5" />
                 </Button>
                 <Button
-                  v-if="!e.is_dir"
                   size="icon-sm"
                   variant="ghost"
-                  :title="t('ssh.download')"
+                  :title="e.is_dir ? t('ssh.download_folder') : t('ssh.download')"
                   :disabled="busy"
-                  @click="download(e)"
+                  @click="e.is_dir ? downloadDir(e) : download(e)"
                 >
                   <AppIcon name="download" class="size-4" />
                 </Button>

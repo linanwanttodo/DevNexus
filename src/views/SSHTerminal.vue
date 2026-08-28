@@ -11,6 +11,7 @@ import {
   sendTerminalInput,
   resizeTerminal,
   closeTerminal,
+  touchConnection,
   onTerminalOutput,
   onTerminalClosed,
   onHostkeyPrompt,
@@ -313,6 +314,7 @@ async function openTab(connectionId) {
     tab.fit = fit;
     tab.search = search;
     tab.status = "live";
+    touchConnection(connectionId).catch(() => {}); // 记录最近使用时间
     term.onData((d) => {
       sendTerminalInput(sessionId, toBase64(d)).catch(() => {});
     });
@@ -353,25 +355,20 @@ function reconnect(tab) {
   void name;
 }
 
-/** 读取 xterm scrollback 为纯文本（分块遍历行），用于会话历史持久化 */
+/** 读取 xterm scrollback 为纯文本（分块遍历行），用于会话历史持久化。
+ *  只用公共 API（IBufferLine.translateToString），不碰 _line 私有字段，
+ *  避免 xterm 升级后 silently 损坏历史保留。 */
 function scrollbackText(term) {
   if (!term || !term.buffer) return "";
   const buf = term.buffer.active;
   const rows = buf.length;
-  const cols = buf.cols;
   const lines = [];
   const max = Math.min(rows, 4000); // 限制内存
   for (let i = Math.max(0, rows - max); i < rows; i++) {
     const line = buf.getLine(i);
     if (!line) continue;
-    const cell = line._line;
-    if (cell && typeof cell.translateToString === "function") {
-      lines.push(cell.translateToString(false));
-    } else {
-      lines.push(line.translateToString(false));
-    }
+    lines.push(line.translateToString(false));
   }
-  void cols;
   return lines.join("\n");
 }
 

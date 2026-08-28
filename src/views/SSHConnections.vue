@@ -219,14 +219,27 @@ async function onConfirmImport() {
   let imported = 0;
   for (const h of selectedHosts) {
     try {
+      // 识别认证类型：config 带 IdentityFile → 私钥认证，并尝试自动读取私钥内容；
+      // 读取失败（文件不存在等）仍标记为私钥，secret 留空由用户编辑补充
+      let authType = "password";
+      let secret = "";
+      if (h.identity_file) {
+        authType = "private_key";
+        try {
+          const content = await invoke("local_read_text", { path: h.identity_file });
+          if (content.trim()) secret = content;
+        } catch {
+          // 私钥文件不可读（如远端路径/Windows 路径），保持 secret 为空
+        }
+      }
       await saveConnection({
         id: null,
         name: h.host,
         host: h.host_name || h.host,
         port: h.port || 22,
         username: h.user || "",
-        auth_type: "password",
-        secret: "",
+        auth_type: authType,
+        secret,
         key_passphrase: null,
         group: null,
         tags: ["imported"],

@@ -126,6 +126,19 @@ pub async fn ssh_sftp_open(
     Ok(sftp_id)
 }
 
+/// 关闭单个 SFTP 通道（不影响 SSH 会话本身，同连接的终端继续可用）
+#[tauri::command]
+pub async fn ssh_sftp_close(
+    manager: tauri::State<'_, SshSessionManager>,
+    sftp_id: String,
+) -> Result<(), String> {
+    if manager.remove_sftp(&sftp_id).await {
+        Ok(())
+    } else {
+        Err(format!("NO_SFTP: {sftp_id}"))
+    }
+}
+
 #[tauri::command]
 pub async fn ssh_sftp_list_dir(
     manager: tauri::State<'_, SshSessionManager>,

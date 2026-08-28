@@ -16,6 +16,8 @@ use tauri::State;
 
 /// 危险命令前缀/关键字：命中需用户确认后才执行。
 /// 参考 DevSecOps 规范：破坏性/提权/不可逆操作需二次确认。
+/// 注意保持低误报：`mv`/`curl`/`wget`/`nohup`/裸 `>` 重定向等日常操作
+/// 不再列入（重定向到绝对路径/设备由 contains_redirection 单独拦截）。
 const DANGEROUS_PATTERNS: &[&str] = &[
     "rm ",
     "rm -",
@@ -32,16 +34,13 @@ const DANGEROUS_PATTERNS: &[&str] = &[
     "su ",
     "chmod 777",
     "chown",
-    "mv ",
     ":(){",
     "chroot",
-    ">",
-    ">|",
-    "curl ",
-    "wget ",
-    "nohup",
-    "systemctl",
-    "service ",
+    "systemctl stop",
+    "systemctl restart",
+    "systemctl disable",
+    "systemctl isolate",
+    "systemctl kill",
     "apt ",
     "apt-get",
     "yum ",
@@ -58,14 +57,12 @@ const DANGEROUS_PATTERNS: &[&str] = &[
     "rm -fr",
     "find . -delete",
     "find / -delete",
-    "> /dev/sda",
     "mkfs.ext",
     "mkfs.xfs",
     "fdisk",
     "parted",
     "iptables -F",
     "ufw disable",
-    "systemctl disable --now",
     "passwd -d",
     "userdel",
     "groupdel",
@@ -78,9 +75,6 @@ const DANGEROUS_PATTERNS: &[&str] = &[
     "rmdir /s",
     "git clean -fdx",
     "chmod -R 777",
-    "echo > ",
-    "touch /proc/sys",
-    "echo 0 > /proc/sys",
 ];
 
 /// 判断一条命令是否危险（需确认）。
@@ -101,8 +95,8 @@ pub fn is_dangerous(cmd: &str) -> bool {
     let lower = normalized.to_lowercase();
     let trimmed = lower.trim();
 
-    // 1) 直接危险前缀/子串：DANGEROUS_PATTERNS 中既有前缀型(rm / sudo)也有包含型(> / $())
-    //    统一按子串检查，但对极短模式(如 ">" / "mv ")要求词边界，避免过度误判
+    // 1) 直接危险前缀/子串：统一按子串检查，短模式（≤2 字符）要求词边界，
+    //    避免过度误判（当前模式表最短为 3 字符，此分支为防御性保留）
     for p in DANGEROUS_PATTERNS {
         let pat = p.to_lowercase();
         if pat.len() <= 2 {
@@ -112,13 +106,6 @@ pub fn is_dangerous(cmd: &str) -> bool {
                 || trimmed.contains(&format!(" {pat}"))
                 || trimmed.contains(&pat) && is_short_pattern_hit(trimmed, &pat)
             {
-                // 对 ">" 这类符号：仅当重定向到绝对路径或设备时才算危险
-                if pat == ">" || pat == ">|" {
-                    if contains_redirection(trimmed) {
-                        return true;
-                    }
-                    continue;
-                }
                 return true;
             }
         } else if trimmed.contains(&pat) {
@@ -178,7 +165,10 @@ fn is_short_pattern_hit(haystack: &str, pat: &str) -> bool {
 }
 
 fn contains_redirection(s: &str) -> bool {
-    // 检测 `> /`, `>>`, `>|`, `> /dev`, `1>`, `2>` 等重定向到绝对路径/设备
+    // 检测重定向到**绝对路径**（`> /etc/...`、`> /dev/sda`、`2> /proc/...`）——
+    // 写系统路径/设备才是真正危险的操作。
+    // 减少误报：`2>/dev/null`（日常必备）、`> log.txt`（相对路径，写当前目录）
+    // 不再标记。`/dev/sda` 等设备不在白名单内，仍然拦截。
     let bytes = s.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
@@ -192,16 +182,12 @@ fn contains_redirection(s: &str) -> bool {
             while j < bytes.len() && bytes[j] == b' ' {
                 j += 1;
             }
-            if j < bytes.len()
-                && (bytes[j] == b'/'
-                    || (j + 1 < bytes.len() && bytes[j].is_ascii_digit() && bytes[j + 1] == b'>'))
-            {
-                return true;
-            }
-            // `> /dev/sda` 等已覆盖；裸 `> file` 在当前目录也可能危险，保守标记
-            if j < bytes.len() && bytes[j] != b' ' && bytes[j] != b';' && bytes[j] != b'&' {
-                // 有目标文件名，视为重定向
-                return true;
+            if j < bytes.len() && bytes[j] == b'/' {
+                // 绝对路径目标：仅放行 /dev/null，其余一律视为危险
+                let rest = s[j..].to_lowercase();
+                if !rest.starts_with("/dev/null") {
+                    return true;
+                }
             }
         }
         i += 1;
@@ -804,7 +790,15 @@ mod tests {
         assert!(is_dangerous("echo hello > /etc/passwd"));
         assert!(is_dangerous("cat a > /tmp/out"));
         assert!(is_dangerous("echo hi >> /var/log/x"));
+        assert!(is_dangerous("dd if=/dev/zero of=/dev/sda"));
         assert!(!is_dangerous("echo hello"));
+        // 误报修复：日常无害用法不再标记
+        assert!(!is_dangerous("ls -lah > out.txt"));
+        assert!(!is_dangerous("systemctl status nginx 2>/dev/null"));
+        assert!(!is_dangerous("curl ifconfig.me"));
+        assert!(!is_dangerous("wget -qO- example.com"));
+        assert!(!is_dangerous("mv a.txt b.txt"));
+        assert!(!is_dangerous("nohup ./server &"));
     }
 
     #[test]

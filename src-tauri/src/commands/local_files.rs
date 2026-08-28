@@ -51,6 +51,15 @@ pub fn local_write_text(path: String, content: String) -> Result<String, String>
     Ok(p.display().to_string())
 }
 
+/// 创建本地目录（含父目录）。用于 SFTP 目录递归下载时在用户选择的目标目录下
+/// 还原远端目录结构（目标根目录来自系统目录对话框，子目录由前端按远端结构拼接）。
+#[tauri::command]
+pub fn local_mkdir_all(path: String) -> Result<String, String> {
+    let p = path_guard::validate_abs_sane_path(&path)?;
+    std::fs::create_dir_all(&p).map_err(|e| format!("Failed to create {}: {e}", p.display()))?;
+    Ok(p.display().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
