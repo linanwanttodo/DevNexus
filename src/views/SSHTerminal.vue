@@ -4,6 +4,8 @@ import { useRoute } from "vue-router";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
+import { save } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import "@xterm/xterm/css/xterm.css";
 import {
   listConnections,
@@ -76,6 +78,163 @@ const pendingDanger = ref(null); // { command, reply } 待确认的危险命令
 
 // 快捷命令 chips：点按直接在活动终端执行
 const QUICK_COMMANDS = ["top", "htop", "df -h", "free -m", "ls -lah", "ps aux | head -20", "uptime", "ip addr", "pwd"];
+
+// ── 终端主题配色 ──
+const TERM_THEMES = {
+  github_dark: {
+    label: "GitHub Dark",
+    theme: currentTheme(),
+  },
+  dracula: {
+    label: "Dracula",
+    theme: {
+      background: "#282a36",
+      foreground: "#f8f8f2",
+      cursor: "#f8f8f2",
+      selectionBackground: "#44475a",
+      black: "#21222c",
+      red: "#ff5555",
+      green: "#50fa7b",
+      yellow: "#f1fa8c",
+      blue: "#bd93f9",
+      magenta: "#ff79c6",
+      cyan: "#8be9fd",
+      white: "#f8f8f2",
+      brightBlack: "#6272a4",
+      brightRed: "#ff6e6e",
+      brightGreen: "#69ff94",
+      brightYellow: "#ffffa5",
+      brightBlue: "#d6acff",
+      brightMagenta: "#ff92df",
+      brightCyan: "#a4ffff",
+      brightWhite: "#ffffff",
+    },
+  },
+  one_dark: {
+    label: "One Dark",
+    theme: {
+      background: "#282c34",
+      foreground: "#abb2bf",
+      cursor: "#528bff",
+      selectionBackground: "#3e4451",
+      black: "#282c34",
+      red: "#e06c75",
+      green: "#98c379",
+      yellow: "#e5c07b",
+      blue: "#61afef",
+      magenta: "#c678dd",
+      cyan: "#56b6c2",
+      white: "#abb2bf",
+      brightBlack: "#5c6370",
+      brightRed: "#e06c75",
+      brightGreen: "#98c379",
+      brightYellow: "#e5c07b",
+      brightBlue: "#61afef",
+      brightMagenta: "#c678dd",
+      brightCyan: "#56b6c2",
+      brightWhite: "#ffffff",
+    },
+  },
+  solarized_dark: {
+    label: "Solarized Dark",
+    theme: {
+      background: "#002b36",
+      foreground: "#839496",
+      cursor: "#93a1a1",
+      selectionBackground: "#073642",
+      black: "#002b36",
+      red: "#dc322f",
+      green: "#859900",
+      yellow: "#b58900",
+      blue: "#268bd2",
+      magenta: "#d33682",
+      cyan: "#2aa198",
+      white: "#eee8d5",
+      brightBlack: "#586e75",
+      brightRed: "#cb4b16",
+      brightGreen: "#586e75",
+      brightYellow: "#657b83",
+      brightBlue: "#839496",
+      brightMagenta: "#6c71c4",
+      brightCyan: "#93a1a1",
+      brightWhite: "#fdf6e3",
+    },
+  },
+  light: {
+    label: "Light",
+    theme: {
+      background: "#ffffff",
+      foreground: "#24292f",
+      cursor: "#0969da",
+      selectionBackground: "#add6ff",
+      black: "#24292f",
+      red: "#cf222e",
+      green: "#116329",
+      yellow: "#4d2d00",
+      blue: "#0969da",
+      magenta: "#8250df",
+      cyan: "#1b7c83",
+      white: "#6e7781",
+      brightBlack: "#57606a",
+      brightRed: "#a40e26",
+      brightGreen: "#1a7f37",
+      brightYellow: "#953800",
+      brightBlue: "#218bff",
+      brightMagenta: "#a475f9",
+      brightCyan: "#3192aa",
+      brightWhite: "#8c959f",
+    },
+  },
+};
+const themeKey = ref(localStorage.getItem("ssh-term-theme") || "github_dark");
+function currentTheme() {
+  return (TERM_THEMES[themeKey.value] || TERM_THEMES.github_dark).theme;
+}
+/** 切换主题：持久化并对所有已打开的终端即时生效 */
+function setTermTheme(key) {
+  themeKey.value = key;
+  localStorage.setItem("ssh-term-theme", key);
+  const th = currentTheme();
+  for (const tb of tabs.value) {
+    if (tb.term) tb.term.options.theme = th;
+  }
+}
+
+// ── 会话录制 ──
+// 录制期间把该标签所有输出（已解码明文）累积到内存，停止时保存为本地 .log 文件
+const recordings = ref({}); // tab.key -> { chunks: string[] }
+const activeTab = computed(() => tabs.value.find((tb) => tb.key === activeKey.value) || null);
+const activeTabRecording = computed(() => !!(activeTab.value && recordings.value[activeTab.value.key]));
+
+function toggleRecording(tab) {
+  if (!tab) return;
+  if (recordings.value[tab.key]) {
+    stopRecording(tab);
+  } else {
+    recordings.value[tab.key] = { chunks: [] };
+    showToast(t("ssh.record_start") + " — " + tab.name, "success");
+  }
+}
+
+async function stopRecording(tab) {
+  const rec = recordings.value[tab.key];
+  if (!rec) return;
+  recordings.value[tab.key] = null; // 先停止写入，再走保存流程
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  let path;
+  try {
+    path = await save({ defaultPath: `${tab.name}_${stamp}.log` });
+  } catch {
+    return; // 对话框失败/取消
+  }
+  if (!path) return;
+  try {
+    await invoke("local_write_text", { path, content: rec.chunks.join("") });
+    showToast(t("ssh.record_saved") + " ✓", "success");
+  } catch (err) {
+    showToast(friendlyError(err), "error");
+  }
+}
 
 function quickExec(cmd) {
   execCommand(cmd);
@@ -254,28 +413,7 @@ async function openTab(connectionId) {
     fontFamily: '"JetBrains Mono", Menlo, monospace',
     fontSize: 13,
     lineHeight: 1.2,
-    theme: {
-      background: "#0d1117",
-      foreground: "#e6edf3",
-      cursor: "#58a6ff",
-      selectionBackground: "#264f78",
-      black: "#484f58",
-      red: "#ff7b72",
-      green: "#3fb950",
-      yellow: "#d29922",
-      blue: "#58a6ff",
-      magenta: "#bc8cff",
-      cyan: "#39c5cf",
-      white: "#b1bac4",
-      brightBlack: "#6e7681",
-      brightRed: "#ffa198",
-      brightGreen: "#56d364",
-      brightYellow: "#e3b341",
-      brightBlue: "#79c0ff",
-      brightMagenta: "#d2a8ff",
-      brightCyan: "#56d4dd",
-      brightWhite: "#f0f6fc",
-    },
+    theme: currentTheme(),
   });
   const fit = new FitAddon();
   const search = new SearchAddon();
@@ -332,6 +470,7 @@ async function openTab(connectionId) {
 
 function closeTab(tab) {
   if (tab.sessionId) closeTerminal(tab.sessionId).catch(() => {});
+  if (recordings.value[tab.key]) recordings.value[tab.key] = null; // 关闭即丢弃未保存的录制
   els.delete(tab.key);
   const idx = tabs.value.indexOf(tab);
   if (idx >= 0) tabs.value.splice(idx, 1);
@@ -497,7 +636,14 @@ function closeSearch() {
 onMounted(async () => {
   unlisteners = [
     await onTerminalOutput(({ sessionId, data }) => {
-      findTabBySession(sessionId)?.term?.write(fromBase64(data));
+      const tab = findTabBySession(sessionId);
+      const text = fromBase64(data);
+      tab?.term?.write(text);
+      // 会话录制：明文累积到该标签的录制缓冲
+      if (tab) {
+        const rec = recordings.value[tab.key];
+        if (rec) rec.chunks.push(text);
+      }
     }),
     await onTerminalClosed(({ sessionId }) => {
       const tab = findTabBySession(sessionId);
@@ -717,6 +863,25 @@ async function removeSocks(id) {
         <Button variant="outline" :disabled="!activeTermId()" @click="openForwardDialog">
           <AppIcon name="network" class="size-4" />
           {{ t("ssh.forward.title") }}
+        </Button>
+        <Select v-model="themeKey" @update:model-value="setTermTheme">
+          <SelectTrigger class="w-[150px]" :title="t('ssh.theme')">
+            <SelectValue :placeholder="t('ssh.theme')" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem v-for="(v, k) in TERM_THEMES" :key="k" :value="k">
+              {{ v.label }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          :class="{ 'record-on': activeTabRecording }"
+          :disabled="!activeTab"
+          @click="toggleRecording(activeTab)"
+        >
+          <span class="rec-dot" :class="{ on: activeTabRecording }"></span>
+          {{ activeTabRecording ? t("ssh.record_stop") : t("ssh.record_start") }}
         </Button>
       </div>
     </div>
@@ -1039,6 +1204,34 @@ async function removeSocks(id) {
   flex-shrink: 0;
   padding-bottom: 8px;
   scrollbar-width: thin;
+}
+
+/* 会话录制指示点：录制中红色呼吸闪烁 */
+.rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-muted-foreground, #888);
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+.rec-dot.on {
+  background: #e5484d;
+  animation: rec-blink 1.2s ease-in-out infinite;
+}
+.button.record-on,
+.record-on {
+  color: #e5484d;
+  border-color: #e5484d;
+}
+@keyframes rec-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
 }
 
 .tab {
