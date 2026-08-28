@@ -32,28 +32,25 @@ pub fn run() {
     // 灵动岛窗口依赖两者）。在 GTK 初始化前强制走 XWayland（X11 后端）：
     // X11 协议原生支持 ARGB 透明 + _NET_WM_STATE_ABOVE 置顶，mutter 会正常合成。
     // Wayland 原生协议不提供窗口级 alpha 与置顶层，因此无条件覆盖
-    // GDK_BACKEND=wayland（含用户显式设置）；纯 Wayland 环境若有 XWayland 同样适用。
+    // GDK_BACKEND（含用户显式设置）；纯 Wayland 环境若有 XWayland 同样适用。
     #[cfg(target_os = "linux")]
     {
-        // 仅在用户未显式指定后端时强制 x11：尊重显式设置，
-        // 避免覆盖用户为兼容性/调试目的配置的 GDK_BACKEND。
-        if std::env::var_os("GDK_BACKEND").is_none() {
-            std::env::set_var("GDK_BACKEND", "x11");
-        }
+        // 无条件强制 x11：本应用的透明窗口（灵动岛）、点击穿透（GDK input
+        // shape）、跨工作区跟随（gdkx11 X11Window）全部依赖 X11 后端。
+        // 此前"仅在未设置时强制"的逻辑在 GDK_BACKEND=wayland 的环境下
+        // （用户 shell/桌面会话常预设）会让透明失效——整个 400×116 岛窗口
+        // 渲染为实心黑块，胶囊收起后黑底仍在，看起来就是"字缩小了框不缩"。
+        std::env::set_var("GDK_BACKEND", "x11");
         eprintln!(
             "[DevNexus] GDK_BACKEND = {}",
             std::env::var("GDK_BACKEND").unwrap_or_default()
         );
 
-        // WebKitGTK 2.46+ 在部分 AMD/Intel GPU 上启用 DMABUF 渲染器后，
-        // 渲染进程（WebKitWebProcess）会随机挂死：窗口首帧正常渲染，
-        // 但之后不再处理输入、不再重绘（整个界面"点不动、移不动"）。
-        // 参见 tauri-apps/tauri#13498。
-        // 设置 WEBKIT_DISABLE_DMABUF_RENDERER=1 强制回退到共享内存渲染路径，
-        // 牺牲少量合成性能换取稳定性。必须在 WebKitGTK 初始化前设置。
-        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-        }
+        // 【注意】不要设置 WEBKIT_DISABLE_DMABUF_RENDERER=1！
+        // 曾为修 SSH 窗口冻结加过该变量（c009c33），强制 WebKitGTK 走软件渲染，
+        // 结果在 AMD GPU 机器上灵动岛出现"框/字重绘错位、胶囊收起卡住不缩"
+        // 的部分重绘故障——1.3.10 及之前 DMABUF GPU 渲染一直正常，时间线吻合，
+        // 故回退。若个别机器 WebKit 挂死，应排查具体 GPU/驱动而非全局禁用。
         eprintln!(
             "[DevNexus] WEBKIT_DISABLE_DMABUF_RENDERER = {}",
             std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").unwrap_or_default()

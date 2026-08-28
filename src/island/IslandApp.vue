@@ -346,25 +346,28 @@ function showBanner(app, title, body, kind = "system") {
     }, 3000);
   } else {
     // 本地事件（倒计时完成等）：强制展开展示。
-    // 收起由统一的 scheduleCollapse 负责（鼠标不在则 AUTO_COLLAPSE_MS 后收起），
-    // 不在这里额外设置 5s 自动收起，避免和 collapseTimer 竞争造成框/内容时序错位。
+    // 关键：横幅到期时框必须与内容一起收，绝不让"内容没了、空框还撑着"——
+    // 此前在横幅消失回调里重新 scheduleCollapse()，会把收起顺延到横幅消失后再 +5s，
+    // 正是用户看到的"内容先缩小、框要再等 5 秒才一起缩小"。
     if (bannerTimer) clearTimeout(bannerTimer);
     bannerTimer = setTimeout(() => {
       if (bannerSeq === seq) {
         banner.value = null;
-        // banner 消失后若鼠标不在，重新触发收起计时（给用户看清横幅后再收）
-        if (!hovering) scheduleCollapse();
+        // 横幅到期：鼠标不在岛上 → 框随内容同一帧收起；
+        // 鼠标仍在岛上 → 保持展开（其内容切回模块视图），移出时再走 onMouseLeave 收起
+        if (!hovering) {
+          expanded.value = false;
+          clearCollapseTimer();
+        }
       }
     }, 4000);
     // 展开框以显示横幅（若已展开则保持）
     if (!expanded.value) {
       expanded.value = true;
     }
-    // 重置收起倒计时：banner 期间鼠标若不在，5s 后才收起（banner 4s 后先消失）
+    // 横幅展示期间不另设独立收起倒计时：收起统一由"横幅到期(上面)"或
+    // "鼠标移出 → onMouseLeave → scheduleCollapse"两条路径驱动，避免计时器竞争
     clearCollapseTimer();
-    if (!hovering) {
-      scheduleCollapse();
-    }
   }
 }
 
@@ -431,28 +434,35 @@ async function onPointerMove(e) {
 // ═══════════════ 输入穿透区域同步（X11 透明窗口点击穿透）═══════════════
 // 透明窗口默认整个矩形拦截点击；Rust 侧用 GDK input shape 把输入区限制为
 // 胶囊覆盖区。胶囊几何随展开/收起变化，前端在状态切换后上报逻辑坐标。
-let shapeTimer = null;
+// 胶囊目标几何（逻辑像素）：与 island.css 中 .capsule / .capsule.expanded 一一对应
+// （收起 240×40，展开 384×108，顶部恒 4px，窗口内水平居中）
+const CAPSULE_SIZE = {
+  collapsed: { width: 240, height: 40 },
+  expanded: { width: 384, height: 108 },
+};
 
-function reportInputShape() {
+function reportInputShape(isExpanded = expanded.value) {
   const c = document.querySelector(".capsule");
   if (!c) return;
   const r = c.getBoundingClientRect();
+  const g = CAPSULE_SIZE[isExpanded ? "expanded" : "collapsed"];
   invoke("island_set_input_shape", {
-    x: r.x,
-    y: r.y,
-    width: r.width,
-    height: r.height,
+    // 宽高用目标态常量；中心点/顶部用实时 rect（spring 动画中二者恒定不变）
+    x: Math.round(r.x + r.width / 2 - g.width / 2),
+    y: Math.round(r.y),
+    width: g.width,
+    height: g.height,
   }).catch(() => {});
 }
 
 function syncInputShape() {
-  clearTimeout(shapeTimer);
-  if (expanded.value) {
-    reportInputShape();
-  } else {
-    // 收起弹簧动画 0.4s：等动画结束再收缩输入区，避免可见胶囊点不到
-    shapeTimer = setTimeout(reportInputShape, 500);
-  }
+  // 状态切换瞬间直接上报目标几何，绝不读动画中的实测矩形、也不延迟上报：
+  // 实测矩形在 spring 动画期间是旧尺寸（展开瞬间读到收起态 240×40），
+  // 输入区与可见大胶囊脱节——鼠标移到大胶囊下半部就越过输入区边界，
+  // WebKitGTK 触发"假 mouseleave"，5 秒收起倒计时在用户悬停期间悄悄开跑，
+  // 悬停/收起状态与视觉彻底脱节（框还大着、内容却按"已离开"的时序走）。
+  // 输入区比动画中的可见胶囊大/小几百毫秒无感知，但事件流必须与状态一致。
+  reportInputShape();
 }
 
 watch(expanded, syncInputShape);
@@ -576,15 +586,20 @@ function onMouseEnter() {
   clearCollapseTimer(); // 悬停中：取消任何待执行的自动收起
   // 有 banner 时仍允许悬停展开（用户把鼠标移过来说明想看/操作）
   hoverTimer = setTimeout(() => setExpanded(true), 120);
+  selfReport();
 }
 
 function onMouseLeave() {
   hovering = false;
   clearTimeout(hoverTimer);
+  // 拖拽中窗口跟随光标、相对位置不变，正常不会触发 leave；
+  // 但快速拖动/指针捕获下可能收到事件——忽略，避免拖动途中被倒计时收起
+  if (dragging.value) return;
   // 无论有没有 banner，鼠标离开就启动收起倒计时——框和内容同步收缩
   if (expanded.value) {
     scheduleCollapse(); // 离开后 AUTO_COLLAPSE_MS 收起（期间返回则取消）
   }
+  selfReport();
 }
 
 async function onCapsuleClick() {
@@ -609,8 +624,12 @@ async function onBannerClick() {
     clearCollapseTimer();
     await openMainWindow();
   } else {
-    // 点击系统通知横幅：只关闭横幅，框由鼠标状态决定（悬停保持，不在则开始倒计时）
-    if (!hovering) scheduleCollapse();
+    // 点击系统通知横幅：鼠标不在岛上 → 横幅与框一起立即收起（点击即恢复原样），
+    // 不留空大框再倒计时 5 秒；鼠标仍在岛上则保持展开，离开时才走收起倒计时
+    if (!hovering) {
+      expanded.value = false;
+      clearCollapseTimer();
+    }
   }
 }
 
@@ -619,10 +638,9 @@ function closeBanner() {
   banner.value = null;
   if (bannerTimer) clearTimeout(bannerTimer);
   bannerTimer = null;
-  // 框的收起由鼠标状态决定：悬停保持展开，不在则开始倒计时
-  if (!hovering && expanded.value) {
-    scheduleCollapse();
-  } else if (!hovering) {
+  // 框随横幅关闭一起收：鼠标不在岛上立即恢复原样（点击即收起），
+  // 鼠标仍在岛上则保持展开（离开时自然走收起倒计时）
+  if (!hovering) {
     expanded.value = false;
     clearCollapseTimer();
   }
@@ -686,21 +704,27 @@ onBeforeUnmount(() => {
   if (sysTimer) clearInterval(sysTimer);
   if (bannerTimer) clearTimeout(bannerTimer);
   if (collapseTimer) clearTimeout(collapseTimer);
+  if (hoverTimer) clearTimeout(hoverTimer);
   if (unlistenNotify) unlistenNotify();
   window.removeEventListener("pointermove", onPointerMove);
   window.removeEventListener("pointerup", onPointerUp);
 });
 
-// ── 调试自检：把实际渲染几何/颜色/缩放写入窗口标题，xwininfo 可直接读取 ──
+// ── 调试自检：把实际渲染几何/颜色/缩放与状态机快照写入窗口标题，
+//    xwininfo / xprop _NET_WM_NAME 可直接读取（诊断框/内容收起时序用）──
 function selfReport() {
   const el = document.querySelector(".capsule");
   if (!el) return;
   const r = el.getBoundingClientRect();
   const cs = getComputedStyle(el);
+  const clock = document.querySelector(".clock-hm");
   document.title =
     `w=${Math.round(r.width)} h=${Math.round(r.height)} r=${cs.borderRadius}` +
+    ` fs=${clock ? getComputedStyle(clock).fontSize : "?"}` +
     ` bg=${cs.backgroundColor} dpr=${window.devicePixelRatio}` +
-    ` win=${window.innerWidth}x${window.innerHeight} mod=${activeModule.value}`;
+    ` win=${window.innerWidth}x${window.innerHeight} mod=${activeModule.value}` +
+    ` exp=${expanded.value ? 1 : 0} hov=${hovering ? 1 : 0}` +
+    ` bnr=${banner.value ? 1 : 0} clps=${collapseTimer ? 1 : 0}`;
 }
 
 // ═══════════════ 窗口尺寸 ═══════════════
@@ -731,6 +755,9 @@ onMounted(() => {
 });
 watch(activeModule, () => {
   setTimeout(selfReport, 300); // 切换模块后上报几何
+});
+watch(expanded, () => {
+  setTimeout(selfReport, 450); // spring 过渡（0.4s）结束后上报最终几何与状态
 });
 </script>
 
