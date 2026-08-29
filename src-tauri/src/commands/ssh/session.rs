@@ -185,23 +185,25 @@ impl Handler for SshHandler {
     /// 双向代理，从而让远端服务器能使用本地的 ssh-agent 私钥。仅当本地存在
     /// SSH_AUTH_SOCK 时接受，否则拒绝（避免无意义通道）。
     #[allow(clippy::type_complexity)]
+    // `channel`/`path` 仅在 `#[cfg(unix)]` 分支使用：Windows 上没有 Unix 域套接字
+    // agent 可代理，二者按惯例加下划线前缀避免非 Unix 目标的 unused 告警。
     fn server_channel_open_agent_forward(
         &mut self,
-        channel: russh::Channel<russh::client::Msg>,
+        _channel: russh::Channel<russh::client::Msg>,
         reply: russh::client::ChannelOpenHandle,
         _session: &mut russh::client::Session,
     ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
         let sock = self.agent_sock.clone();
         async move {
             match sock {
-                Some(path) => {
+                Some(_path) => {
                     #[cfg(unix)]
                     {
-                        match tokio::net::UnixStream::connect(&path).await {
+                        match tokio::net::UnixStream::connect(&_path).await {
                             Ok(mut agent) => {
                                 // 接受通道，并将远端 auth-agent 通道与本地 agent 双向代理
                                 reply.accept().await;
-                                let mut stream = channel.into_stream();
+                                let mut stream = _channel.into_stream();
                                 tokio::spawn(async move {
                                     let _ = tokio::io::copy_bidirectional(&mut stream, &mut agent)
                                         .await;
