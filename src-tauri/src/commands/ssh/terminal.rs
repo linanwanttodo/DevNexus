@@ -1,5 +1,5 @@
 use crate::commands::ssh::connections::SshStore;
-use crate::commands::ssh::session::{open, SessionEntry, SshSessionManager, TerminalHandle};
+use crate::commands::ssh::session::{SessionEntry, SshSessionManager, TerminalHandle};
 use russh::ChannelMsg;
 use std::sync::Arc;
 use tauri::Emitter;
@@ -18,27 +18,8 @@ pub async fn ssh_terminal_open(
     cols: u32,
     rows: u32,
 ) -> Result<String, String> {
-    // 复用已存在的连接会话；否则新建
-    let entry = {
-        let sessions = manager.sessions.lock().await;
-        sessions
-            .values()
-            .find(|s| s.connection_id == connection_id)
-            .cloned()
-    };
-    let entry = match entry {
-        Some(e) => e,
-        None => {
-            let sid = open(&app, &store, &manager, &connection_id).await?;
-            manager
-                .sessions
-                .lock()
-                .await
-                .get(&sid)
-                .cloned()
-                .ok_or("NO_SESSION")?
-        }
-    };
+    // 复用已存在的连接会话；否则新建（并发打开同一连接时由 open_locks 串行化去重）
+    let entry = manager.get_or_open(&app, &store, &connection_id).await?;
     open_channel(&app, entry, cols, rows).await
 }
 
@@ -61,6 +42,17 @@ async fn open_channel(
         .request_shell(false)
         .await
         .map_err(|e| format!("SHELL_FAILED: {e}"))?;
+
+    // 若会话启用了 Agent 转发，向服务端请求 auth-agent-req，
+    // 服务端随后会建立 auth-agent 通道并由 SshHandler 代理到本地 ssh-agent。
+    if entry
+        .agent_forwarding
+        .load(std::sync::atomic::Ordering::SeqCst)
+    {
+        if let Err(e) = channel.agent_forward(true).await {
+            eprintln!("[agent] request agent forwarding failed: {e}");
+        }
+    }
 
     let term_id = uuid::Uuid::new_v4().to_string();
     let (read_half, write_half) = channel.split();

@@ -1,5 +1,5 @@
 use crate::commands::ssh::connections::SshStore;
-use crate::commands::ssh::session::{open, SftpHandle, SshSessionManager};
+use crate::commands::ssh::session::{SftpHandle, SshSessionManager};
 use base64::{engine::general_purpose, Engine as _};
 use russh_sftp::client::SftpSession;
 use russh_sftp::protocol::FileAttributes;
@@ -83,26 +83,8 @@ pub async fn ssh_sftp_open(
     manager: tauri::State<'_, SshSessionManager>,
     connection_id: String,
 ) -> Result<String, String> {
-    // 复用已存在的连接会话；否则新建（与 terminal.rs 相同的取会话逻辑）
-    let sid = {
-        let sessions = manager.sessions.lock().await;
-        sessions
-            .iter()
-            .find(|(_, s)| s.connection_id == connection_id)
-            .map(|(sid, _)| sid.clone())
-    };
-    let sid = match sid {
-        Some(id) => id,
-        None => open(&app, &store, &manager, &connection_id).await?,
-    };
-
-    let entry = manager
-        .sessions
-        .lock()
-        .await
-        .get(&sid)
-        .cloned()
-        .ok_or("NO_SESSION")?;
+    // 复用已存在的连接会话；否则新建（与 terminal.rs 相同，并发打开由 open_locks 去重）
+    let entry = manager.get_or_open(&app, &store, &connection_id).await?;
     let client = entry.client.lock().await;
     let channel = client
         .channel_open_session()
@@ -218,11 +200,17 @@ pub async fn ssh_sftp_write_file(
         .await
         .ok_or_else(|| format!("NO_SFTP: {sftp_id}"))?;
     let sftp = h.sftp.lock().await;
+    // 首块（offset==0）截断已有内容，避免覆盖较短文件时残留旧尾部字节导致静默损坏；
+    // 后续块仅在偏移处续写，不做截断。
+    let flags = if offset == 0 {
+        russh_sftp::protocol::OpenFlags::WRITE
+            | russh_sftp::protocol::OpenFlags::CREATE
+            | russh_sftp::protocol::OpenFlags::TRUNCATE
+    } else {
+        russh_sftp::protocol::OpenFlags::WRITE | russh_sftp::protocol::OpenFlags::CREATE
+    };
     let mut file = sftp
-        .open_with_flags(
-            &path,
-            russh_sftp::protocol::OpenFlags::WRITE | russh_sftp::protocol::OpenFlags::CREATE,
-        )
+        .open_with_flags(&path, flags)
         .await
         .map_err(|e| format!("SFTP_OPEN: {e}"))?;
     if offset > 0 {

@@ -295,7 +295,8 @@ pub fn ssh_import_open_ssh_config() -> Result<Vec<OpenSshHost>, String> {
 /// 解析 OpenSSH config 内容，返回 Host 条目列表
 fn parse_openssh_config(content: &str) -> Result<Vec<OpenSshHost>, String> {
     let mut hosts = Vec::new();
-    let mut current_host: Option<OpenSshHost> = None;
+    // 当前 Host 块内的全部别名：一条 `Host a b` 会生成多个别名且属性共享
+    let mut current: Vec<OpenSshHost> = Vec::new();
 
     for line in content.lines() {
         let line = line.trim();
@@ -311,64 +312,61 @@ fn parse_openssh_config(content: &str) -> Result<Vec<OpenSshHost>, String> {
 
         match key.as_str() {
             "host" => {
-                if let Some(h) = current_host.take() {
-                    hosts.push(h);
-                }
-                current_host = Some(OpenSshHost {
-                    host: value.clone(),
-                    host_name: None,
-                    user: None,
-                    port: None,
-                    identity_file: None,
-                    proxy_command: None,
-                    proxy_jump: None,
-                });
-            }
-            "hostname" => {
-                if let Some(ref mut h) = current_host {
-                    h.host_name = Some(value);
-                }
-            }
-            "user" => {
-                if let Some(ref mut h) = current_host {
-                    h.user = Some(value);
+                hosts.append(&mut current);
+                // 通配（含 * ?）与取反（! 开头）的别名不作为具体连接导入，
+                // 否则 `Host *` 等 catch-all 会污染导入列表
+                for token in parts[1..].iter() {
+                    if token.contains('*') || token.contains('?') || token.starts_with('!') {
+                        continue;
+                    }
+                    current.push(OpenSshHost {
+                        host: token.to_string(),
+                        host_name: None,
+                        user: None,
+                        port: None,
+                        identity_file: None,
+                        proxy_command: None,
+                        proxy_jump: None,
+                    });
                 }
             }
-            "port" => {
-                if let Some(ref mut h) = current_host {
-                    h.port = value.parse().ok();
+            "match" => {
+                // Match 条件块：固化已收集的主机并腾空 current，
+                // 使块内属性无处附着而被跳过（append 后 current 已为空）
+                hosts.append(&mut current);
+            }
+            _ => {
+                for h in current.iter_mut() {
+                    apply_openssh_attr(h, key.as_str(), &value);
                 }
             }
-            "identityfile" | "identity_file" => {
-                // 展开 ~ 为真实 home 路径
-                let path = if value.starts_with("~/") {
-                    dirs::home_dir()
-                        .map(|h| h.join(value.trim_start_matches("~/")))
-                        .unwrap_or_else(|| std::path::PathBuf::from(&value))
-                } else {
-                    std::path::PathBuf::from(&value)
-                };
-                if let Some(ref mut h) = current_host {
-                    h.identity_file = Some(path.to_string_lossy().into_owned());
-                }
-            }
-            "proxycommand" => {
-                if let Some(ref mut h) = current_host {
-                    h.proxy_command = Some(value);
-                }
-            }
-            "proxyjump" => {
-                if let Some(ref mut h) = current_host {
-                    h.proxy_jump = Some(value);
-                }
-            }
-            _ => {}
         }
     }
-    if let Some(h) = current_host {
-        hosts.push(h);
-    }
+    hosts.append(&mut current);
     Ok(hosts)
+}
+
+/// 把 OpenSSH config 的单个属性应用到一条 Host 记录
+fn apply_openssh_attr(h: &mut OpenSshHost, key: &str, value: &str) {
+    match key {
+        "hostname" => h.host_name = Some(value.to_string()),
+        "user" => h.user = Some(value.to_string()),
+        "port" => h.port = value.parse().ok(),
+        "identityfile" | "identity_file" => {
+            // 展开 ~ 为真实 home 路径
+            let path = if value.starts_with("~/") {
+                dirs::home_dir()
+                    .map(|home| home.join(value.trim_start_matches("~/")))
+                    .unwrap_or_else(|| std::path::PathBuf::from(value))
+            } else {
+                std::path::PathBuf::from(value)
+            };
+            h.identity_file = Some(path.to_string_lossy().into_owned());
+        }
+        "proxycommand" => h.proxy_command = Some(value.to_string()),
+        "proxyjump" => h.proxy_jump = Some(value.to_string()),
+        _ => {}
+    }
 }
 
 /// 导出连接为 OpenSSH config 格式（不含密码，仅元数据）
@@ -462,5 +460,37 @@ mod tests {
         let info: SshConnectionInfo = conn.into();
         assert_eq!(info.id, "1");
         assert!(!serde_json::to_string(&info).unwrap().contains("TOP-SECRET"));
+    }
+
+    #[test]
+    fn test_parse_openssh_skips_wildcard_and_match() {
+        let cfg = "Host *\n  User root\n\nHost web\n  HostName 10.0.0.1\n  User deploy\n\nMatch all\n  User ignored\n  HostName 1.2.3.4\n";
+        let hosts = parse_openssh_config(cfg).unwrap();
+        // `Host *` 与 `Match` 块都不应产生连接；仅 `web` 被导入
+        assert_eq!(hosts.len(), 1);
+        assert_eq!(hosts[0].host, "web");
+        assert_eq!(hosts[0].host_name.as_deref(), Some("10.0.0.1"));
+        assert_eq!(hosts[0].user.as_deref(), Some("deploy"));
+    }
+
+    #[test]
+    fn test_parse_openssh_multi_alias_shares_attrs() {
+        let cfg = "Host web1 web2\n  HostName 10.0.0.1\n  Port 2222\n";
+        let hosts = parse_openssh_config(cfg).unwrap();
+        assert_eq!(hosts.len(), 2);
+        assert_eq!(hosts[0].host, "web1");
+        assert_eq!(hosts[1].host, "web2");
+        for h in &hosts {
+            assert_eq!(h.host_name.as_deref(), Some("10.0.0.1"));
+            assert_eq!(h.port, Some(2222));
+        }
+    }
+
+    #[test]
+    fn test_parse_openssh_negated_alias_skipped() {
+        let cfg = "Host !secret public\n  HostName 10.0.0.9\n";
+        let hosts = parse_openssh_config(cfg).unwrap();
+        assert_eq!(hosts.len(), 1);
+        assert_eq!(hosts[0].host, "public");
     }
 }

@@ -17,6 +17,8 @@ use tauri::Emitter;
 
 pub struct SshSessionManager {
     pub sessions: tokio::sync::Mutex<HashMap<String, Arc<SessionEntry>>>,
+    /// 每个连接 ID 一把互斥锁：串行化并发 open()，防止同一连接被重复建立
+    pub open_locks: tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     pub known_hosts: Mutex<HashMap<String, String>>, // host:port -> fingerprint
     pub pending_keys: Mutex<HashMap<String, PendingKey>>, // session_id -> pending server key
 }
@@ -41,10 +43,12 @@ pub struct SessionEntry {
     pub local_forwards: tokio::sync::Mutex<Vec<ForwardEntry>>,
     /// 动态 SOCKS5 代理转发列表（已激活的 -D 转发）
     pub socks_forwards: tokio::sync::Mutex<Vec<SocksEntry>>,
-    /// Keepalive 配置（秒）
-    pub keepalive_secs: u64,
-    /// 上次成功写入时间（用于 Keepalive 检测）
-    pub last_activity: tokio::sync::Mutex<std::time::Instant>,
+    /// 每个端口转发对应的停止信号；关闭/会话结束时 notify，令后台 accept 循环退出并释放端口
+    pub forward_stops: tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Notify>>>,
+    /// 每个 SOCKS5 代理对应的停止信号（同上）
+    pub socks_stops: tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Notify>>>,
+    /// 是否启用 SSH Agent 转发（开启后新开终端会请求 auth-agent-req，服务端据此建立转发通道）
+    pub agent_forwarding: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -160,6 +164,9 @@ pub struct SftpHandle {
 
 pub struct SshHandler {
     pub server_key: Arc<Mutex<Option<russh::keys::PublicKey>>>,
+    /// 本地 SSH agent 套接字路径（来自 SSH_AUTH_SOCK）。非空时，服务端建立的
+    /// auth-agent 转发通道会被代理到本地 agent；为空则拒绝转发（无可用 agent）。
+    pub agent_sock: Option<String>,
 }
 
 impl Handler for SshHandler {
@@ -169,8 +176,59 @@ impl Handler for SshHandler {
         &mut self,
         server_public_key: &russh::keys::PublicKey,
     ) -> Result<bool, Self::Error> {
-        *self.server_key.lock().unwrap() = Some(server_public_key.clone());
+        *self.server_key.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(server_public_key.clone());
         Ok(true) // 先接受，connect 完成后由上层统一校验
+    }
+
+    /// 服务端请求建立 auth-agent 转发通道时触发：把该通道与本地 SSH agent 套接字
+    /// 双向代理，从而让远端服务器能使用本地的 ssh-agent 私钥。仅当本地存在
+    /// SSH_AUTH_SOCK 时接受，否则拒绝（避免无意义通道）。
+    #[allow(clippy::type_complexity)]
+    fn server_channel_open_agent_forward(
+        &mut self,
+        channel: russh::Channel<russh::client::Msg>,
+        reply: russh::client::ChannelOpenHandle,
+        _session: &mut russh::client::Session,
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
+        let sock = self.agent_sock.clone();
+        async move {
+            match sock {
+                Some(path) => {
+                    #[cfg(unix)]
+                    {
+                        match tokio::net::UnixStream::connect(&path).await {
+                            Ok(mut agent) => {
+                                // 接受通道，并将远端 auth-agent 通道与本地 agent 双向代理
+                                reply.accept().await;
+                                let mut stream = channel.into_stream();
+                                tokio::spawn(async move {
+                                    let _ = tokio::io::copy_bidirectional(&mut stream, &mut agent)
+                                        .await;
+                                });
+                                Ok(())
+                            }
+                            Err(e) => {
+                                eprintln!("[agent] connect local SSH_AUTH_SOCK failed: {e}");
+                                // 丢弃 reply -> 自动拒绝
+                                Ok(())
+                            }
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        // 非 Unix 平台无 Unix 域套接字 agent，拒绝转发
+                        let _ = reply;
+                        Ok(())
+                    }
+                }
+                None => {
+                    // 本地无 agent，拒绝
+                    let _ = reply;
+                    Ok(())
+                }
+            }
+        }
     }
 }
 
@@ -226,9 +284,16 @@ pub fn fingerprint(server_key: &russh::keys::PublicKey) -> String {
         .to_string()
 }
 
-fn session_config() -> Arc<russh::client::Config> {
+/// 按连接级 keepalive 配置生成 russh 客户端配置。
+/// `keepalive_secs == 0` 表示关闭保活（服务端默认 30s 的硬编码此前从未生效，属死代码）。
+fn session_config(keepalive_secs: u64) -> Arc<russh::client::Config> {
+    let keepalive_interval = if keepalive_secs == 0 {
+        None
+    } else {
+        Some(std::time::Duration::from_secs(keepalive_secs))
+    };
     let config = russh::client::Config {
-        keepalive_interval: Some(std::time::Duration::from_secs(30)),
+        keepalive_interval,
         keepalive_max: 3,
         ..russh::client::Config::default()
     };
@@ -272,9 +337,49 @@ impl SshSessionManager {
     pub fn new() -> Self {
         Self {
             sessions: tokio::sync::Mutex::new(HashMap::new()),
+            open_locks: tokio::sync::Mutex::new(HashMap::new()),
             known_hosts: Mutex::new(load_known_hosts()),
             pending_keys: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// 按连接 ID 查找已有会话
+    pub async fn find_by_connection(&self, connection_id: &str) -> Option<Arc<SessionEntry>> {
+        let sessions = self.sessions.lock().await;
+        sessions
+            .values()
+            .find(|s| s.connection_id == connection_id)
+            .cloned()
+    }
+
+    /// 复用或新建连接会话（并发安全）。同一 `connection_id` 的并发请求经每连接
+    /// 互斥锁串行化，后到者在锁内二次检查后直接复用已有会话，避免双方都查不到
+    /// 而各自 `open()` 出两个会话（重复跳板/认证、多占连接）。
+    pub async fn get_or_open(
+        &self,
+        app: &tauri::AppHandle,
+        store: &SshStore,
+        connection_id: &str,
+    ) -> Result<Arc<SessionEntry>, String> {
+        if let Some(e) = self.find_by_connection(connection_id).await {
+            return Ok(e);
+        }
+        let lock = {
+            let mut locks = self.open_locks.lock().await;
+            locks.entry(connection_id.to_string()).or_default().clone()
+        };
+        let _guard = lock.lock().await;
+        // 拿到锁后二次检查：会话可能已被并发请求创建
+        if let Some(e) = self.find_by_connection(connection_id).await {
+            return Ok(e);
+        }
+        let sid = open(app, store, self, connection_id).await?;
+        self.sessions
+            .lock()
+            .await
+            .get(&sid)
+            .cloned()
+            .ok_or_else(|| "NO_SESSION".to_string())
     }
 
     fn host_key(&self, host: &str) -> Option<String> {
@@ -363,8 +468,9 @@ async fn open_via_jump(
     let j_server_key: Arc<Mutex<Option<russh::keys::PublicKey>>> = Arc::new(Mutex::new(None));
     let j_handler = SshHandler {
         server_key: j_server_key.clone(),
+        agent_sock: None,
     };
-    let j_config = session_config();
+    let j_config = session_config(jump_conn.keepalive_secs);
     let mut j_client = russh::client::connect_stream(j_config, jtcp, j_handler)
         .await
         .map_err(|e| format!("JUMP_HANDSHAKE_FAILED: {e}"))?;
@@ -441,10 +547,13 @@ pub async fn open(
 
     // 2. SSH 握手 + 捕获 server key
     let server_key: Arc<Mutex<Option<russh::keys::PublicKey>>> = Arc::new(Mutex::new(None));
+    // 捕获本地 agent 套接字，供后续服务端建立 auth-agent 转发通道时代理使用
+    let agent_sock = std::env::var("SSH_AUTH_SOCK").ok();
     let handler = SshHandler {
         server_key: server_key.clone(),
+        agent_sock: agent_sock.clone(),
     };
-    let config = session_config();
+    let config = session_config(conn.keepalive_secs);
     let mut client = russh::client::connect_stream(config, transport, handler)
         .await
         .map_err(|e| format!("HANDSHAKE_FAILED: {e}"))?;
@@ -469,15 +578,19 @@ pub async fn open(
         None => {
             // 首次连接：登记 pending，等待前端确认
             let session_id = uuid::Uuid::new_v4().to_string();
-            manager.pending_keys.lock().unwrap().insert(
-                session_id.clone(),
-                PendingKey {
-                    host: host_key.clone(),
-                    fingerprint: fp.clone(),
-                    server_key: key.clone(),
-                    approved: false,
-                },
-            );
+            manager
+                .pending_keys
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(
+                    session_id.clone(),
+                    PendingKey {
+                        host: host_key.clone(),
+                        fingerprint: fp.clone(),
+                        server_key: key.clone(),
+                        approved: false,
+                    },
+                );
             let _ = app.emit(
                 "ssh-hostkey-prompt",
                 serde_json::json!({
@@ -490,18 +603,29 @@ pub async fn open(
             let start = std::time::Instant::now();
             loop {
                 let approved = {
-                    let pending = manager.pending_keys.lock().unwrap();
+                    let pending = manager
+                        .pending_keys
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
                     pending.get(&session_id).map(|p| p.approved)
                 };
                 match approved {
                     Some(true) => {
-                        manager.pending_keys.lock().unwrap().remove(&session_id);
+                        manager
+                            .pending_keys
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .remove(&session_id);
                         manager.record_host_key(&host_key, &fp);
                         break;
                     }
                     Some(false) => {
                         if start.elapsed() > std::time::Duration::from_secs(30) {
-                            manager.pending_keys.lock().unwrap().remove(&session_id);
+                            manager
+                                .pending_keys
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .remove(&session_id);
                             return Err("HOSTKEY_REJECTED: no confirmation within 30s".into());
                         }
                         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -526,8 +650,9 @@ pub async fn open(
             sftp_sessions: tokio::sync::Mutex::new(HashMap::new()),
             local_forwards: tokio::sync::Mutex::new(Vec::new()),
             socks_forwards: tokio::sync::Mutex::new(Vec::new()),
-            keepalive_secs: conn.keepalive_secs,
-            last_activity: tokio::sync::Mutex::new(std::time::Instant::now()),
+            forward_stops: tokio::sync::Mutex::new(HashMap::new()),
+            socks_stops: tokio::sync::Mutex::new(HashMap::new()),
+            agent_forwarding: std::sync::atomic::AtomicBool::new(false),
         }),
     );
     Ok(session_id)
@@ -564,12 +689,54 @@ pub fn ssh_hostkey_reject(
     Ok(())
 }
 
+/// 关闭并清理单个会话：停止端口转发/SOCKS、显式断开 SSH 连接、清空终端/SFTP 句柄，
+/// 并为每个终端立即 emit `ssh-terminal-closed`。
+/// 不再依赖 Arc 引用计数自然回收——终端/SFTP 读任务持有 `entry`，仅移除会话表
+/// 条目会让底层连接存活到通道 EOF 才释放，造成延迟断开与事件迟到。
+async fn shutdown_entry(app: &tauri::AppHandle, entry: &SessionEntry) {
+    // 1. 通知所有端口转发 / SOCKS 后台 accept 循环退出，释放被绑定的本地端口
+    let stops: Vec<Arc<tokio::sync::Notify>> = {
+        let mut v = Vec::new();
+        v.extend(entry.forward_stops.lock().await.values().cloned());
+        v.extend(entry.socks_stops.lock().await.values().cloned());
+        v
+    };
+    for s in stops {
+        s.notify_one();
+    }
+    // 2. 显式发送 SSH_MSG_DISCONNECT 断开连接
+    let _ = entry
+        .client
+        .lock()
+        .await
+        .disconnect(russh::Disconnect::ByApplication, "closed by user", "en")
+        .await;
+    // 3. 清空终端 / SFTP 句柄（读任务随后感知通道关闭并退出）
+    let term_ids: Vec<String> = {
+        let mut t = entry.terminals.lock().await;
+        let ids: Vec<String> = t.keys().cloned().collect();
+        t.clear();
+        ids
+    };
+    entry.sftp_sessions.lock().await.clear();
+    // 4. 立即通知前端终端已关闭；读任务检测到句柄已被移除后不再重复 emit
+    for tid in term_ids {
+        let _ = app.emit(
+            "ssh-terminal-closed",
+            serde_json::json!({ "session_id": tid, "reason": "closed" }),
+        );
+    }
+}
+
 #[tauri::command]
 pub async fn ssh_close(
+    app: tauri::AppHandle,
     state: tauri::State<'_, SshSessionManager>,
     session_id: String,
 ) -> Result<(), String> {
-    state.sessions.lock().await.remove(&session_id);
+    if let Some(entry) = state.sessions.lock().await.remove(&session_id) {
+        shutdown_entry(&app, &entry).await;
+    }
     Ok(())
 }
 
@@ -582,7 +749,9 @@ pub async fn ssh_test_connection(
     connection_id: String,
 ) -> Result<String, String> {
     let sid = open(&app, &store, &manager, &connection_id).await?;
-    manager.sessions.lock().await.remove(&sid);
+    if let Some(entry) = manager.sessions.lock().await.remove(&sid) {
+        shutdown_entry(&app, &entry).await;
+    }
     Ok("ok".into())
 }
 
@@ -624,45 +793,59 @@ pub async fn ssh_forward_local(
         active: true,
     };
 
-    // 登记到 local_forwards
+    // 停止信号：关闭转发 / 会话时 notify，令后台 accept 循环退出并释放端口
+    let stop = Arc::new(tokio::sync::Notify::new());
+
+    // 登记到 local_forwards 与 forward_stops（分别加锁，顺序固定避免死锁）
     {
         let mut fw = entry_arc.local_forwards.lock().await;
         fw.push(fentry.clone());
+        entry_arc
+            .forward_stops
+            .lock()
+            .await
+            .insert(fid.clone(), stop.clone());
     }
 
     // 后台接受本地连接，通过 SSH direct-tcpip 转发
     tokio::spawn(async move {
         loop {
-            match listener.accept().await {
-                Ok((inbound, src)) => {
-                    let client = entry_arc.client.lock().await;
-                    match client
-                        .channel_open_direct_tcpip(
-                            dest_h.clone(),
-                            dest_p as u32,
-                            src.ip().to_string(),
-                            src.port() as u32,
-                        )
-                        .await
-                    {
-                        Ok(ch) => {
-                            // 用 ChannelStream 包装 SSH 通道（实现 tokio AsyncRead/AsyncWrite），
-                            // 再与本地 TCP 双向并发拷贝。copy_bidirectional 在任一端关闭后自动收尾。
-                            let mut ch_stream = ch.into_stream();
-                            let mut inbound = inbound;
-                            tokio::spawn(async move {
-                                let _ = tokio::io::copy_bidirectional(&mut inbound, &mut ch_stream)
-                                    .await;
-                            });
+            tokio::select! {
+                // 收到停止信号：退出循环，listener 被 drop -> 端口释放
+                _ = stop.notified() => break,
+                accepted = listener.accept() => {
+                    match accepted {
+                        Ok((inbound, src)) => {
+                            let client = entry_arc.client.lock().await;
+                            match client
+                                .channel_open_direct_tcpip(
+                                    dest_h.clone(),
+                                    dest_p as u32,
+                                    src.ip().to_string(),
+                                    src.port() as u32,
+                                )
+                                .await
+                            {
+                                Ok(ch) => {
+                                    // 用 ChannelStream 包装 SSH 通道（实现 tokio AsyncRead/AsyncWrite），
+                                    // 再与本地 TCP 双向并发拷贝。copy_bidirectional 在任一端关闭后自动收尾。
+                                    let mut ch_stream = ch.into_stream();
+                                    let mut inbound = inbound;
+                                    tokio::spawn(async move {
+                                        let _ = tokio::io::copy_bidirectional(&mut inbound, &mut ch_stream)
+                                            .await;
+                                    });
+                                }
+                                Err(e) => {
+                                    eprintln!("[forward] channel open failed: {}", e);
+                                }
+                            }
                         }
                         Err(e) => {
-                            eprintln!("[forward] channel open failed: {}", e);
+                            eprintln!("[forward] accept failed: {}", e);
+                            break;
                         }
                     }
-                }
-                Err(e) => {
-                    eprintln!("[forward] accept failed: {}", e);
-                    break;
                 }
             }
         }
@@ -671,7 +854,7 @@ pub async fn ssh_forward_local(
     Ok(fentry)
 }
 
-/// 关闭指定端口转发（标记 inactive）
+/// 关闭指定端口转发（标记 inactive 并触发后台 accept 循环退出，释放端口）
 #[tauri::command]
 pub async fn ssh_close_forward(
     state: tauri::State<'_, SshSessionManager>,
@@ -683,6 +866,9 @@ pub async fn ssh_close_forward(
         let mut fw = entry.local_forwards.lock().await;
         if let Some(f) = fw.iter_mut().find(|f| f.id == forward_id) {
             f.active = false;
+            if let Some(stop) = entry.forward_stops.lock().await.get(&forward_id) {
+                stop.notify_one();
+            }
         }
     }
     Ok(())
@@ -700,16 +886,21 @@ pub async fn ssh_list_forwards(
     Ok(fw.clone())
 }
 
-/// 启用 SSH Agent 转发（读取 SSH_AUTH_SOCK，通过 SSH channel 转发 agent 请求）
+/// 启用 SSH Agent 转发：校验本地存在 SSH_AUTH_SOCK（即有可用 ssh-agent），
+/// 并在会话上置位 `agent_forwarding`。此后通过该会话新开的终端会请求
+/// auth-agent-req，服务端据此建立转发通道并由 `SshHandler` 代理到本地 agent。
 #[tauri::command]
 pub async fn ssh_forward_agent(
-    _state: tauri::State<'_, SshSessionManager>,
-    _session_id: String,
+    state: tauri::State<'_, SshSessionManager>,
+    session_id: String,
 ) -> Result<String, String> {
-    use std::env;
-    let auth_sock = env::var("SSH_AUTH_SOCK")
+    let auth_sock = std::env::var("SSH_AUTH_SOCK")
         .map_err(|_| "SSH_AUTH_SOCK not set — no agent available on this system")?;
-    // Agent 转发由 russh 协议层自动处理；此处仅验证环境变量存在
+    let sessions = state.sessions.lock().await;
+    let entry = sessions.get(&session_id).ok_or("SESSION_NOT_FOUND")?;
+    entry
+        .agent_forwarding
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     Ok(auth_sock)
 }
 
@@ -746,25 +937,38 @@ pub async fn ssh_socks_proxy(
         active: true,
     };
 
+    // 停止信号：关闭代理 / 会话时 notify，令后台 accept 循环退出并释放端口
+    let stop = Arc::new(tokio::sync::Notify::new());
+
     {
         let mut sw = entry_arc.socks_forwards.lock().await;
         sw.push(sentry.clone());
+        entry_arc
+            .socks_stops
+            .lock()
+            .await
+            .insert(fid.clone(), stop.clone());
     }
 
     tokio::spawn(async move {
         loop {
-            match listener.accept().await {
-                Ok((inbound, _src)) => {
-                    let entry = Arc::clone(&entry_arc);
-                    tokio::spawn(async move {
-                        if let Err(e) = serve_socks(inbound, entry).await {
-                            eprintln!("[socks] proxy error: {}", e);
+            tokio::select! {
+                _ = stop.notified() => break,
+                accepted = listener.accept() => {
+                    match accepted {
+                        Ok((inbound, _src)) => {
+                            let entry = Arc::clone(&entry_arc);
+                            tokio::spawn(async move {
+                                if let Err(e) = serve_socks(inbound, entry).await {
+                                    eprintln!("[socks] proxy error: {}", e);
+                                }
+                            });
                         }
-                    });
-                }
-                Err(e) => {
-                    eprintln!("[socks] accept failed: {}", e);
-                    break;
+                        Err(e) => {
+                            eprintln!("[socks] accept failed: {}", e);
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -773,7 +977,7 @@ pub async fn ssh_socks_proxy(
     Ok(sentry)
 }
 
-/// 关闭指定 SOCKS5 代理（标记 inactive；监听器随 drop 停止接受）
+/// 关闭指定 SOCKS5 代理（标记 inactive 并触发后台 accept 循环退出，释放端口）
 #[tauri::command]
 pub async fn ssh_close_socks(
     state: tauri::State<'_, SshSessionManager>,
@@ -785,6 +989,9 @@ pub async fn ssh_close_socks(
         let mut sw = entry.socks_forwards.lock().await;
         if let Some(s) = sw.iter_mut().find(|s| s.id == socks_id) {
             s.active = false;
+            if let Some(stop) = entry.socks_stops.lock().await.get(&socks_id) {
+                stop.notify_one();
+            }
         }
     }
     Ok(())
