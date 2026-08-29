@@ -36,6 +36,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.16] - 2026-08-29
+
+### Added (English)
+- SSH terminal: multiple color themes and session recording
+- SFTP: dual-pane mode with transfer queue
+- SSH: working agent forwarding — server-requested auth-agent channels are proxied to the
+  local ssh-agent (`SSH_AUTH_SOCK`), toggled per session from the terminal toolbar
+- SSH: per-connection keepalive interval (0 = disabled)
+
+### 新增（中文）
+- SSH 终端：多套主题配色与会话录制
+- SFTP：双栏模式与传输队列
+- SSH：Agent 转发真正落地——服务端请求的 auth-agent 通道代理到本地 ssh-agent
+  （`SSH_AUTH_SOCK`），可在终端工具栏按会话开启
+- SSH：按连接配置 Keepalive 间隔（0 = 禁用）
+
+### Changed (English)
+- Local port forwards / SOCKS5 proxies release their bound local ports immediately when
+  closed or when the session disconnects (stop signals for background accept loops)
+- OpenSSH config import: `Host a b` multi-alias entries share attributes; wildcard and
+  negated aliases as well as `Match` blocks are no longer imported
+- Concurrent opens of the same connection are serialized per connection, preventing
+  duplicate sessions (racy check-then-open in terminal/SFTP replaced by `get_or_open`)
+- Session close now sends an explicit SSH disconnect, emits terminal-closed events
+  immediately and shuts down forwards/SFTP handles deterministically
+
+### 变更（中文）
+- 关闭端口转发/SOCKS 代理或断开会话时立即释放被绑定的本地端口（后台 accept 循环接停止信号）
+- OpenSSH config 导入：`Host a b` 多别名共享属性；通配/取反别名与 Match 块不再误导入
+- 同一连接的并发打开按连接锁串行去重，终端/SFTP 的 check-then-open 竞态由 `get_or_open` 取代
+- 关闭会话改为显式发送 SSH 断开、立即通知前端终端关闭，并确定性清理转发/SFTP 句柄
+
+### Fixed (English)
+- SFTP: overwriting a remote file with shorter content no longer leaves stale trailing
+  bytes (first chunk opens with TRUNCATE)
+- Island: restored GPU rendering fix (frame/character redraw misalignment), forced X11
+  backend and instant input-area reporting
+
+### 修复（中文）
+- SFTP：覆盖写入较短内容时不再残留旧文件尾部字节（首块写入加 TRUNCATE）
+- 灵动岛：恢复 GPU 渲染修复（框/字重绘错位），强制 X11 后端与输入区瞬时上报
+
+---
+
 ## [1.3.12] - 2026-08-16
 
 ### Added (English)
