@@ -198,6 +198,33 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn test_silent_start_get_set() {
+        // 测试 get_silent_start 和 set_silent_start 的基本功能
+        // 先确保关闭
+        let _ = set_silent_start(false);
+        assert!(!get_silent_start());
+
+        // 开启
+        assert!(set_silent_start(true).is_ok());
+        assert!(get_silent_start());
+
+        // 再次关闭
+        assert!(set_silent_start(false).is_ok());
+        assert!(!get_silent_start());
+    }
+
+    #[test]
+    fn test_set_autostart_unsupported_platform() {
+        // 在不支持的平台上应该返回错误
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        {
+            let result = set_autostart(true);
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("not supported"));
+        }
+    }
 }
 
 /// 设置开机自启

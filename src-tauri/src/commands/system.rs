@@ -169,6 +169,73 @@ mod tests {
         // 只验证调用不 panic 且返回有限值，不强行断言非零（空闲机器可能接近 0）
         assert!(usage.is_finite() && usage >= 0.0);
     }
+
+    #[test]
+    fn test_hardware_status_optional_fields_none() {
+        // 测试所有可选字段都为 None 的情况（台式机场景）
+        let status = HardwareStatus {
+            cpu_temp_c: None,
+            gpu_name: None,
+            gpu_memory_used_mb: None,
+            gpu_memory_total_mb: None,
+            gpu_usage_percent: None,
+            gpu_temp_c: None,
+            battery_percent: None,
+            battery_status: None,
+        };
+        let json = serde_json::to_string(&status).unwrap();
+        // 所有字段都应该序列化为 null
+        assert!(json.contains("\"cpu_temp_c\":null"));
+        assert!(json.contains("\"gpu_name\":null"));
+        assert!(json.contains("\"battery_percent\":null"));
+        assert!(json.contains("\"battery_status\":null"));
+    }
+
+    #[test]
+    fn test_system_info_large_values() {
+        // 测试大数值是否正确序列化
+        let info = SystemInfo {
+            os_name: "Ubuntu".to_string(),
+            os_version: "24.04 LTS".to_string(),
+            kernel_version: "6.8.0-45-generic".to_string(),
+            cpu_model: "AMD Ryzen 9 7950X 16-Core Processor".to_string(),
+            cpu_cores: 32,
+            total_memory_gb: 128.0,
+            total_disk_gb: 4096.0,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("\"cpu_cores\":32"));
+        assert!(json.contains("\"total_memory_gb\":128.0"));
+        assert!(json.contains("\"total_disk_gb\":4096.0"));
+    }
+
+    #[test]
+    fn test_resource_usage_edge_cases() {
+        // 测试边界值
+        let usage = ResourceUsage {
+            cpu_usage: 100.0, // 满载
+            memory_used_gb: 64.0,
+            memory_total_gb: 64.0, // 内存用满
+            memory_percent: 100.0,
+            disk_used_gb: 999.0,
+            disk_total_gb: 1000.0, // 磁盘几乎满了
+            disk_percent: 99.9,
+            uptime_secs: u64::MAX, // 最大运行时间
+        };
+        let json = serde_json::to_string(&usage).unwrap();
+        assert!(json.contains("\"cpu_usage\":100.0"));
+        assert!(json.contains("\"memory_percent\":100.0"));
+        assert!(json.contains("\"disk_percent\":99.9"));
+    }
+
+    #[test]
+    fn test_get_app_version() {
+        // 测试版本号获取
+        let version = get_app_version();
+        assert!(!version.is_empty());
+        // 版本号应该符合 semver 格式
+        assert!(version.matches('.').count() >= 2 || version.contains('-'));
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
