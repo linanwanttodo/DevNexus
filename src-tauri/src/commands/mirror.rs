@@ -104,6 +104,13 @@ fn user_home() -> PathBuf {
 mod mirror_data;
 pub use mirror_data::{MirrorGroup, MirrorSource};
 
+/// List all available mirror groups with their current URLs.
+///
+/// Scans system configuration files to detect currently active mirror URLs
+/// for each package manager (npm, pypi, docker, cargo, go, maven, gradle).
+///
+/// # Returns
+/// A vector of `MirrorGroup` structs containing mirror information.
 #[tauri::command]
 pub fn list_mirrors() -> Vec<MirrorGroup> {
     // 静态数据来自 mirror_data::list_mirror_groups()，此处只填充各镜像当前生效 URL
@@ -183,6 +190,17 @@ pub async fn test_mirror_latency(url: String) -> Result<i64, String> {
     Ok(latency)
 }
 
+/// Switch to a specific mirror URL for the given package manager.
+///
+/// Updates the configuration file for the specified mirror type (npm, pypi, docker, cargo, go, maven, gradle)
+/// to use the provided URL. On Linux/macOS, may require sudo password for system-wide changes.
+///
+/// # Arguments
+/// * `mirror_id` - The ID of the mirror group to switch (e.g., "npm", "pypi", "docker")
+/// * `url` - The new mirror URL to use
+///
+/// # Returns
+/// A success message or error description.
 #[tauri::command]
 pub fn switch_mirror(mirror_id: String, url: String) -> Result<String, String> {
     match mirror_id.as_str() {

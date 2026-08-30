@@ -12,8 +12,10 @@ struct CachedEntry {
     versions: Vec<VersionInfo>,
 }
 
-/// 版本缓存管理器（两级：内存 + 文件）
-/// 缓存永久有效，直到用户手动刷新或切换版本
+/// Version cache manager with two-level caching (memory + file).
+///
+/// Provides persistent caching for version information across application restarts.
+/// Cache entries remain valid until manually refreshed or a version is switched.
 pub struct VersionCache {
     inner: Mutex<HashMap<String, CachedEntry>>,
     cache_path: Option<std::path::PathBuf>,
@@ -82,10 +84,17 @@ impl Default for VersionCache {
     }
 }
 
+/// Information about an installed software version.
+///
+/// Represents a single version of a development tool (Python, Node.js, Go, etc.)
+/// with its installation path and activation status.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct VersionInfo {
+    /// Version string (e.g., "3.11.0", "1.21.0")
     pub version: String,
+    /// Installation path or executable location
     pub path: String,
+    /// Whether this version is currently active/default
     pub is_active: bool,
 }
 

@@ -1,20 +1,38 @@
 use serde::{Deserialize, Serialize};
 
+/// GitHub release information from the API.
+///
+/// Contains metadata about a specific release including version tag, URL,
+/// release notes, and publication date.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GithubRelease {
+    /// Release tag (e.g., "v1.3.16")
     pub tag_name: String,
+    /// HTML URL to the release page
     pub html_url: String,
+    /// Release notes/description
     pub body: Option<String>,
+    /// Publication timestamp
     pub published_at: Option<String>,
 }
 
+/// Update check result with version comparison and download information.
+///
+/// Returned when checking for updates, contains all necessary information
+/// to display update availability and perform the update.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateInfo {
+    /// Whether an update is available
     pub has_update: bool,
+    /// Latest available version
     pub latest_version: String,
+    /// Currently installed version
     pub current_version: String,
+    /// Direct download URL for the update
     pub download_url: String,
+    /// Release notes for the new version
     pub release_notes: Option<String>,
+    /// Publication timestamp of the new version
     pub published_at: Option<String>,
 }
 
