@@ -272,6 +272,7 @@ fn dirs_home_dir() -> PathBuf {
 
 /// Read Name field from .desktop file
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 fn desktop_name_of(path: &std::path::Path) -> String {
     let Ok(content) = std::fs::read_to_string(path) else {
         return String::new();
