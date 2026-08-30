@@ -2,7 +2,7 @@
 //
 // Re-exports all software commands and types for the parent module.
 
-// Submodules - ALL EXTRACTED! 
+// Submodules
 pub mod installer;
 pub mod process_manager;
 pub mod residue_cleaner;
@@ -27,5 +27,5 @@ pub use scanner::InstalledApp;
 pub use uninstaller::force_uninstall_residues_blocking;
 pub use version_manager::{is_valid_version, merge_versions, safe_get_version};
 
-//  All major submodules extracted!
+// All major submodules extracted!
 // Remaining in software_core.rs: Tauri commands that depend on external modules
