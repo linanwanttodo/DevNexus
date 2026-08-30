@@ -2265,3 +2265,18 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 }
+// software/mod.rs — Software management module organization
+//
+// Re-exports all software commands and types for the parent module.
+
+pub mod process_manager;
+
+// Re-export process manager functions for use by other modules
+pub use process_manager::{kill_processes_by_name, process_matches_keyword};
+
+// TODO: Add other submodules as they are extracted:
+// pub mod scanner;
+// pub mod version_manager;
+// pub mod installer;
+// pub mod uninstaller;
+// pub mod residue_cleaner;
