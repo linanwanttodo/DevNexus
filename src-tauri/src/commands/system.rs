@@ -165,7 +165,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(300));
         sys.refresh_cpu_specifics(sysinfo::CpuRefreshKind::everything());
         let usage = sys.global_cpu_usage();
-        eprintln!("cpu_usage after 2 samples = {usage:?}");
+        tracing::debug!(cpu_usage = %usage, "CPU usage after 2 samples");
         // 只验证调用不 panic 且返回有限值，不强行断言非零（空闲机器可能接近 0）
         assert!(usage.is_finite() && usage >= 0.0);
     }

@@ -40,12 +40,12 @@ pub async fn start_server_on(state: Arc<AppState>, addr: &str) {
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("[API Hub] Failed to bind {}: {}", addr, e);
+            tracing::error!(address = %addr, error = %e, "[API Hub] Failed to bind TCP listener");
             return;
         }
     };
     if let Ok(local) = listener.local_addr() {
-        println!("[API Hub] Server started on http://{}", local);
+        tracing::info!(address = %local, "[API Hub] Server started");
     }
     state.running.store(true, Ordering::SeqCst);
     // 记录启动时刻作为首个活动时间，避免「刚启动就被判定空闲」
@@ -59,7 +59,10 @@ pub async fn start_server_on(state: Arc<AppState>, addr: &str) {
             let now_ms = now_unix_ms();
             let last = idle_state.last_activity_ms.load(Ordering::Relaxed);
             if last > 0 && now_ms.saturating_sub(last) >= IDLE_SHUTDOWN_SECS * 1000 {
-                println!("[API Hub] Idle for {IDLE_SHUTDOWN_SECS}s, shutting down server");
+                tracing::info!(
+                    idle_seconds = IDLE_SHUTDOWN_SECS,
+                    "[API Hub] Idle timeout reached, shutting down server"
+                );
                 break;
             }
         }
@@ -69,7 +72,7 @@ pub async fn start_server_on(state: Arc<AppState>, addr: &str) {
         .with_graceful_shutdown(idle_shutdown)
         .await
     {
-        eprintln!("[API Hub] Server error: {}", e);
+        tracing::error!(error = %e, "[API Hub] Server error");
     }
     state.running.store(false, Ordering::SeqCst);
     // 复位 started，允许下次使用再次惰性拉起

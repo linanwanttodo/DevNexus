@@ -58,13 +58,13 @@ pub async fn log_request(state: &AppState, mut log: RequestLog) {
                     log.is_streaming as i32,
                 ],
             ) {
-                eprintln!("[API Hub] Failed to insert request log: {}", e);
+                tracing::error!(error = %e, "[API Hub] Failed to insert request log");
             }
         }
     })
     .await;
     if res.is_err() {
-        eprintln!("[API Hub] log_request spawn_blocking join failed");
+        tracing::error!("[API Hub] log_request spawn_blocking join failed");
     }
 }
 
@@ -93,13 +93,13 @@ pub async fn update_log_tokens(state: &AppState, log_id: &str, input: u64, outpu
                 "UPDATE request_logs SET input_tokens = ?1, output_tokens = ?2 WHERE id = ?3",
                 rusqlite::params![input as i64, output as i64, id],
             ) {
-                eprintln!("[API Hub] Failed to update request log tokens: {}", e);
+                tracing::error!(error = %e, "[API Hub] Failed to update request log tokens");
             }
         }
     })
     .await;
     if res.is_err() {
-        eprintln!("[API Hub] update_log_tokens spawn_blocking join failed");
+        tracing::error!("[API Hub] update_log_tokens spawn_blocking join failed");
     }
 }
 
@@ -115,7 +115,7 @@ pub async fn get_logs(state: &AppState, limit: usize, offset: usize) -> Vec<Requ
     .ok()
     .flatten();
     if db_result.is_none() {
-        eprintln!("[API Hub] get_logs: DB unavailable or query failed, falling back to memory");
+        tracing::warn!("[API Hub] DB unavailable, falling back to memory for logs");
     }
 
     if let Some(logs) = db_result {
@@ -144,9 +144,7 @@ pub async fn get_usage_stats(state: &AppState) -> UsageStats {
     .ok()
     .flatten();
     if db_result.is_none() {
-        eprintln!(
-            "[API Hub] get_usage_stats: DB unavailable or query failed, falling back to memory"
-        );
+        tracing::warn!("[API Hub] DB unavailable, falling back to memory for usage stats");
     }
 
     if let Some(stats) = db_result {

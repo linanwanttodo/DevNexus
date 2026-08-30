@@ -197,9 +197,10 @@ pub fn load_providers_from_db_sync(
         let api_key = cipher.decrypt(&stored_key);
         // 存储为密文但解密失败（篡改/密钥不匹配）则跳过该 Provider 并告警，避免加载空 key 的无效配置
         if stored_key.starts_with("enc1:") && api_key.is_empty() && !stored_key.is_empty() {
-            eprintln!(
-                "[API Hub] WARNING: failed to decrypt api_key for provider '{}', skipping",
-                row.get::<_, String>(1).unwrap_or_default()
+            let provider_name = row.get::<_, String>(1).unwrap_or_default();
+            tracing::error!(
+                provider = %provider_name,
+                "[API Hub] Failed to decrypt API key for provider, skipping"
             );
             return Err(rusqlite::Error::InvalidParameterName(
                 "decrypt_failed".to_string(),

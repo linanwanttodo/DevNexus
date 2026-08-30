@@ -73,10 +73,9 @@ impl ApiKeyCipher {
         }
 
         // 4) 明文降级（keyring 与文件均不可用）
-        eprintln!(
-            "[API Hub] WARNING: unable to persist api_key encryption key (keyring and {} both unavailable). \
-             Falling back to PLAINTEXT storage for API keys.",
-            key_path.display()
+        tracing::error!(
+            key_path = %key_path.display(),
+            "[API Hub] Unable to persist API key encryption key, falling back to PLAINTEXT storage"
         );
         ApiKeyCipher {
             key,
@@ -126,12 +125,12 @@ impl ApiKeyCipher {
         let combined = match general_purpose::STANDARD.decode(payload) {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("[API Hub] Failed to base64-decode encrypted api_key: {}", e);
+                tracing::warn!(error = %e, "[API Hub] Failed to base64-decode encrypted API key");
                 return String::new();
             }
         };
         if combined.len() < 12 {
-            eprintln!("[API Hub] Invalid encrypted api_key payload (too short)");
+            tracing::warn!("[API Hub] Invalid encrypted API key payload (too short)");
             return String::new();
         }
         let (nonce_bytes, ciphertext) = combined.split_at(12);
@@ -139,17 +138,14 @@ impl ApiKeyCipher {
         let cipher = match Aes256Gcm::new_from_slice(&self.key) {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("[API Hub] Invalid encryption key: {}", e);
+                tracing::error!(error = %e, "[API Hub] Invalid encryption key");
                 return String::new();
             }
         };
         match cipher.decrypt(nonce, ciphertext) {
             Ok(pt) => String::from_utf8_lossy(&pt).to_string(),
             Err(e) => {
-                eprintln!(
-                    "[API Hub] Failed to decrypt api_key (corrupted or wrong key): {}",
-                    e
-                );
+                tracing::warn!(error = %e, "[API Hub] Failed to decrypt API key (corrupted or wrong key)");
                 String::new()
             }
         }
