@@ -28,7 +28,7 @@ async fn get_with_timeout_and_retry(
         match req.send().await {
             Ok(r) => return Ok(r),
             Err(e) if attempt == 0 => {
-                eprintln!("[API Hub] fetch_models retry after error: {}", e);
+                tracing::warn!(error = %e, "[API Hub] Retrying model fetch after error");
                 tokio::time::sleep(Duration::from_millis(200)).await;
                 continue;
             }

@@ -141,7 +141,7 @@ pub async fn test_mirror_latency(url: String) -> Result<i64, String> {
                 }
             }
         } else {
-            eprintln!("[DevNexus] Warning: Failed to acquire LATENCY_CACHE read lock");
+            tracing::warn!("[DevNexus] Failed to acquire latency cache read lock");
         }
     }
 

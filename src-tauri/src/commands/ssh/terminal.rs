@@ -50,7 +50,7 @@ async fn open_channel(
         .load(std::sync::atomic::Ordering::SeqCst)
     {
         if let Err(e) = channel.agent_forward(true).await {
-            eprintln!("[agent] request agent forwarding failed: {e}");
+            tracing::warn!(error = %e, "[SSH] Agent forwarding request failed");
         }
     }
 

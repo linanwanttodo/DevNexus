@@ -211,7 +211,7 @@ impl Handler for SshHandler {
                                 Ok(())
                             }
                             Err(e) => {
-                                eprintln!("[agent] connect local SSH_AUTH_SOCK failed: {e}");
+                                tracing::warn!(error = %e, "[SSH] Connect local SSH_AUTH_SOCK failed");
                                 // 丢弃 reply -> 自动拒绝
                                 Ok(())
                             }
@@ -839,12 +839,12 @@ pub async fn ssh_forward_local(
                                     });
                                 }
                                 Err(e) => {
-                                    eprintln!("[forward] channel open failed: {}", e);
+                                    tracing::warn!(error = %e, "[SSH] Forward channel open failed");
                                 }
                             }
                         }
                         Err(e) => {
-                            eprintln!("[forward] accept failed: {}", e);
+                            tracing::warn!(error = %e, "[SSH] Forward accept failed");
                             break;
                         }
                     }
@@ -962,12 +962,12 @@ pub async fn ssh_socks_proxy(
                             let entry = Arc::clone(&entry_arc);
                             tokio::spawn(async move {
                                 if let Err(e) = serve_socks(inbound, entry).await {
-                                    eprintln!("[socks] proxy error: {}", e);
+                                    tracing::warn!(error = %e, "[SSH] SOCKS proxy error");
                                 }
                             });
                         }
                         Err(e) => {
-                            eprintln!("[socks] accept failed: {}", e);
+                            tracing::warn!(error = %e, "[SSH] SOCKS accept failed");
                             break;
                         }
                     }

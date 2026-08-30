@@ -72,13 +72,18 @@ impl CryptoVault {
             let encoded = general_purpose::STANDARD.encode(key);
             match entry.set_password(&encoded) {
                 Ok(_) => persisted = true,
-                Err(e) => eprintln!("[CryptoVault] Failed to persist key to keyring: {}", e),
+                Err(e) => tracing::warn!(
+                    error = %e,
+                    "[CryptoVault] Failed to persist key to keyring"
+                ),
             }
         }
         if !persisted {
             persisted = Self::write_key_file(&key);
             if !persisted {
-                eprintln!("[CryptoVault] WARNING: unable to persist encryption key (keyring and file both unavailable).");
+                tracing::error!(
+                    "[CryptoVault] Unable to persist encryption key (keyring and file both unavailable)"
+                );
             }
         }
         if persisted {
@@ -150,9 +155,9 @@ impl CryptoVault {
         if let Some(e) = entry {
             let encoded = general_purpose::STANDARD.encode(key);
             if let Err(err) = e.set_password(&encoded) {
-                eprintln!(
-                    "[CryptoVault] Failed to persist master password to keyring: {}",
-                    err
+                tracing::warn!(
+                    error = %err,
+                    "[CryptoVault] Failed to persist master password to keyring"
                 );
             }
         }

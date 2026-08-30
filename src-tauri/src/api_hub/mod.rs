@@ -50,9 +50,9 @@ fn load_or_create_token(data_dir: &std::path::Path) -> String {
             }
             return token;
         }
-        eprintln!(
-            "[API Hub] WARNING: failed to persist auth token to {}; using in-memory token.",
-            token_path.display()
+        tracing::warn!(
+            path = %token_path.display(),
+            "[API Hub] Failed to persist auth token, using in-memory token"
         );
     }
     token
@@ -71,9 +71,10 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
     let conn = match rusqlite::Connection::open(&db_path) {
         Ok(c) => Some(c),
         Err(e) => {
-            eprintln!(
-                "[API Hub] Failed to open database {:?}: {} (providers will not persist)",
-                db_path, e
+            tracing::error!(
+                path = ?db_path,
+                error = %e,
+                "[API Hub] Failed to open database (providers will not persist)"
             );
             None
         }
@@ -82,7 +83,7 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
     // 初始化数据库表
     if let Some(ref c) = conn {
         if let Err(e) = provider::init_db_sync(c) {
-            eprintln!("[API Hub] Database init error: {}", e);
+            tracing::error!(error = %e, "[API Hub] Database init error");
         }
     }
 
@@ -108,10 +109,7 @@ pub fn init(data_dir: &std::path::Path) -> AppState {
         .pool_max_idle_per_host(10)
         .build()
         .unwrap_or_else(|e| {
-            eprintln!(
-                "[API Hub] Failed to build HTTP client, using default: {}",
-                e
-            );
+            tracing::warn!(error = %e, "[API Hub] Failed to build HTTP client with custom config, using default");
             reqwest::Client::new()
         });
 

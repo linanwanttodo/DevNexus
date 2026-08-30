@@ -41,9 +41,9 @@ pub fn run() {
         // （用户 shell/桌面会话常预设）会让透明失效——整个 400×116 岛窗口
         // 渲染为实心黑块，胶囊收起后黑底仍在，看起来就是"字缩小了框不缩"。
         std::env::set_var("GDK_BACKEND", "x11");
-        eprintln!(
-            "[DevNexus] GDK_BACKEND = {}",
-            std::env::var("GDK_BACKEND").unwrap_or_default()
+        tracing::info!(
+            gdk_backend = %std::env::var("GDK_BACKEND").unwrap_or_default(),
+            "[DevNexus] GDK_BACKEND configured"
         );
 
         // 【注意】不要设置 WEBKIT_DISABLE_DMABUF_RENDERER=1！
@@ -51,9 +51,9 @@ pub fn run() {
         // 结果在 AMD GPU 机器上灵动岛出现"框/字重绘错位、胶囊收起卡住不缩"
         // 的部分重绘故障——1.3.10 及之前 DMABUF GPU 渲染一直正常，时间线吻合，
         // 故回退。若个别机器 WebKit 挂死，应排查具体 GPU/驱动而非全局禁用。
-        eprintln!(
-            "[DevNexus] WEBKIT_DISABLE_DMABUF_RENDERER = {}",
-            std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").unwrap_or_default()
+        tracing::info!(
+            webkit_dmabuf_disabled = %std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").unwrap_or_default(),
+            "[DevNexus] WEBKIT_DISABLE_DMABUF_RENDERER status"
         );
     }
 
@@ -136,7 +136,7 @@ pub fn run() {
                 .or_else(|| Image::from_bytes(include_bytes!("../icons/32x32.png")).ok());
 
             let Some(tray_icon) = tray_icon else {
-                eprintln!("[DevNexus] Warning: no tray icon available, skipping tray setup");
+                tracing::warn!("[DevNexus] No tray icon available, skipping tray setup");
                 return Ok(());
             };
 
@@ -472,5 +472,12 @@ pub fn run() {
             commands::ssh::ai::ssh_ai_sftp,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running DevNexus");
+        .map_err(|e| {
+            tracing::error!(
+                error = %e,
+                "DevNexus failed to start. This is a critical error that prevents the application from running."
+            );
+            e
+        })
+        .expect("DevNexus runtime failed to start - check logs for details");
 }

@@ -28,7 +28,15 @@ pub fn create_main_window(app: &tauri::AppHandle) -> tauri::WebviewWindow {
         .resizable(true)
         .shadow(false)
         .build()
-        .expect("failed to create main window")
+        .unwrap_or_else(|e| {
+            tracing::error!(
+                error = %e,
+                width = MAIN_WIDTH,
+                height = MAIN_HEIGHT,
+                "Failed to create main window. This may indicate a Tauri runtime issue."
+            );
+            panic!("Failed to create main window: {}", e);
+        })
 }
 
 /// 显示主窗口：若不存在则先重建（主窗口可能因「关闭转后台」被 destroy）。

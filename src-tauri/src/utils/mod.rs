@@ -28,9 +28,10 @@ pub fn data_dir() -> std::path::PathBuf {
 
     // SQLite / 配置写入前确保目录存在；失败时回退到当前目录
     if let Err(e) = std::fs::create_dir_all(&dir) {
-        eprintln!(
-            "[DevNexus] Warning: cannot create data dir {:?}: {}",
-            dir, e
+        tracing::warn!(
+            data_dir = ?dir,
+            error = %e,
+            "[DevNexus] Cannot create data directory, falling back to current directory"
         );
         return std::path::PathBuf::from(".");
     }

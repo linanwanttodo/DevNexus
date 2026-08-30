@@ -171,8 +171,8 @@ mod imp {
             .map(|m| m.append2(vec![rule], 0u32));
             let Some(monitor) = monitor else { return };
             if conn.send_with_reply_and_block(monitor, TIMEOUT).is_err() {
-                eprintln!(
-                    "[DevNexus] notification monitor not permitted; island notifications disabled"
+                tracing::error!(
+                    "[DevNexus] Notification monitor not permitted; island notifications disabled"
                 );
                 return;
             }
@@ -511,7 +511,7 @@ pub fn island_get_enabled() -> bool {
 pub fn island_set_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), String> {
     ensure_started();
     if let Err(e) = std::fs::create_dir_all(crate::utils::data_dir()) {
-        eprintln!("[DevNexus] cannot create data dir for island_enabled: {e}");
+        tracing::warn!(error = %e, "[DevNexus] Cannot create data dir for island_enabled");
     }
     let _ = std::fs::write(island_enabled_path(), if enabled { "1" } else { "0" });
     // 同步所有岛窗口显示状态（托盘点击时主窗口可能未打开，这里直接控制窗口）
@@ -576,7 +576,7 @@ fn load_key_from_disk() -> Option<String> {
 
 fn save_key_to_disk(key: &str) {
     if let Err(e) = std::fs::create_dir_all(crate::utils::data_dir()) {
-        eprintln!("[DevNexus] cannot create data dir for deepseek key: {e}");
+        tracing::warn!(error = %e, "[DevNexus] Cannot create data dir for deepseek key");
         return;
     }
     let path = key_file_path();
@@ -588,7 +588,7 @@ fn save_key_to_disk(key: &str) {
             let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
         }
     } else {
-        eprintln!("[DevNexus] cannot persist deepseek key");
+        tracing::error!("[DevNexus] Cannot persist DeepSeek key to disk");
     }
 }
 
