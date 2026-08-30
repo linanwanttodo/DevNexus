@@ -3,6 +3,7 @@
 // Re-exports all software commands and types for the parent module.
 
 // Submodules
+pub mod installer;
 pub mod process_manager;
 pub mod scanner;
 pub mod version_manager;
@@ -15,12 +16,15 @@ mod software_core;
 pub use software_core::*;
 
 // Re-export submodule functions for use by other modules
+pub use installer::{
+    extract_and_install, find_binary_in_dir, get_install_base_dir,
+    is_valid_version as is_valid_install_version,
+};
 pub use process_manager::{kill_processes_by_name, process_matches_keyword};
 pub use scanner::InstalledApp;
 pub use version_manager::{is_valid_version, merge_versions, safe_get_version};
 
 // TODO: As functions are extracted to submodules, remove them from software_core.rs
 // Final structure will be:
-// pub mod installer;
 // pub mod uninstaller;
 // pub mod residue_cleaner;
