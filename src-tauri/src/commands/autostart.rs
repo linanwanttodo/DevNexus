@@ -144,10 +144,11 @@ pub fn get_autostart() -> bool {
 
 #[cfg(test)]
 mod tests {
-    // 仅 Linux 测试使用 super 符号（autostart_desktop_path）。
-    // 若不加 cfg，Windows/macOS 上 Linux-only 测试被移除后 `use super::*`
-    // 成为 unused import，触发 clippy -D warnings 编译失败（CI 已复现）。
-    #[cfg(target_os = "linux")]
+    // 跨平台测试（test_silent_start_flag_roundtrip / test_silent_start_get_set /
+    // test_set_autostart_unsupported_platform）依赖 super 中的 set_silent_start、
+    // get_silent_start、set_autostart、silent_flag_path 等公共符号。
+    // 平台无关测试必须无条件 `use super::*`，否则 Windows/macOS CI 上
+    // `cannot find function ... in this scope`（E0425）——CI 已复现。
     use super::*;
 
     #[test]

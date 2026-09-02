@@ -190,14 +190,13 @@ pub fn extract_and_install(
                     String::from_utf8_lossy(&output.stderr)
                 ));
             }
-            // Copy .app bundle from mounted DMG
+            // Copy .app bundle from mounted DMG (stdlib recursive copy;
+            // 避免引入 fs_extra 依赖——它仅在这一处用到，且增加构建体积)
             if let Ok(entries) = std::fs::read_dir(&mount_point) {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.extension().map(|e| e == "app").unwrap_or(false) {
-                        let dest =
-                            install_dir.join(path.file_name().expect("App bundle has no name"));
-                        fs_extra::dir::copy(&path, install_dir, &fs_extra::dir::CopyOptions::new())
+                        copy_dir_recursive(&path, install_dir)
                             .map_err(|e| format!("Failed to copy .app: {}", e))?;
                         break;
                     }
@@ -219,5 +218,43 @@ pub fn extract_and_install(
     // Clean up temp file
     let _ = std::fs::remove_file(filepath);
 
+    Ok(())
+}
+
+/// 递归复制目录到目标父目录（stdlib-only，替代 fs_extra::dir::copy）。
+/// 把 `src` 整个子树拷到 `dst_parent/src.file_name()`。
+/// 不跟随符号链接（macOS .app 内 Resources 等可能含符号链接，安全起见用 symlink_metadata 区分）。
+/// 仅 Unix 编译（依赖 std::os::unix::fs::symlink），避免在 Windows 触发 unix-only API 错误。
+#[cfg(unix)]
+#[allow(dead_code)]
+fn copy_dir_recursive(src: &std::path::Path, dst_parent: &std::path::Path) -> std::io::Result<()> {
+    let file_name = src.file_name().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "src has no file name")
+    })?;
+    let dst = dst_parent.join(file_name);
+    copy_dir_into(src, &dst)
+}
+
+#[cfg(unix)]
+fn copy_dir_into(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_into(&from, &to)?;
+        } else if file_type.is_symlink() {
+            // 不跟随：保留链接目标，复制链接本身
+            let target = std::fs::read_link(&from)?;
+            if to.exists() {
+                std::fs::remove_file(&to).ok();
+            }
+            std::os::unix::fs::symlink(&target, &to)?;
+        } else {
+            std::fs::copy(&from, &to)?;
+        }
+    }
     Ok(())
 }

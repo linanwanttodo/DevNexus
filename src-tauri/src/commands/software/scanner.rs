@@ -3,6 +3,7 @@
 // Scans .desktop files to build installed applications list.
 
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
 use std::path::PathBuf;
 
 /// Installed application information
@@ -14,7 +15,10 @@ pub struct InstalledApp {
     pub icon: Option<String>,
 }
 
-/// Check if a desktop file is a system/GNOME component (should be excluded)
+/// Check if a desktop file is a system/GNOME component (should be excluded).
+/// 仅 Linux 的 `.desktop` 扫描会调用，Windows/macOS 编译时 `list_gui_apps` 被 `#[cfg]` 移除，
+/// 该函数变成 dead-code 进而 clippy `-D warnings` 报错——加 `#[cfg]` 一并门控。
+#[cfg(target_os = "linux")]
 fn is_system_desktop(path: &std::path::Path) -> bool {
     let s = path.to_string_lossy().to_lowercase();
     let name = path
