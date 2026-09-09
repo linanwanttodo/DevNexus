@@ -1,6 +1,6 @@
 // src-tauri/src/commands/autostart.rs — 开机自启 + 静默启动
 // 开机自启：写入系统自启入口（Linux XDG autostart / macOS LaunchAgent / Windows 注册表 Run）。
-// 静默启动：持久化标志文件，应用启动时读取——开启则主窗口不显示，后台常驻托盘 + 灵动岛。
+// 静默启动：持久化标志文件，应用启动时读取——开启则主窗口不显示，后台常驻托盘。
 
 fn silent_flag_path() -> std::path::PathBuf {
     crate::utils::data_dir().join("silent_start")

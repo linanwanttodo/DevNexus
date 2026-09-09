@@ -68,7 +68,6 @@ export const iconMap = {
   branch: "GitBranch",
   "code-block": "CodeXml",
   archive: "Archive",
-  island: "Pill",
 
   // SSH 模块
   server: "Server",

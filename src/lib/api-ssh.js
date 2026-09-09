@@ -1,4 +1,4 @@
-// src/lib/api-ssh.js — SSH 后端命令与事件封装（19 个命令 + 3 个事件）
+// src/lib/api-ssh.js — SSH 后端命令与事件封装
 // 约定：明文凭据只在 Rust 侧解密；终端输入输出与文件内容均以 base64 传输。
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -65,13 +65,6 @@ export const rmRecursiveSftp = (sftpId, path) =>
 export const searchSftp = (sftpId, root, pattern, maxDepth) =>
   invoke("ssh_sftp_search", { sftpId, root, pattern, maxDepth });
 
-// ---- SFTP AI 助手（复用 API Hub 的 LLM Provider 配置）----
-// 传入当前目录上下文，返回 { reply, actions, model, provider }
-export const aiSftp = (params) =>
-  invoke("ssh_ai_sftp", params);
-export const aiSftpModels = () =>
-  invoke("ssh_ai_list_models");
-
 // ---- 端口转发与隧道 ----
 export const forwardLocal = (sessionId, bindHost, bindPort, destHost, destPort) =>
   invoke("ssh_forward_local", { sessionId, bindHost, bindPort, destHost, destPort });
@@ -90,9 +83,19 @@ export const closeSocks = (sessionId, socksId) =>
 export const listSocks = (sessionId) =>
   invoke("ssh_list_socks", { sessionId });
 
-// ---- AI 助手（复用 API Hub 的 LLM Provider 配置）----
-// 列出可用模型（来自 API Hub 启用的 Provider）
+// ---- SSH AI 助手（独立 Provider 配置，见 SSH 助手页）----
+// 服务配置 CRUD
+export const aiListProviders = () => invoke("ssh_ai_list_providers");
+export const aiAddProvider = (provider) =>
+  invoke("ssh_ai_add_provider", provider);
+export const aiUpdateProvider = (provider) =>
+  invoke("ssh_ai_update_provider", provider);
+export const aiDeleteProvider = (name) =>
+  invoke("ssh_ai_delete_provider", { name });
+// 列出可用模型（来自启用的 SSH AI 服务）
 export const aiListModels = () => invoke("ssh_ai_list_models");
+// 列出当前打开的终端（供选择命令执行目标）
+export const aiListTerminals = () => invoke("ssh_ai_list_terminals");
 // 发送一条消息，返回 { reply, commands, dangerous, model, provider }
 export const aiChat = (params) =>
   invoke("ssh_ai_chat", params);

@@ -91,28 +91,18 @@ mod tests {
     }
 
     #[test]
-    fn test_infer_cookie_table_firefox() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch("CREATE TABLE moz_cookies (id INTEGER);")
+    fn test_count_cookies_chrome_table() {
+        let dir = std::env::temp_dir().join("devnexus_cookie_test");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("cookies_test.sqlite");
+        let _ = std::fs::remove_file(&path);
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("CREATE TABLE cookies (id INTEGER); INSERT INTO cookies VALUES (1);")
             .unwrap();
-        let table = infer_cookie_table(&conn).unwrap();
-        assert_eq!(table, "moz_cookies");
-    }
-
-    #[test]
-    fn test_infer_cookie_table_chrome() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch("CREATE TABLE cookies (id INTEGER);")
-            .unwrap();
-        let table = infer_cookie_table(&conn).unwrap();
-        assert_eq!(table, "cookies");
-    }
-
-    #[test]
-    fn test_infer_cookie_table_fallback() {
-        let conn = Connection::open_in_memory().unwrap();
-        let table = infer_cookie_table(&conn).unwrap();
-        assert_eq!(table, "cookies");
+        drop(conn);
+        let count = count_cookies(&path).unwrap();
+        assert_eq!(count, 1);
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
@@ -249,7 +239,7 @@ pub struct BrowserInfo {
     pub cookie_count: usize,
 }
 
-/// 获取支持的浏览器列表
+/// 获取支持的浏览器列表（仅 Chrome）
 #[tauri::command]
 pub fn get_supported_browsers() -> Vec<BrowserInfo> {
     let mut browsers = Vec::new();
@@ -264,42 +254,20 @@ pub fn get_supported_browsers() -> Vec<BrowserInfo> {
         });
     }
 
-    // Edge
-    if let Some(path) = get_edge_cookie_path() {
-        let count = count_cookies(&path).unwrap_or(0);
-        browsers.push(BrowserInfo {
-            name: "Edge".to_string(),
-            cookie_path: path.to_string_lossy().to_string(),
-            cookie_count: count,
-        });
-    }
-
-    // Firefox
-    if let Some(path) = get_firefox_cookie_path() {
-        let count = count_cookies(&path).unwrap_or(0);
-        browsers.push(BrowserInfo {
-            name: "Firefox".to_string(),
-            cookie_path: path.to_string_lossy().to_string(),
-            cookie_count: count,
-        });
-    }
-
     browsers
 }
 
-/// 提取指定浏览器的 Cookie
+/// 提取指定浏览器的 Cookie（仅 Chrome）
 #[tauri::command]
 pub fn extract_cookies(
     browser_name: String,
     domain_filter: Option<String>,
     max_results: Option<usize>,
 ) -> Result<Vec<CookieEntry>, String> {
-    let cookie_path = match browser_name.as_str() {
-        "Chrome" => get_chrome_cookie_path(),
-        "Edge" => get_edge_cookie_path(),
-        "Firefox" => get_firefox_cookie_path(),
-        _ => return Err(format!("Unsupported browser: {}", browser_name)),
-    };
+    if browser_name.as_str() != "Chrome" {
+        return Err(format!("Unsupported browser: {}", browser_name));
+    }
+    let cookie_path = get_chrome_cookie_path();
 
     let path = cookie_path.ok_or_else(|| format!("{} cookie database not found", browser_name))?;
 
@@ -361,15 +329,12 @@ pub fn export_as_json(
 
 // ==================== 浏览器 Cookie 路径检测 ====================
 
-/// 根据浏览器名称获取 Cookie 数据库路径（供导出函数使用）
+/// 根据浏览器名称获取 Cookie 数据库路径（仅 Chrome，供导出函数使用）
 fn get_browser_cookie_path(browser_name: &str) -> Result<PathBuf, String> {
-    let path = match browser_name {
-        "Chrome" => get_chrome_cookie_path(),
-        "Edge" => get_edge_cookie_path(),
-        "Firefox" => get_firefox_cookie_path(),
-        _ => return Err(format!("Unsupported browser: {}", browser_name)),
-    };
-    path.ok_or_else(|| format!("{} cookie database not found", browser_name))
+    if browser_name != "Chrome" {
+        return Err(format!("Unsupported browser: {}", browser_name));
+    }
+    get_chrome_cookie_path().ok_or_else(|| format!("{} cookie database not found", browser_name))
 }
 
 fn get_chrome_cookie_path() -> Option<PathBuf> {
@@ -435,157 +400,14 @@ fn get_chrome_cookie_path() -> Option<PathBuf> {
     None
 }
 
-fn get_edge_cookie_path() -> Option<PathBuf> {
-    #[cfg(target_os = "macos")]
-    {
-        if let Ok(home) = std::env::var("HOME") {
-            let base =
-                PathBuf::from(home).join("Library/Application Support/Microsoft Edge/Default");
-            // 现代 Chromium(Edge 80+) 用 Network\Cookies；旧版用 Cookies
-            for rel in ["Network/Cookies", "Cookies"] {
-                let p = base.join(rel);
-                if p.exists() {
-                    return Some(p);
-                }
-            }
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        if let Ok(home) = std::env::var("HOME") {
-            let base = PathBuf::from(home).join(".config/microsoft-edge/Default");
-            for rel in ["Network/Cookies", "Cookies"] {
-                let p = base.join(rel);
-                if p.exists() {
-                    return Some(p);
-                }
-            }
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-            let base = PathBuf::from(localappdata).join("Microsoft\\Edge\\User Data\\Default");
-            // 现代 Edge 用 Network\Cookies；旧版用 Cookies
-            for rel in ["Network\\Cookies", "Cookies"] {
-                let p = base.join(rel);
-                if p.exists() {
-                    return Some(p);
-                }
-            }
-        }
-    }
-
-    None
-}
-
-fn get_firefox_cookie_path() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let profile_root = PathBuf::from(&home).join(".mozilla/firefox");
-
-    if !profile_root.exists() {
-        return None;
-    }
-
-    // 读取 profiles.ini 找到默认 profile
-    let profiles_ini = profile_root.join("profiles.ini");
-    if profiles_ini.exists() {
-        if let Ok(content) = std::fs::read_to_string(&profiles_ini) {
-            let mut current_path: Option<String> = None;
-            let mut is_default = false;
-            for line in content.lines() {
-                let line = line.trim();
-                if line.to_lowercase() == "[profile0]" || line.starts_with("[profile") {
-                    current_path = None;
-                    is_default = false;
-                } else if let Some(val) = line.strip_prefix("Path=") {
-                    current_path = Some(val.to_string());
-                } else if line.to_lowercase() == "default=1" || line.starts_with("Default=") {
-                    is_default = true;
-                }
-                // Section break — evaluate
-                if line.is_empty() || (line.starts_with('[') && current_path.is_some()) {
-                    if is_default {
-                        if let Some(ref path) = current_path {
-                            let cookie_path = if path.starts_with('/') {
-                                PathBuf::from(path)
-                            } else {
-                                profile_root.join(path)
-                            }
-                            .join("cookies.sqlite");
-                            if cookie_path.exists() {
-                                return Some(cookie_path);
-                            }
-                        }
-                    }
-                    if line.starts_with('[') && line != "[Profile0]" {
-                        current_path = None;
-                        is_default = false;
-                    }
-                }
-            }
-            // Check last section
-            if is_default {
-                if let Some(ref path) = current_path {
-                    let cookie_path = if path.starts_with('/') {
-                        PathBuf::from(path)
-                    } else {
-                        profile_root.join(path)
-                    }
-                    .join("cookies.sqlite");
-                    if cookie_path.exists() {
-                        return Some(cookie_path);
-                    }
-                }
-            }
-        }
-    }
-
-    // 回退：扫描 profile 目录
-    if let Ok(entries) = std::fs::read_dir(&profile_root) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                let cookie_path = path.join("cookies.sqlite");
-                if cookie_path.exists() {
-                    return Some(cookie_path);
-                }
-            }
-        }
-    }
-
-    None
-}
-
 // ==================== Cookie 数据库操作 ====================
 
 fn count_cookies(path: &PathBuf) -> Result<usize, String> {
     let conn = Connection::open(path).map_err(|e| format!("Failed to open: {}", e))?;
-    let table = infer_cookie_table(&conn)?;
     let count: usize = conn
-        .query_row(&format!("SELECT COUNT(*) FROM {}", table), [], |row| {
-            row.get(0)
-        })
+        .query_row("SELECT COUNT(*) FROM cookies", [], |row| row.get(0))
         .map_err(|e| format!("Count failed: {}", e))?;
     Ok(count)
-}
-
-fn infer_cookie_table(conn: &Connection) -> Result<&'static str, String> {
-    let tables: Vec<String> = conn
-        .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-        .map_err(|e| format!("Query failed: {}", e))?
-        .query_map([], |row| row.get(0))
-        .map_err(|e| format!("Query failed: {}", e))?
-        .filter_map(|r| r.ok())
-        .collect();
-
-    if tables.iter().any(|t| t == "moz_cookies") {
-        Ok("moz_cookies")
-    } else {
-        Ok("cookies")
-    }
 }
 
 /// 获取 Cookie 数据库的版本号（用于判断是否包含完整性检查哈希）
@@ -640,19 +462,6 @@ fn map_chrome_cookie_row(
         domain: host_key,
         path: row.get(3)?,
         expires,
-        secure: row.get(5)?,
-        httponly: row.get(6)?,
-    })
-}
-
-fn map_firefox_cookie_row(row: &rusqlite::Row) -> rusqlite::Result<CookieEntry> {
-    let value: String = row.get(1)?;
-    Ok(CookieEntry {
-        name: row.get(0)?,
-        value,
-        domain: row.get(2)?,
-        path: row.get(3)?,
-        expires: row.get(4)?,
         secure: row.get(5)?,
         httponly: row.get(6)?,
     })
@@ -747,7 +556,6 @@ fn read_cookies(
 
     let conn =
         Connection::open(&tmp_path).map_err(|e| format!("Failed to open database: {}", e))?;
-    let table = infer_cookie_table(&conn)?;
 
     // 根据 max_results 生成 LIMIT 子句
     let limit_clause = match max_results {
@@ -755,24 +563,14 @@ fn read_cookies(
         None => String::new(),
     };
 
-    let (query, param) = if table == "moz_cookies" {
-        let base = "SELECT name, value, host, path, expiry, isSecure, isHttpOnly FROM moz_cookies";
-        match domain_filter {
-            Some(ref domain) => (
-                format!("{} WHERE host LIKE ?1{}", base, limit_clause),
-                Some(format!("%{}%", domain)),
-            ),
-            None => (format!("{}{}", base, limit_clause), None),
-        }
-    } else {
-        let base = "SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies";
-        match domain_filter {
-            Some(ref domain) => (
-                format!("{} WHERE host_key LIKE ?1{}", base, limit_clause),
-                Some(format!("%{}%", domain)),
-            ),
-            None => (format!("{}{}", base, limit_clause), None),
-        }
+    // Chrome cookies 表
+    let base = "SELECT name, encrypted_value, host_key, path, expires_utc, is_secure, is_httponly FROM cookies";
+    let (query, param) = match domain_filter {
+        Some(ref domain) => (
+            format!("{} WHERE host_key LIKE ?1{}", base, limit_clause),
+            Some(format!("%{}%", domain)),
+        ),
+        None => (format!("{}{}", base, limit_clause), None),
     };
 
     let mut stmt = conn
@@ -781,41 +579,22 @@ fn read_cookies(
 
     let mut cookies = Vec::new();
 
-    if table == "moz_cookies" {
-        let map_fn = map_firefox_cookie_row;
-        if let Some(ref p) = param {
-            let rows = stmt
-                .query_map([p.as_str()], map_fn)
-                .map_err(|e| format!("Query failed: {}", e))?;
-            for row in rows {
-                cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
-            }
-        } else {
-            let rows = stmt
-                .query_map([], map_fn)
-                .map_err(|e| format!("Query failed: {}", e))?;
-            for row in rows {
-                cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
-            }
+    // Chrome — 传递 has_integrity_check 到 map 闭包
+    if let Some(ref p) = param {
+        let rows = stmt
+            .query_map([p.as_str()], |row| {
+                map_chrome_cookie_row(row, has_integrity_check)
+            })
+            .map_err(|e| format!("Query failed: {}", e))?;
+        for row in rows {
+            cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
         }
     } else {
-        // Chrome/Edge — 传递 has_integrity_check 到 map 闭包
-        if let Some(ref p) = param {
-            let rows = stmt
-                .query_map([p.as_str()], |row| {
-                    map_chrome_cookie_row(row, has_integrity_check)
-                })
-                .map_err(|e| format!("Query failed: {}", e))?;
-            for row in rows {
-                cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
-            }
-        } else {
-            let rows = stmt
-                .query_map([], |row| map_chrome_cookie_row(row, has_integrity_check))
-                .map_err(|e| format!("Query failed: {}", e))?;
-            for row in rows {
-                cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
-            }
+        let rows = stmt
+            .query_map([], |row| map_chrome_cookie_row(row, has_integrity_check))
+            .map_err(|e| format!("Query failed: {}", e))?;
+        for row in rows {
+            cookies.push(row.map_err(|e| format!("Cookie row error: {}", e))?);
         }
     }
 

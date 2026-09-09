@@ -18,7 +18,6 @@ export const navItems = [
     },
   },
   { id: "processes", route: "/processes", icon: "thunderbolt", labelKey: "nav.processes" },
-  { id: "passwords", route: "/passwords", icon: "lock", labelKey: "nav.passwords" },
   { id: "cookies", route: "/cookies", icon: "idcard", labelKey: "nav.cookies" },
   { id: "uninstall", route: "/uninstall", icon: "delete", labelKey: "nav.uninstall" },
   { id: "tuning", route: "/tuning/linux", icon: "tool", labelKey: "nav.system_tune",
@@ -31,17 +30,6 @@ export const navItems = [
       ],
     },
   },
-  { id: "api-hub", route: "/api-hub", icon: "branch", labelKey: "nav.api_hub",
-    context: {
-      titleKey: "nav.api_hub",
-      items: [
-        { route: "/api-hub", icon: "bar-chart", labelKey: "apiHub.tabs.stats" },
-        { route: "/api-hub/providers", icon: "database", labelKey: "apiHub.tabs.providers" },
-        { route: "/api-hub/endpoints", icon: "link", labelKey: "apiHub.tabs.endpoints" },
-        { route: "/api-hub/logs", icon: "history", labelKey: "apiHub.tabs.logs" },
-      ],
-    },
-  },
   { id: "ssh", route: "/ssh", icon: "server", labelKey: "nav.ssh",
     context: {
       titleKey: "nav.ssh",
@@ -49,10 +37,10 @@ export const navItems = [
         { route: "/ssh", icon: "list", labelKey: "ssh.connections" },
         { route: "/ssh/sessions", icon: "terminal", labelKey: "ssh.sessions" },
         { route: "/ssh/sftp", icon: "folder", labelKey: "ssh.sftp" },
+        { route: "/ssh/ai", icon: "sparkles", labelKey: "nav.sshAssistant" },
       ],
     },
   },
-  { id: "island", route: "/island", icon: "island", labelKey: "nav.island" },
   { id: "settings", route: "/settings", icon: "settings", labelKey: "nav.settings" },
 ];
 

@@ -22,21 +22,6 @@
         "decorations": false,
         "resizable": true,
         "backgroundColor": [22, 22, 22, 255]
-      },
-      {
-        "label": "island",
-        "title": "DevNexus Island",
-        "url": "island.html",
-        "width": 248,
-        "height": 60,
-        "decorations": false,
-        "transparent": true,
-        "alwaysOnTop": true,
-        "shadow": false,
-        "resizable": false,
-        "skipTaskbar": true,
-        "visible": false,
-        "backgroundColor": [0, 0, 0, 0]
       }
     ],
     "security": {

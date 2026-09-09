@@ -2,9 +2,7 @@
   "identifier": "default",
   "description": "Default capability set for DevNexus",
   "windows": [
-    "main",
-    "island",
-    "island-*"
+    "main"
   ],
   "permissions": [
     "core:default",

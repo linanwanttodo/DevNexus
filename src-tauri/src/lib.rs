@@ -1,4 +1,3 @@
-pub mod api_hub;
 pub mod commands;
 mod residue_scanner;
 mod utils;
@@ -7,7 +6,7 @@ use commands::window_factory::create_main_window;
 
 use tauri::{
     image::Image,
-    menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder},
+    menu::{MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
     Manager,
 };
@@ -28,40 +27,11 @@ fn init_tracing() {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     init_tracing();
-    // GNOME Wayland 不支持透明窗口与 always-on-top（Tauri/WebKitGTK 已知限制，
-    // 灵动岛窗口依赖两者）。在 GTK 初始化前强制走 XWayland（X11 后端）：
-    // X11 协议原生支持 ARGB 透明 + _NET_WM_STATE_ABOVE 置顶，mutter 会正常合成。
-    // Wayland 原生协议不提供窗口级 alpha 与置顶层，因此无条件覆盖
-    // GDK_BACKEND（含用户显式设置）；纯 Wayland 环境若有 XWayland 同样适用。
-    #[cfg(target_os = "linux")]
-    {
-        // 无条件强制 x11：本应用的透明窗口（灵动岛）、点击穿透（GDK input
-        // shape）、跨工作区跟随（gdkx11 X11Window）全部依赖 X11 后端。
-        // 此前"仅在未设置时强制"的逻辑在 GDK_BACKEND=wayland 的环境下
-        // （用户 shell/桌面会话常预设）会让透明失效——整个 400×116 岛窗口
-        // 渲染为实心黑块，胶囊收起后黑底仍在，看起来就是"字缩小了框不缩"。
-        std::env::set_var("GDK_BACKEND", "x11");
-        tracing::info!(
-            gdk_backend = %std::env::var("GDK_BACKEND").unwrap_or_default(),
-            "[DevNexus] GDK_BACKEND configured"
-        );
 
-        // 【注意】不要设置 WEBKIT_DISABLE_DMABUF_RENDERER=1！
-        // 曾为修 SSH 窗口冻结加过该变量（c009c33），强制 WebKitGTK 走软件渲染，
-        // 结果在 AMD GPU 机器上灵动岛出现"框/字重绘错位、胶囊收起卡住不缩"
-        // 的部分重绘故障——1.3.10 及之前 DMABUF GPU 渲染一直正常，时间线吻合，
-        // 故回退。若个别机器 WebKit 挂死，应排查具体 GPU/驱动而非全局禁用。
-        tracing::info!(
-            webkit_dmabuf_disabled = %std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").unwrap_or_default(),
-            "[DevNexus] WEBKIT_DISABLE_DMABUF_RENDERER status"
-        );
-    }
-
-    let password_manager = commands::password_manager::PasswordManager::new();
     let version_cache = commands::version_manager::VersionCache::new();
 
-    // 初始化 API Hub
-    let api_hub_state = api_hub::init(&crate::utils::data_dir());
+    // SSH AI 独立配置存档（自带 Provider，不依赖 API Hub）
+    let ssh_ai_store = commands::ssh::ai::SshAiStore::load(&crate::utils::data_dir());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -69,15 +39,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_fs::init())
-        .manage(password_manager)
         .manage(version_cache)
-        .manage(api_hub_state)
+        .manage(ssh_ai_store)
         .manage(commands::ssh::connections::SshStore::new())
         .manage(commands::ssh::session::SshSessionManager::new())
         .setup(move |app| {
             // 开发模式下硬刷新一次主窗口，确保显示最新前端代码。
             // 注意：不能调用 clear_all_browsing_data()——它会清空 localStorage，
-            // 导致用户偏好（主题/灵动岛开关/DeepSeek Key 等）每次 dev 启动都丢失。
+            // 导致用户偏好（主题等）每次 dev 启动都丢失。
             #[cfg(debug_assertions)]
             if let Some(window) = app.get_webview_window("main") {
                 let w = window.clone();
@@ -87,14 +56,7 @@ pub fn run() {
                 });
             }
 
-            // 启动 API Hub 后台服务：改为惰性启动——用户首次进入 API Hub 页面时
-            // 由 api_hub_status 命令触发 start()，未使用该功能时不绑定端口/起后台任务。
-            // 见 api_hub::ensure_started (CAS 保证只启动一次)。
-
-            // 启动灵动岛数据桥：系统通知监听（微信/QQ 等 → island-notify 事件）
-            commands::island_bridge::init(app.handle().clone());
-
-            // 静默启动：开启时主窗口不显示，后台常驻托盘 + 灵动岛。
+            // 静默启动：开启时主窗口不显示，后台常驻托盘。
             // 直接从 tauri.conf.json 自动创建的主窗口销毁（而非 hide），
             // 省掉 ~260MB 主窗口渲染进程；用户从托盘「显示 DevNexus」时再重建。
             if commands::autostart::get_silent_start() {
@@ -105,23 +67,14 @@ pub fn run() {
             }
 
             let lang = commands::tray::saved_lang();
-            let (show_label, _island_label, check_update_label, quit_label) =
+            let (show_label, check_update_label, quit_label) =
                 commands::tray::tray_texts(&lang);
-            let balance_label = commands::tray::balance_placeholder(&lang);
             let show = MenuItemBuilder::with_id("show", show_label).build(app)?;
-            // 灵动岛：check 开关项，文字显示当前状态（"灵动岛：开"/"灵动岛：关"），
-            // 点击直接切换并同步更新文字
-            let island_checked = commands::island_bridge::island_get_enabled();
-            let island_state_label = commands::tray::island_label_by_state(&lang, island_checked);
-            let island = CheckMenuItemBuilder::with_id("island", island_state_label)
-                .checked(island_checked)
-                .build(app)?;
             let check_update =
                 MenuItemBuilder::with_id("check-update", check_update_label).build(app)?;
-            let balance = MenuItemBuilder::with_id("balance", balance_label).build(app)?;
             let quit = MenuItemBuilder::with_id("quit", quit_label).build(app)?;
             let menu = MenuBuilder::new(app)
-                .items(&[&show, &island, &check_update, &balance, &quit])
+                .items(&[&show, &check_update, &quit])
                 .build()?;
             // Linux(libappindicator/dbusmenu) 下菜单对象必须在 setup 返回后保持存活：
             // 否则 Rust 侧 Menu drop 会释放 D-Bus 菜单 registrar，导致托盘菜单项
@@ -148,8 +101,8 @@ pub fn run() {
                 .on_menu_event(move |app, event| match event.id().as_ref() {
                     "show" => {
                         // 关键：菜单事件在主线程且持有 GTK 菜单指针 grab 的上下文中触发，
-                        // 此处同步执行窗口 show/set_focus 等 X11 操作会令主循环死锁、
-                        // grab 永不释放 → 整个桌面卡死（参见下方 "island" 分支说明）。
+                        // 此处同步执行窗口 show/set_focus 等操作会令主循环死锁、
+                        // grab 永不释放 → 整个桌面卡死。
                         // 因此全部窗口操作抛到异步线程，先让菜单回调返回并释放 grab。
                         let app_clone = app.clone();
                         tauri::async_runtime::spawn(async move {
@@ -165,45 +118,8 @@ pub fn run() {
                             }
                         });
                     }
-                    "island" => {
-                        // 灵动岛开关：以 Rust 侧持久化状态文件为准计算 next，
-                        // 不再依赖 dbusmenu 的 is_checked()——在某些环境下
-                        // is_checked() 不可靠、恒返回 false，会导致 next 永远为
-                        // true（永远"启用"），托盘点击毫无变化（"开关没用"）。
-                        let cur = crate::commands::island_bridge::island_get_enabled();
-                        let next = !cur;
-                        // 同步更新菜单 check 项与文字，确保视觉一致
-                        {
-                            let menu = app.state::<tauri::menu::Menu<tauri::Wry>>();
-                            if let Some(item) = menu.get("island") {
-                                if let Some(ci) = item.as_check_menuitem() {
-                                    let _ = ci.set_checked(next);
-                                }
-                            }
-                        }
-
-                        // 关键修复：菜单事件回调运行在 GTK 主线程，且当时正持有
-                        // 托盘菜单的 pointer grab（指针捕获）。若在此处同步执行
-                        // island_set_enabled() 内的窗口 X11 操作（show/hide/
-                        // set_always_on_top/set_visible_on_all_workspaces），这些
-                        // 操作需要主事件循环继续推进才能完成 X11 往返，但当前回调
-                        // 本就阻塞着主循环 → 死锁。grab 永不释放，X 服务器把所有
-                        // 指针输入只路由给本进程 → 整个桌面冻结、仅光标可动。
-                        // 因此：先把 next 状态算好，让菜单回调立即返回释放 grab，
-                        // 再把真正的窗口变更抛到异步线程执行。
-                        let app_clone = app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let _ = crate::commands::island_bridge::island_set_enabled(
-                                next,
-                                app_clone.clone(),
-                            );
-                            // 同步更新菜单文字：开 → "灵动岛：开" / 关 → "灵动岛：关"
-                            let lang = crate::commands::tray::saved_lang();
-                            crate::commands::tray::update_island_menu_text(&app_clone, &lang, next);
-                        });
-                    }
                     "check-update" => {
-                        // 同样避免在菜单 grab 上下文中同步操作窗口（同 "island"/"show" 死锁风险）。
+                        // 避免在菜单 grab 上下文中同步操作窗口（同 "show" 死锁风险）。
                         let app_clone = app.clone();
                         tauri::async_runtime::spawn(async move {
                             if let Some(w) = app_clone.get_webview_window("main") {
@@ -216,35 +132,12 @@ pub fn run() {
                             let _ = app_clone.emit("tray-nav", "/settings");
                         });
                     }
-                    "balance" => {
-                        // 点击余额菜单项：查询 DeepSeek 余额并更新菜单文字
-                        let app_handle = app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let text = match crate::commands::island_bridge::deepseek_get_balance()
-                                .await
-                            {
-                                Ok(b) => crate::commands::tray::format_balance(&b),
-                                Err(e) => {
-                                    let lang = crate::commands::tray::saved_lang();
-                                    match lang.as_str() {
-                                        "zh" => format!("DeepSeek 余额: 查询失败 ({e})"),
-                                        "ru" => format!("Баланс DeepSeek: ошибка ({e})"),
-                                        _ => format!("DeepSeek Balance: error ({e})"),
-                                    }
-                                }
-                            };
-                            crate::commands::tray::set_menu_item_text(&app_handle, "balance", text);
-                        });
-                    }
                     "quit" => {
                         app.exit(0);
                     }
                     _ => {}
                 })
                 .build(&app_handle)?;
-
-            // 托盘 DeepSeek 余额自动刷新：启动后立即查询并周期性更新菜单文字
-            commands::tray::start_balance_refresh(app_handle.clone());
 
             // ── 启动期防"壁纸化"看门狗（Linux/XWayland）──
             // 已确诊根因：XWayland 的 _NET_CURRENT_DESKTOP 会在无人操作时抖动
@@ -283,21 +176,12 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                if window.label() == "island" {
-                    // 灵动岛：关闭即隐藏（设置页可重新显示）
-                    let _ = window.hide();
-                } else {
-                    // 主窗口：关闭即销毁 WebView 渲染进程（而非 hide）。
-                    // 原因：hide() 只把窗口 unmap，背后的 WebKit 渲染进程（~260MB）
-                    // 不退出、JS 上下文与 DOM 全保留 → 内存一分不少。
-                    // destroy() 才真正回收渲染进程；下次由托盘「显示 DevNexus」
-                    // 或点击灵动岛时按需重建（create_main_window）。
-                    // 这样软件后台常驻时，主窗口的 260MB 渲染进程被释放，
-                    // 常驻内存从 ~760MB 降到 ~300MB（仅 Rust 宿主 + 网络进程 + 岛窗口）。
-                    // 恢复入口：托盘「显示 DevNexus」(rebuild + show)，或点击灵动岛。
-                    let _ = window.set_skip_taskbar(true);
-                    let _ = window.destroy();
-                }
+                // 主窗口：关闭即销毁 WebView 渲染进程（而非 hide）。
+                // 原因：hide() 只把窗口 unmap，背后的 WebKit 渲染进程（~260MB）
+                // 不退出、JS 上下文与 DOM 全保留 → 内存一分不少。
+                // destroy() 才真正回收渲染进程；下次由托盘「显示 DevNexus」按需重建。
+                let _ = window.set_skip_taskbar(true);
+                let _ = window.destroy();
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -370,13 +254,6 @@ pub fn run() {
             commands::local_files::local_mkdir_all,
             commands::local_files::local_list_dir,
             commands::local_files::local_read_file_chunk,
-            commands::password_manager::add_password,
-            commands::password_manager::list_passwords,
-            commands::password_manager::get_password,
-            commands::password_manager::delete_password,
-            commands::password_manager::update_password,
-            commands::password_manager::export_chrome_csv,
-            commands::password_manager::import_chrome_csv,
             commands::ssh::connections::ssh_list_connections,
             commands::ssh::connections::ssh_save_connection,
             commands::ssh::connections::ssh_delete_connection,
@@ -444,32 +321,16 @@ pub fn run() {
             commands::updater::get_download_url,
             commands::version_manager::list_versions,
             commands::version_manager::switch_version,
-            api_hub::commands::api_hub_list_providers,
-            api_hub::commands::api_hub_add_provider,
-            api_hub::commands::api_hub_delete_provider,
-            api_hub::commands::api_hub_update_provider,
-            api_hub::commands::api_hub_get_logs,
-            api_hub::commands::api_hub_get_usage_stats,
-            api_hub::commands::api_hub_status,
-            api_hub::commands::api_hub_get_token,
-            api_hub::commands::api_hub_fetch_models,
-            commands::island_bridge::island_media_status,
-            commands::island_bridge::island_media_control,
-            commands::island_bridge::island_set_sticky,
-            commands::island_bridge::island_set_input_shape,
-            commands::island_bridge::island_get_hud,
-            commands::island_bridge::island_get_enabled,
-            commands::island_bridge::island_set_enabled,
-            commands::island_bridge::deepseek_get_balance,
-            commands::island_bridge::deepseek_set_key,
-            commands::island_bridge::deepseek_get_key,
-            // SSH AI 助手（复用 API Hub 的 LLM Provider 配置）
+            // SSH AI 助手（独立 Provider 配置，见 SSH 助手页）
+            commands::ssh::ai::ssh_ai_list_providers,
+            commands::ssh::ai::ssh_ai_add_provider,
+            commands::ssh::ai::ssh_ai_update_provider,
+            commands::ssh::ai::ssh_ai_delete_provider,
             commands::ssh::ai::ssh_ai_list_models,
+            commands::ssh::ai::ssh_ai_list_terminals,
             commands::ssh::ai::ssh_ai_chat,
             commands::ssh::ai::ssh_ai_execute,
             commands::ssh::ai::ssh_ai_get_buffer,
-            // SFTP AI 助手（复用 API Hub 的 LLM Provider 配置）
-            commands::ssh::ai::ssh_ai_sftp,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| {

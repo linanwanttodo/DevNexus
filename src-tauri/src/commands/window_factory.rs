@@ -1,7 +1,7 @@
 // src-tauri/src/commands/window_factory.rs — 主窗口创建工厂
 // 职责：按 tauri.conf.json 中 "main" 窗口的参数创建主 WebView 窗口。
 // 集中此逻辑后，主窗口在「关闭转后台」时被 destroy()，
-// 托盘「显示 DevNexus」/ 点击灵动岛时可按需重建——从而回收 WebKit 渲染进程（~260MB）。
+// 托盘「显示 DevNexus」时可按需重建——从而回收 WebKit 渲染进程（~260MB）。
 //
 // 注意：窗口参数必须与 tauri.conf.json 的 main 窗口保持一致，
 // 否则重建出的窗口尺寸/装饰/背景色会与首次启动不一致。
@@ -40,7 +40,7 @@ pub fn create_main_window(app: &tauri::AppHandle) -> tauri::WebviewWindow {
 }
 
 /// 显示主窗口：若不存在则先重建（主窗口可能因「关闭转后台」被 destroy）。
-/// 供前端（托盘/灵动岛点击打开主窗口）调用，确保窗口被销毁后仍能恢复。
+/// 供前端（托盘点击打开主窗口）调用，确保窗口被销毁后仍能恢复。
 #[tauri::command]
 pub fn show_main_window(app: tauri::AppHandle) {
     create_main_window(&app);

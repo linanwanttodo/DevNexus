@@ -43,10 +43,6 @@ const routes = [
   },
   { path: "/ports", redirect: "/processes" },
   {
-    path: "/passwords",
-    component: () => import("./views/PasswordManager.vue"),
-  },
-  {
     path: "/cookies",
     component: () => import("./views/CookieExtractor.vue"),
   },
@@ -71,29 +67,8 @@ const routes = [
     component: () => import("./views/ContainerManager.vue"),
   },
   {
-    path: "/island",
-    component: () => import("./views/IslandSettings.vue"),
-  },
-  {
     path: "/settings",
     component: () => import("./views/Settings.vue"),
-  },
-  {
-    path: "/api-hub",
-    component: () => import("./views/ApiHub.vue"),
-  },
-  // API Hub 子导航：统计/Provider/日志（同一页面，路由驱动原标签页）
-  {
-    path: "/api-hub/providers",
-    component: () => import("./views/ApiHub.vue"),
-  },
-  {
-    path: "/api-hub/endpoints",
-    component: () => import("./views/ApiHub.vue"),
-  },
-  {
-    path: "/api-hub/logs",
-    component: () => import("./views/ApiHub.vue"),
   },
   {
     path: "/migration",
@@ -110,6 +85,10 @@ const routes = [
   {
     path: "/ssh/sftp",
     component: () => import("./views/SSHSftp.vue"),
+  },
+  {
+    path: "/ssh/ai",
+    component: () => import("./views/SSHAssistant.vue"),
   },
   { path: "/:pathMatch(.*)*", redirect: "/dashboard" },
 ];
