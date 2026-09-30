@@ -1,5 +1,7 @@
 # 消息提示与反馈体系改造实施计划
 
+> 状态：已实施完成（2026-09-30，提交 6b83587..c8a702c）。Task 12 的运行时人工验收项（三语言 UI、并发确认框、sudo 行为、遮罩与 toast 布局）需在运行应用时确认，静态验证（构建、195 项 cargo 测试、语言包键完整性、clippy）均已通过。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 建立结构化错误码协议与统一反馈门面，修复消息提示体系全部已核实缺陷，并以 container 模块完成首个错误迁移试点。
