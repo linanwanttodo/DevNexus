@@ -9,7 +9,22 @@
   "errors": {
     "provider_exists": "Provider already exists",
     "already_exists": "Already exists",
-    "invalid_version": "Invalid version string"
+    "invalid_version": "Invalid version string",
+    "unknown": "Unknown error occurred",
+    "COMMON_INVALID_INPUT": "Invalid input",
+    "COMMON_NOT_FOUND": "Target resource not found",
+    "COMMON_PERMISSION_DENIED": "Permission denied: authorization required",
+    "COMMON_INTERNAL": "Internal error occurred",
+    "COMMON_CANCELLED": "Operation cancelled",
+    "DOCKER_NOT_INSTALLED": "Docker not found. Please install Docker first",
+    "DOCKER_NOT_RUNNING": "Docker is not running. Please start Docker and retry",
+    "DOCKER_TIMEOUT": "Docker operation timed out and was terminated",
+    "DOCKER_COMMAND_FAILED": "Docker operation failed",
+    "DOCKER_INVALID_ID": "Invalid container ID: {id}",
+    "DOCKER_INVALID_ACTION": "Unsupported action: {action}",
+    "DOCKER_EXEC_EMPTY": "Enter a command to execute in the container",
+    "DOCKER_EXEC_FORBIDDEN": "Command contains forbidden characters",
+    "COMPOSE_NOT_INSTALLED": "Docker Compose plugin not found"
   },
   "version": "Version",
   "search": "Search...",
@@ -502,7 +517,12 @@
     "install_failed": "Installation failed: {error}",
     "uninstall_failed": "Uninstall failed: {error}",
     "opening": "Opening {name}...",
-    "error_msg": "Error: {error}"
+    "error_msg": "Error: {error}",
+    "toast": {
+      "copied": "Copied",
+      "click_to_copy": "Click anywhere to copy the error, or use the button",
+      "copy": "Copy"
+    }
   },
   "process": {
     "title": "Processes & Ports",
@@ -1007,6 +1027,7 @@
     "desc": "This operation requires admin rights. Enter your system password to continue (used only for this sudo elevation, not stored).",
     "placeholder": "Enter system password",
     "hint": "Password is passed via sudo -S only, never stored or logged.",
-    "cancelled": "Cancelled"
+    "cancelled": "Cancelled",
+    "empty_password": "Please enter a password"
   }
 }

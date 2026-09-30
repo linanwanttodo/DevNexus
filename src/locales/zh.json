@@ -9,7 +9,22 @@
   "errors": {
     "provider_exists": "Provider 已存在",
     "already_exists": "已存在",
-    "invalid_version": "版本号格式无效"
+    "invalid_version": "版本号格式无效",
+    "unknown": "发生未知错误",
+    "COMMON_INVALID_INPUT": "输入无效",
+    "COMMON_NOT_FOUND": "未找到目标资源",
+    "COMMON_PERMISSION_DENIED": "权限不足：此操作需要授权",
+    "COMMON_INTERNAL": "发生内部错误",
+    "COMMON_CANCELLED": "操作已取消",
+    "DOCKER_NOT_INSTALLED": "未检测到 Docker，请先安装 Docker",
+    "DOCKER_NOT_RUNNING": "Docker 未运行，请启动 Docker 后重试",
+    "DOCKER_TIMEOUT": "Docker 操作超时，已终止命令",
+    "DOCKER_COMMAND_FAILED": "Docker 操作失败",
+    "DOCKER_INVALID_ID": "无效的容器 ID：{id}",
+    "DOCKER_INVALID_ACTION": "不支持的操作：{action}",
+    "DOCKER_EXEC_EMPTY": "请输入要在容器内执行的命令",
+    "DOCKER_EXEC_FORBIDDEN": "命令包含被禁止的字符",
+    "COMPOSE_NOT_INSTALLED": "未检测到 Docker Compose 插件"
   },
   "version": "版本",
   "search": "搜索...",
@@ -502,7 +517,12 @@
     "install_failed": "安装失败：{error}",
     "uninstall_failed": "卸载失败：{error}",
     "opening": "正在打开 {name}...",
-    "error_msg": "错误：{error}"
+    "error_msg": "错误：{error}",
+    "toast": {
+      "copied": "已复制",
+      "click_to_copy": "点击任意处复制报错，右侧按钮亦可",
+      "copy": "复制"
+    }
   },
   "process": {
     "title": "进程/端口",
@@ -1014,6 +1034,7 @@
     "desc": "该操作需要管理员权限，请输入系统密码以继续（仅用于本次 sudo 提权，不会保存）。",
     "placeholder": "输入系统密码",
     "hint": "密码仅通过 sudo -S 传入，不会落盘或记录日志。",
-    "cancelled": "已取消"
+    "cancelled": "已取消",
+    "empty_password": "请输入密码"
   }
 }

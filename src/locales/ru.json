@@ -9,7 +9,22 @@
   "errors": {
     "provider_exists": "Провайдер уже существует",
     "already_exists": "Уже существует",
-    "invalid_version": "Недопустимая строка версии"
+    "invalid_version": "Недопустимая строка версии",
+    "unknown": "Произошла неизвестная ошибка",
+    "COMMON_INVALID_INPUT": "Неверный ввод",
+    "COMMON_NOT_FOUND": "Целевой ресурс не найден",
+    "COMMON_PERMISSION_DENIED": "Недостаточно прав: требуется авторизация",
+    "COMMON_INTERNAL": "Внутренняя ошибка",
+    "COMMON_CANCELLED": "Операция отменена",
+    "DOCKER_NOT_INSTALLED": "Docker не найден. Сначала установите Docker",
+    "DOCKER_NOT_RUNNING": "Docker не запущен. Запустите Docker и повторите",
+    "DOCKER_TIMEOUT": "Операция Docker прервана по таймауту",
+    "DOCKER_COMMAND_FAILED": "Операция Docker завершилась ошибкой",
+    "DOCKER_INVALID_ID": "Недопустимый ID контейнера: {id}",
+    "DOCKER_INVALID_ACTION": "Действие не поддерживается: {action}",
+    "DOCKER_EXEC_EMPTY": "Введите команду для выполнения в контейнере",
+    "DOCKER_EXEC_FORBIDDEN": "Команда содержит запрещённые символы",
+    "COMPOSE_NOT_INSTALLED": "Плагин Docker Compose не найден"
   },
   "version": "Версия",
   "search": "Поиск...",
@@ -442,7 +457,12 @@
     "uninstall_failed": "Ошибка удаления: {error}",
     "opening": "Открытие {name}...",
     "error_msg": "Ошибка: {error}",
-    "actions": "Actions"
+    "actions": "Actions",
+    "toast": {
+      "copied": "Скопировано",
+      "click_to_copy": "Нажмите в любом месте, чтобы скопировать ошибку, или кнопку справа",
+      "copy": "Копировать"
+    }
   },
   "uninstall_mgr": {
     "title": "Удаление приложений",
@@ -960,6 +980,7 @@
     "desc": "Операция требует прав администратора. Введите системный пароль (используется только для sudo, не сохраняется).",
     "placeholder": "Введите пароль",
     "hint": "Пароль передаётся только через sudo -S, не сохраняется.",
-    "cancelled": "Отменено"
+    "cancelled": "Отменено",
+    "empty_password": "Введите пароль"
   }
 }
