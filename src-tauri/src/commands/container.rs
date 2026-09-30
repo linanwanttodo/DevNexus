@@ -1,3 +1,4 @@
+use crate::utils::error::DevNexusError;
 use serde::{Deserialize, Serialize};
 
 // ── Data structures ──────────────────────────────────────────────
@@ -57,30 +58,35 @@ const ALLOWED_ACTIONS: &[&str] = &["start", "stop", "restart", "pause", "unpause
 
 /// Validate a container id/name. Rejects empty/oversized values, option
 /// injection (`-...`) and shell metacharacters.
-fn validate_container_id(id: &str) -> Result<(), String> {
+fn validate_container_id(id: &str) -> Result<(), DevNexusError> {
     if id.is_empty() || id.len() > 128 {
-        return Err("Invalid container id".to_string());
+        return Err(DevNexusError::new("DOCKER_INVALID_ID").param("id", truncate_for_param(id)));
     }
     if id.starts_with('-')
         || id
             .chars()
             .any(|c| c.is_whitespace() || ";|&$`\'\"\\".contains(c))
     {
-        return Err("Invalid container id".to_string());
+        return Err(DevNexusError::new("DOCKER_INVALID_ID").param("id", truncate_for_param(id)));
     }
     Ok(())
+}
+
+/// 参数回显截断，避免异常超长输入进入错误对象
+fn truncate_for_param(s: &str) -> String {
+    s.chars().take(64).collect()
 }
 
 /// Validate a command string passed to `sh -c` inside a container. Rejects
 /// shell metacharacters (`; | & $ ` "`) and newlines to prevent command
 /// chaining / injection while allowing normal single commands.
-fn validate_exec_command(command: &str) -> Result<(), String> {
+fn validate_exec_command(command: &str) -> Result<(), DevNexusError> {
     if command.is_empty() {
-        return Err("Empty exec command".to_string());
+        return Err(DevNexusError::new("DOCKER_EXEC_EMPTY"));
     }
     let forbidden = ";|&$`\"\n\r";
     if command.chars().any(|c| forbidden.contains(c)) {
-        return Err("Invalid exec command: shell metacharacters are not allowed".to_string());
+        return Err(DevNexusError::new("DOCKER_EXEC_FORBIDDEN"));
     }
     Ok(())
 }
@@ -99,16 +105,46 @@ fn docker_timeout_for(args: &[&str]) -> std::time::Duration {
     crate::utils::exec::DEFAULT_TIMEOUT
 }
 
+/// 将 exec 层错误归类为稳定错误码
+fn classify_spawn_error(err: &str) -> DevNexusError {
+    if err.contains("No such file or directory") || err.contains("program not found") {
+        DevNexusError::new("DOCKER_NOT_INSTALLED").detail(err)
+    } else if err.contains("timed out") {
+        DevNexusError::new("DOCKER_TIMEOUT").detail(err)
+    } else {
+        DevNexusError::new("DOCKER_COMMAND_FAILED").detail(err)
+    }
+}
+
+/// 将 docker 命令非零退出的输出归类为稳定错误码
+fn classify_exit_error(output: &str) -> DevNexusError {
+    let s = output.trim();
+    let lower = s.to_lowercase();
+    if lower.contains("cannot connect to the docker daemon")
+        || lower.contains("is the docker daemon running")
+        || lower.contains("error during connect")
+        || lower.contains("docker daemon is not running")
+    {
+        DevNexusError::new("DOCKER_NOT_RUNNING").detail(s.to_string())
+    } else if lower.contains("compose") && lower.contains("no such command") {
+        DevNexusError::new("COMPOSE_NOT_INSTALLED").detail(s.to_string())
+    } else {
+        DevNexusError::new("DOCKER_COMMAND_FAILED").detail(s.to_string())
+    }
+}
+
 /// Run a docker command and return stdout, stderr separately.
 /// Timeout depends on the subcommand (see `docker_timeout_for`).
-fn run_docker(args: &[&str]) -> Result<(String, String), String> {
-    let r = crate::utils::exec::run("docker", args, docker_timeout_for(args))?;
+fn run_docker(args: &[&str]) -> Result<(String, String), DevNexusError> {
+    let r = crate::utils::exec::run("docker", args, docker_timeout_for(args))
+        .map_err(|e| classify_spawn_error(&e))?;
     if r.status != 0 {
-        return Err(if r.stderr.trim().is_empty() {
+        let msg = if r.stderr.trim().is_empty() {
             r.stdout.trim().to_string()
         } else {
             r.stderr.trim().to_string()
-        });
+        };
+        return Err(classify_exit_error(&msg));
     }
     Ok((r.stdout, r.stderr))
 }
@@ -148,7 +184,7 @@ pub fn check_docker() -> DockerStatus {
 }
 
 #[tauri::command]
-pub fn list_containers(all: bool) -> Result<Vec<ContainerInfo>, String> {
+pub fn list_containers(all: bool) -> Result<Vec<ContainerInfo>, DevNexusError> {
     let mut args = vec!["ps", "--format", "{{json .}}", "--no-trunc"];
     if all {
         args.push("-a");
@@ -218,9 +254,9 @@ pub fn list_containers(all: bool) -> Result<Vec<ContainerInfo>, String> {
 }
 
 #[tauri::command]
-pub fn container_action(name: String, action: String) -> Result<String, String> {
+pub fn container_action(name: String, action: String) -> Result<String, DevNexusError> {
     if !ALLOWED_ACTIONS.contains(&action.as_str()) {
-        return Err(format!("Unsupported container action: {}", action));
+        return Err(DevNexusError::new("DOCKER_INVALID_ACTION").param("action", action.clone()));
     }
     validate_container_id(&name)?;
     // Removing a running container fails without --force; force-remove preserves
@@ -235,7 +271,7 @@ pub fn container_action(name: String, action: String) -> Result<String, String> 
 }
 
 #[tauri::command]
-pub fn get_container_logs(name: String, tail: Option<u32>) -> Result<String, String> {
+pub fn get_container_logs(name: String, tail: Option<u32>) -> Result<String, DevNexusError> {
     let tail = tail.unwrap_or(200);
     let tail_str = tail.to_string();
     let (stdout, stderr) = run_docker(&["logs", "--tail", &tail_str, &name])?;
@@ -248,7 +284,7 @@ pub fn get_container_logs(name: String, tail: Option<u32>) -> Result<String, Str
 }
 
 #[tauri::command]
-pub fn exec_in_container(name: String, command: String) -> Result<String, String> {
+pub fn exec_in_container(name: String, command: String) -> Result<String, DevNexusError> {
     validate_container_id(&name)?;
     validate_exec_command(&command)?;
     let (stdout, stderr) = run_docker(&["exec", &name, "sh", "-c", &command])?;
@@ -261,7 +297,7 @@ pub fn exec_in_container(name: String, command: String) -> Result<String, String
 }
 
 #[tauri::command]
-pub fn list_images() -> Result<Vec<ImageInfo>, String> {
+pub fn list_images() -> Result<Vec<ImageInfo>, DevNexusError> {
     let (stdout, _) = run_docker(&["images", "--format", "{{json .}}", "--no-trunc"])?;
     let raw: Vec<serde_json::Value> = parse_json_lines(&stdout);
     let images = raw
@@ -305,13 +341,13 @@ pub fn list_images() -> Result<Vec<ImageInfo>, String> {
 }
 
 #[tauri::command]
-pub fn pull_image(image: String) -> Result<String, String> {
+pub fn pull_image(image: String) -> Result<String, DevNexusError> {
     let (stdout, _) = run_docker(&["pull", &image])?;
     Ok(stdout.trim().to_string())
 }
 
 #[tauri::command]
-pub fn remove_image(image_id: String, force: bool) -> Result<String, String> {
+pub fn remove_image(image_id: String, force: bool) -> Result<String, DevNexusError> {
     let mut args = vec!["rmi"];
     if force {
         args.push("-f");
@@ -322,25 +358,25 @@ pub fn remove_image(image_id: String, force: bool) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn build_image(tag: String, path: String) -> Result<String, String> {
+pub fn build_image(tag: String, path: String) -> Result<String, DevNexusError> {
     let (stdout, _) = run_docker(&["build", "-t", &tag, &path])?;
     Ok(stdout.trim().to_string())
 }
 
 #[tauri::command]
-pub fn tag_image(image_id: String, tag: String) -> Result<String, String> {
+pub fn tag_image(image_id: String, tag: String) -> Result<String, DevNexusError> {
     let (stdout, _) = run_docker(&["tag", &image_id, &tag])?;
     Ok(stdout.trim().to_string())
 }
 
 #[tauri::command]
-pub fn push_image(tag: String) -> Result<String, String> {
+pub fn push_image(tag: String) -> Result<String, DevNexusError> {
     let (stdout, _) = run_docker(&["push", &tag])?;
     Ok(stdout.trim().to_string())
 }
 
 #[tauri::command]
-pub fn list_volumes() -> Result<Vec<VolumeInfo>, String> {
+pub fn list_volumes() -> Result<Vec<VolumeInfo>, DevNexusError> {
     let (stdout, _) = run_docker(&["volume", "ls", "--format", "{{json .}}"])?;
     let raw: Vec<serde_json::Value> = parse_json_lines(&stdout);
     let volumes = raw
@@ -378,14 +414,14 @@ pub fn list_volumes() -> Result<Vec<VolumeInfo>, String> {
 }
 
 #[tauri::command]
-pub fn volume_action(name: String, action: String) -> Result<String, String> {
+pub fn volume_action(name: String, action: String) -> Result<String, DevNexusError> {
     // action: create, rm
     let (stdout, _) = run_docker(&["volume", &action, &name])?;
     Ok(stdout.trim().to_string())
 }
 
 #[tauri::command]
-pub fn list_networks() -> Result<Vec<NetworkInfo>, String> {
+pub fn list_networks() -> Result<Vec<NetworkInfo>, DevNexusError> {
     let (stdout, _) = run_docker(&["network", "ls", "--format", "{{json .}}"])?;
     let raw: Vec<serde_json::Value> = parse_json_lines(&stdout);
     let networks = raw
@@ -423,14 +459,17 @@ pub fn list_networks() -> Result<Vec<NetworkInfo>, String> {
 }
 
 #[tauri::command]
-pub fn network_action(name: String, action: String) -> Result<String, String> {
+pub fn network_action(name: String, action: String) -> Result<String, DevNexusError> {
     // action: create, rm
     let (stdout, _) = run_docker(&["network", &action, &name])?;
     Ok(stdout.trim().to_string())
 }
 
 #[tauri::command]
-pub fn compose_up(file: Option<String>, project_name: Option<String>) -> Result<String, String> {
+pub fn compose_up(
+    file: Option<String>,
+    project_name: Option<String>,
+) -> Result<String, DevNexusError> {
     let mut args = vec!["compose"];
     if let Some(f) = &file {
         args.push("-f");
@@ -447,7 +486,10 @@ pub fn compose_up(file: Option<String>, project_name: Option<String>) -> Result<
 }
 
 #[tauri::command]
-pub fn compose_down(file: Option<String>, project_name: Option<String>) -> Result<String, String> {
+pub fn compose_down(
+    file: Option<String>,
+    project_name: Option<String>,
+) -> Result<String, DevNexusError> {
     let mut args = vec!["compose"];
     if let Some(f) = &file {
         args.push("-f");
@@ -466,7 +508,7 @@ pub fn compose_down(file: Option<String>, project_name: Option<String>) -> Resul
 pub fn compose_ps(
     file: Option<String>,
     project_name: Option<String>,
-) -> Result<Vec<ContainerInfo>, String> {
+) -> Result<Vec<ContainerInfo>, DevNexusError> {
     let mut args = vec!["compose"];
     if let Some(f) = &file {
         args.push("-f");
@@ -537,7 +579,7 @@ pub fn compose_logs(
     file: Option<String>,
     project_name: Option<String>,
     tail: Option<u32>,
-) -> Result<String, String> {
+) -> Result<String, DevNexusError> {
     let mut args = vec!["compose"];
     if let Some(f) = &file {
         args.push("-f");
@@ -568,6 +610,48 @@ mod tests {
         ALLOWED_ACTIONS,
     };
     use std::time::Duration;
+
+    #[test]
+    fn test_classify_spawn_error() {
+        assert_eq!(
+            super::classify_spawn_error("failed to execute 'docker': No such file or directory")
+                .code,
+            "DOCKER_NOT_INSTALLED"
+        );
+        assert_eq!(
+            super::classify_spawn_error("command 'docker' timed out after 60s and was terminated")
+                .code,
+            "DOCKER_TIMEOUT"
+        );
+        assert_eq!(
+            super::classify_spawn_error("failed to wait for 'docker': boom").code,
+            "DOCKER_COMMAND_FAILED"
+        );
+    }
+
+    #[test]
+    fn test_classify_exit_error() {
+        assert_eq!(
+            super::classify_exit_error(
+                "Cannot connect to the Docker daemon at unix:///var/run/docker.sock"
+            )
+            .code,
+            "DOCKER_NOT_RUNNING"
+        );
+        assert_eq!(
+            super::classify_exit_error("docker: 'compose' is not a docker command.").code,
+            "DOCKER_COMMAND_FAILED"
+        );
+        let e = super::classify_exit_error("some other failure");
+        assert_eq!(e.code, "DOCKER_COMMAND_FAILED");
+        assert_eq!(e.detail.as_deref(), Some("some other failure"));
+    }
+
+    #[test]
+    fn test_truncate_for_param() {
+        assert_eq!(super::truncate_for_param(&"ab".repeat(100)).len(), 64);
+        assert_eq!(super::truncate_for_param("short"), "short");
+    }
 
     #[test]
     fn test_long_docker_ops_get_generous_timeout() {
