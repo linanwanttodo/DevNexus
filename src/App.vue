@@ -54,7 +54,7 @@ function require_tauri_listen() {
 
     <ConfirmDialog />
     <SudoDialog />
-    <Sonner :theme="theme" position="top-center" rich-colors expand close-button :toast-options="{ duration: 3500 }" />
+    <Sonner :theme="theme" position="top-center" rich-colors expand :visible-toasts="5" :offset="{ top: 44 }" :toast-options="{ duration: 3500 }" />
   </div>
 </template>
 
