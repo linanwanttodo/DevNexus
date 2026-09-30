@@ -1,23 +1,17 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, onErrorCaptured } from "vue";
+import { onMounted, onBeforeUnmount, onErrorCaptured } from "vue";
 import { Button } from "@/components/ui/button";
 import AppIcon from "./AppIcon.vue";
-import { showToast } from "../lib/toast.js";
 import { t } from "../lib/i18n.js";
 import { getError, clearError as clearStoredError, captureError } from "../lib/error.js";
 
-const errorInfo = ref(getError().value);
+// 单一状态源：直接使用 error.js 的响应式 ref，避免复制快照失步
+const errorInfo = getError();
 
 // 子组件错误捕获（Vue onErrorCaptured）
 onErrorCaptured((err, _instance, info) => {
-  errorInfo.value = {
-    message: err instanceof Error ? err.message : String(err),
-    stack: info,
-    timestamp: Date.now(),
-  };
   captureError(err, info);
-  showToast(`Error: ${err.message || "Unknown error"}`, "error", 5000);
-  return false; // 阻止继续冒泡，避免全局 handler 重复弹 toast
+  return false; // 阻止继续冒泡，避免全局 handler 重复处理
 });
 
 let removeHandlers = [];
@@ -30,13 +24,8 @@ onMounted(() => {
   // 全局未捕获错误
   const handleError = (event) => {
     const err = event.error || new Error(String(event.error));
-    captureError(err, event.loc);
-    errorInfo.value = {
-      message: err instanceof Error ? err.message : String(err),
-      stack: event.loc,
-      timestamp: Date.now(),
-    };
-    showToast(`Error: ${err.message || "Unknown error"}`, "error", 5000);
+    const loc = [event.filename, event.lineno, event.colno].filter(Boolean).join(":");
+    captureError(err, loc || null);
     event.preventDefault();
   };
 
@@ -44,12 +33,6 @@ onMounted(() => {
   const handleRejection = (event) => {
     const err = event.reason || new Error("Unhandled promise rejection");
     captureError(err, null);
-    errorInfo.value = {
-      message: err instanceof Error ? err.message : String(err),
-      stack: null,
-      timestamp: Date.now(),
-    };
-    showToast(`Error: ${err.message || "Unknown error"}`, "error", 5000);
     event.preventDefault();
   };
 
