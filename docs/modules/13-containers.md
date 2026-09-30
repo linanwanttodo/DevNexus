@@ -32,9 +32,10 @@ ContainerManager.vue ──→ invoke("list_containers")  ──→ container.rs
 
 ## 3. 安全设计
 
-- 所有 docker 命令经 `utils::exec` 统一执行，120s 超时（防 docker 卡死阻塞）
+- 所有 docker 命令经 `utils::exec` 统一执行，超时防 docker 卡死阻塞（默认 60s，pull/push/build 等长操作 900s）
 - 容器 action 白名单校验（`ALLOWED_ACTIONS`），容器名/命令参数拒绝 shell 元字符与 `-` 选项注入
 - 输出 JSON 行解析（`parse_json_lines`）容错跳过非法行
+- 错误返回结构化错误码（`DevNexusError`）：区分未安装（DOCKER_NOT_INSTALLED）、未运行（DOCKER_NOT_RUNNING）、超时（DOCKER_TIMEOUT）、执行失败（DOCKER_COMMAND_FAILED）等，详见 `docs/modules/error-codes.md`
 
 ---
 

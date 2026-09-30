@@ -4,8 +4,6 @@ use std::fmt;
 
 /// 统一结构化错误：code 为稳定错误码（前端按 errors.<code> 翻译），
 /// params 为 i18n 插值参数，detail 为原始细节（仅日志与详情展示，不直接面向用户）。
-/// TODO(container 模块迁移后移除)：首个命令模块接入前暂无使用方
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct DevNexusError {
     pub code: String,
@@ -14,6 +12,7 @@ pub struct DevNexusError {
     pub detail: Option<String>,
 }
 
+/// 快捷构造器供各命令模块逐步迁移使用；尚未迁移的模块接入后相应方法即被消费
 #[allow(dead_code)]
 impl DevNexusError {
     pub fn new(code: impl Into<String>) -> Self {
