@@ -75,6 +75,7 @@
     "checking": "正在检查更新",
     "click_to_check": "点击检查更新",
     "up_to_date": "系统已是最新",
+    "update_fallback_browser": "自动更新失败，已转用浏览器下载",
     "update_available": "发现新版本：",
     "update_error": "更新检查失败",
     "released": "发布日期",

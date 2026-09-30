@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { showToast } from "../lib/toast.js";
 import { showConfirm } from "../lib/confirm.js";
+import { feedback } from "../lib/feedback.js";
 import { t, tFormat } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
 import AppIcon from "../components/AppIcon.vue";
@@ -115,7 +116,7 @@ async function loadVersions(env, forceRefresh = false) {
     });
   } catch (err) {
     console.error(`Error loading versions for ${env.name}:`, err);
-    showToast(t("common.error_msg").replace("{error}", friendlyError(err)));
+    feedback.toast.error(err);
     versionsMap[env.name] = [];
   } finally {
     loadingVersions[env.name] = false;
@@ -164,7 +165,7 @@ async function switchVersion(env, version) {
     }
     await loadEnvironments();
   } catch (err) {
-    showToast(t("common.error_msg").replace("{error}", friendlyError(err)));
+    feedback.toast.error(err);
   } finally {
     switchingVersion[env.name] = false;
   }
@@ -176,7 +177,7 @@ async function addToPath(env) {
     showToast(result);
     await loadEnvironments();
   } catch (err) {
-    showToast(t("common.error_msg").replace("{error}", friendlyError(err)));
+    feedback.toast.error(err);
   }
 }
 
@@ -187,7 +188,7 @@ async function removeFromPath(env) {
     showToast(result);
     await loadEnvironments();
   } catch (err) {
-    showToast(t("common.error_msg").replace("{error}", friendlyError(err)));
+    feedback.toast.error(err);
   }
 }
 
@@ -213,7 +214,7 @@ async function createEnvironment() {
     newEnvPath.value = "";
     await loadEnvironments();
   } catch (err) {
-    showToast(t("common.error_msg").replace("{error}", friendlyError(err)));
+    feedback.toast.error(err);
   } finally {
     creating.value = false;
   }

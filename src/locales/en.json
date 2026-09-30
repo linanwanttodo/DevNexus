@@ -75,6 +75,7 @@
     "checking": "Checking for updates",
     "click_to_check": "Click to check for updates",
     "up_to_date": "System is up to date",
+    "update_fallback_browser": "Auto-update failed, opening download page in browser",
     "update_available": "Update available:",
     "update_error": "Update check failed",
     "released": "Released",

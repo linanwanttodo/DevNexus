@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "../lib/toast.js";
 import { showConfirm } from "../lib/confirm.js";
+import { feedback } from "../lib/feedback.js";
 import { t, tFormat } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
 import BrandIcons from "../icons/BrandIcons.vue";
@@ -127,6 +128,7 @@ async function checkPackageManagers() {
     packageManagers.value = await invoke("list_package_managers");
   } catch (err) {
     console.error("Error checking package managers:", err);
+    feedback.toast.error(err);
     packageManagers.value = [];
   } finally {
     pmChecking.value = false;

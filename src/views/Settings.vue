@@ -105,6 +105,8 @@ async function downloadAndInstall() {
     }
   } catch (err) {
     console.error("Updater downloadAndInstall failed:", err);
+    // 自动更新失败但仍有浏览器兜底路径：给出可见反馈后再转浏览器下载
+    feedback.toast.warning("settings.update_fallback_browser");
   }
 
   try {

@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "../lib/toast.js";
+import { feedback } from "../lib/feedback.js";
 import { t } from "../lib/i18n.js";
 import { friendlyError } from "../lib/errors.js";
 import AppIcon from "../components/AppIcon.vue";
@@ -82,6 +83,7 @@ async function testMirror(groupId, mirrorUrl) {
     }
   } catch (err) {
     console.error("Latency test failed:", err);
+    feedback.toast.error(err);
   } finally {
     const next = { ...testingUrls.value };
     delete next[mirrorUrl];
@@ -128,6 +130,7 @@ async function testAllMirrors(group) {
     }
   } catch (err) {
     console.error("Batch test failed:", err);
+    feedback.toast.error(err);
   } finally {
     testingGroup.value = null;
   }
