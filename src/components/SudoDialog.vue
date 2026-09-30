@@ -25,10 +25,16 @@ watch(
 
 function onOk() {
   const pw = input.value;
-  sudoResolve(pw || null);
+  if (!pw) {
+    if (sudoState.value) sudoState.value.error = t("sudo.empty_password");
+    return;
+  }
+  sudoResolve(pw);
+  input.value = "";
 }
 function onCancel() {
   sudoResolve(null);
+  input.value = "";
 }
 </script>
 
@@ -53,6 +59,7 @@ function onCancel() {
           autofocus
         />
         <p class="text-[11px] text-muted-foreground">{{ t("sudo.hint") }}</p>
+        <p v-if="sudoState?.error" class="text-[11px] text-destructive">{{ sudoState.error }}</p>
       </div>
       <DialogFooter>
         <Button variant="outline" @click="onCancel">{{ t("common.cancel") }}</Button>
